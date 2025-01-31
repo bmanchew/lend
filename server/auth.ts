@@ -123,8 +123,14 @@ export function setupAuth(app: Express) {
 
       // Check if trying to create an admin
       if (parsed.data.role === "admin") {
-        // Only allow admin creation if the current user is an admin
-        if (!req.user || (req.user as User).role !== "admin") {
+        // Allow first admin creation or require admin privileges
+        const [existingAdmin] = await db
+          .select()
+          .from(users)
+          .where(eq(users.role, "admin"))
+          .limit(1);
+
+        if (existingAdmin && (!req.user || (req.user as User).role !== "admin")) {
           return res.status(403).json({ message: "Only admins can create admin accounts" });
         }
       }
