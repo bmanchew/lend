@@ -127,7 +127,18 @@ export function registerRoutes(app: Express): Server {
       }
 
       const customerContracts = await db
-        .select()
+        .select({
+          id: contracts.id,
+          merchantId: contracts.merchantId,
+          customerId: contracts.customerId,
+          amount: contracts.amount,
+          term: contracts.term,
+          interestRate: contracts.interestRate,
+          status: contracts.status,
+          creditScore: contracts.creditScore,
+          createdAt: contracts.createdAt,
+          merchantName: merchants.companyName,
+        })
         .from(contracts)
         .where(eq(contracts.customerId, customerId))
         .leftJoin(merchants, eq(contracts.merchantId, merchants.id));
@@ -138,6 +149,63 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
+
+  // Add mock KYC endpoint for development
+  if (process.env.NODE_ENV !== 'production') {
+    apiRouter.get("/mock-kyc/:sessionId", async (req: Request, res: Response) => {
+      const { sessionId } = req.params;
+      res.send(`
+        <html>
+          <head>
+            <title>Mock KYC Verification</title>
+            <script>
+              async function completeVerification() {
+                try {
+                  // Get userId from sessionId (mock implementation)
+                  const userId = ${req.query.userId || 'null'};
+
+                  if (!userId) {
+                    alert('User ID not found');
+                    return;
+                  }
+
+                  // Call webhook endpoint
+                  await fetch('/api/kyc/callback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      sessionId: '${sessionId}',
+                      userId,
+                      status: 'verified',
+                      timestamp: new Date().toISOString()
+                    })
+                  });
+
+                  // Redirect back to dashboard
+                  window.location.href = '/customer';
+                } catch (error) {
+                  console.error('Error:', error);
+                  alert('Verification failed');
+                }
+              }
+            </script>
+          </head>
+          <body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: system-ui;">
+            <div style="text-align: center;">
+              <h1>Mock KYC Verification</h1>
+              <p>Session ID: ${sessionId}</p>
+              <button 
+                onclick="completeVerification()"
+                style="padding: 10px 20px; background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer;"
+              >
+                Complete Verification
+              </button>
+            </div>
+          </body>
+        </html>
+      `);
+    });
+  }
 
   // Merchant routes
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
