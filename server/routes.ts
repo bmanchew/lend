@@ -7,38 +7,40 @@ import { setupAuth } from "./auth.js";
 import express from 'express';
 import { diditService } from "./services/didit";
 import { Request, Response, NextFunction } from 'express';
-
-// Mount the API router under /api prefix
-const apiRouter = express.Router();
+import cors from 'cors';
 
 export function registerRoutes(app: Express): Server {
+  // Enable CORS and JSON parsing
+  app.use(cors());
+  app.use(express.json());
+
+  // Create API router
+  const apiRouter = express.Router();
+
+  // Mount API router under /api prefix BEFORE any other middleware
+  app.use('/api', apiRouter);
+
   setupAuth(app);
 
   // Add a new endpoint to check specific session status
-  apiRouter.get("/kyc/session/:sessionId/status", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/kyc/session/:sessionId/status", async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.params;
       console.log('Checking status for session:', sessionId);
-
-      // First check our local database
-      const [session] = await db
-        .select({
-          sessionId: verificationSessions.sessionId,
-          status: verificationSessions.status,
-          userId: verificationSessions.userId,
-          updatedAt: verificationSessions.updatedAt,
-          documentData: verificationSessions.documentData
-        })
-        .from(verificationSessions)
-        .where(eq(verificationSessions.sessionId, sessionId))
-        .limit(1);
 
       // Get current status from Didit API
       const currentStatus = await diditService.getSessionStatus(sessionId);
       console.log('Current Didit API status:', currentStatus);
 
+      // First check our local database
+      const [session] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId))
+        .limit(1);
+
       if (!session) {
-        return res.status(404).json({
+        return res.status(200).json({
           sessionId,
           status: currentStatus,
           message: 'Session found in Didit but not in local database'
@@ -52,7 +54,7 @@ export function registerRoutes(app: Express): Server {
         await db
           .update(verificationSessions)
           .set({
-            status: currentStatus,
+            status: currentStatus as typeof verificationSessions.status.enum,
             updatedAt: new Date()
           })
           .where(eq(verificationSessions.sessionId, sessionId));
@@ -66,19 +68,19 @@ export function registerRoutes(app: Express): Server {
             .where(eq(users.id, session.userId));
         }
 
-        return res.json({
+        return res.status(200).json({
           ...session,
           status: currentStatus,
           statusUpdated: true
         });
       }
 
-      return res.json({
+      return res.status(200).json({
         ...session,
         status: currentStatus
       });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error checking session status:', err);
       return res.status(500).json({
         error: 'Failed to check session status',
@@ -404,7 +406,6 @@ export function registerRoutes(app: Express): Server {
   });
 
 
-
   // Update the webhook endpoint to include more logging
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -496,8 +497,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Mount API router under /api prefix
-  app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
   return httpServer;
