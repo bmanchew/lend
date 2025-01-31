@@ -111,11 +111,8 @@ class DiditService {
       console.log('Got access token for KYC session');
 
       // Create session according to documentation
-      const callbackUrl = new URL(`${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`);
-
-      // Session ID will be appended by Didit automatically
       const sessionData = {
-        callback: callbackUrl.toString(),
+        callback: this.config.webhookUrl,
         features: 'OCR + FACE',
         vendor_data: user.id.toString()
       };

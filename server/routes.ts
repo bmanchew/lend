@@ -314,45 +314,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add KYC callback URL endpoint for mobile app redirect
+  // Add callback URL endpoint for mobile app redirect
   apiRouter.get("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { session_id, status } = req.query;
+      const { session_id: sessionId, status } = req.query;
 
-      if (!session_id) {
+      if (!sessionId) {
         return res.status(400).json({ error: 'Missing session ID' });
       }
 
-      // Get verification status from Didit API
-      const verificationStatus = status?.toString().toLowerCase();
-
       // Redirect to appropriate page based on status
-      const baseUrl = process.env.APP_URL || 'http://localhost:5000';
-      let redirectPath = '/dashboard';
-      let statusParam = '';
-
-      switch (verificationStatus) {
-        case 'approved':
-        case 'success':
-          statusParam = 'success';
-          break;
-        case 'declined':
-        case 'failed':
-          statusParam = 'failed';
-          break;
-        case 'pending':
-        case 'in_review':
-          statusParam = 'pending';
-          break;
-        default:
-          statusParam = 'unknown';
+      let redirectUrl = '/dashboard';
+      if (status === 'success') {
+        redirectUrl += '?kyc=success';
+      } else if (status === 'failed') {
+        redirectUrl += '?kyc=failed';
       }
 
-      // Add status parameter and session ID to URL
-      redirectPath += `?kyc=${statusParam}&session=${session_id}`;
-
-      // Redirect to frontend application
-      res.redirect(`${baseUrl}${redirectPath}`);
+      res.redirect(redirectUrl);
     } catch (err) {
       console.error('Error handling KYC callback:', err);
       next(err);
