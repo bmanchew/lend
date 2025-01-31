@@ -15,15 +15,20 @@ const PostgresSessionStore = connectPg(session);
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
+  const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+  return `${derivedKey.toString("hex")}.${salt}`;
 }
 
 async function comparePasswords(supplied: string, stored: string) {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
+  try {
+    const [hashedPassword, salt] = stored.split(".");
+    const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
+    const storedBuf = Buffer.from(hashedPassword, "hex");
+    return timingSafeEqual(storedBuf, suppliedBuf);
+  } catch (error) {
+    console.error("Password comparison error:", error);
+    return false;
+  }
 }
 
 export function setupAuth(app: Express) {
