@@ -317,11 +317,35 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
       }
 
-      await diditService.processWebhook(payload);
+      const { session_id, status, vendor_data } = payload;
+
+      // Update verification session
+      await db.transaction(async (tx) => {
+        // Update session status
+        await tx
+          .update(verificationSessions)
+          .set({
+            status: status as VerificationStatus,
+            updatedAt: new Date(),
+          })
+          .where(eq(verificationSessions.sessionId, session_id));
+
+        // If final status received, update user's KYC status
+        if (status === 'Approved' || status === 'Declined') {
+          const userId = parseInt(vendor_data);
+          await tx
+            .update(users)
+            .set({
+              kycStatus: status === 'Approved' ? 'verified' : 'failed'
+            })
+            .where(eq(users.id, userId));
+        }
+      });
 
       res.json({ status: 'success' });
     } catch (err) {
       console.error('Error processing Didit webhook:', err);
+      // Send 200 even on error to prevent retries, we'll handle failed webhooks separately
       res.status(200).json({ status: 'queued_for_retry' });
     }
   });

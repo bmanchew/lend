@@ -46,15 +46,11 @@ export function KycVerificationModal({
     },
     enabled: isOpen && !!user?.id,
     refetchInterval: (data) => {
-      // Poll every 2 seconds if verification is in progress
-      if (data?.status === 'pending' || data?.status === 'in_progress') {
+      // Poll every 2 seconds if verification is ongoing
+      if (!data?.status || data.status === 'pending' || data.status === 'initialized' || data.status === 'in_progress') {
         return 2000;
       }
       // Stop polling once we have a final status
-      if (data?.status === 'Approved' || data?.status === 'Declined') {
-        return false;
-      }
-      // Default polling interval
       return false;
     },
   });
@@ -62,6 +58,7 @@ export function KycVerificationModal({
   // Effect to handle verification completion
   useEffect(() => {
     if (kycData?.status === 'Approved' && onVerificationComplete) {
+      console.log('Verification completed successfully');
       onVerificationComplete();
     }
   }, [kycData?.status, onVerificationComplete]);
