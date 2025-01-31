@@ -8,6 +8,7 @@ import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
+import { fromZodError } from "zod-validation-error";
 
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
@@ -59,12 +60,20 @@ export function setupAuth(app: Express) {
           .where(eq(users.username, username))
           .limit(1);
 
-        if (!user || !(await comparePasswords(password, user.password))) {
+        if (!user) {
+          console.log('User not found:', username);
+          return done(null, false, { message: "Invalid credentials" });
+        }
+
+        const isValid = await comparePasswords(password, user.password);
+        if (!isValid) {
+          console.log('Invalid password for user:', username);
           return done(null, false, { message: "Invalid credentials" });
         }
 
         return done(null, user);
       } catch (err) {
+        console.error('Auth error:', err);
         return done(err);
       }
     })
@@ -92,7 +101,8 @@ export function setupAuth(app: Express) {
     try {
       const parsed = insertUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid input" });
+        const error = fromZodError(parsed.error);
+        return res.status(400).json({ error: error.message });
       }
 
       const [existingUser] = await db
@@ -121,20 +131,23 @@ export function setupAuth(app: Express) {
         res.status(201).json(user);
       });
     } catch (err) {
+      console.error('Registration error:', err);
       res.status(500).json({ error: "Registration failed" });
     }
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: any) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) {
+        console.error('Login error:', err);
         return res.status(500).json({ error: "Login failed" });
       }
       if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: info?.message || "Invalid credentials" });
       }
       req.login(user, (err) => {
         if (err) {
+          console.error('Login session error:', err);
           return res.status(500).json({ error: "Login failed" });
         }
         res.json(user);
