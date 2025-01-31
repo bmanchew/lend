@@ -151,7 +151,7 @@ class DiditService {
       const accessToken = await this.getAccessToken();
 
       const response = await axios.get(
-        `https://verification.didit.me/v1/session/${sessionId}/status`,
+        `https://verification.didit.me/v1/session/${sessionId}`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -204,7 +204,7 @@ class DiditService {
           const newToken = await this.getAccessToken();
 
           const retryResponse = await axios.get(
-            `https://verification.didit.me/v1/session/${sessionId}/status`,
+            `https://verification.didit.me/v1/session/${sessionId}`,
             {
               headers: {
                 'Authorization': `Bearer ${newToken}`,
