@@ -71,10 +71,8 @@ class DiditService {
     }
   }
 
-  // Verify webhook signature using the provided secret
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     try {
-      // Check if timestamp is recent (within 5 minutes)
       const timestamp = parseInt(timestampHeader);
       const currentTime = Math.floor(Date.now() / 1000);
       if (Math.abs(currentTime - timestamp) > 300) {
@@ -82,13 +80,11 @@ class DiditService {
         return false;
       }
 
-      // Calculate expected signature
       const expectedSignature = crypto
         .createHmac('sha256', this.config.webhookSecret)
         .update(requestBody)
         .digest('hex');
 
-      // Compare signatures using constant-time comparison
       return crypto.timingSafeEqual(
         Buffer.from(signatureHeader),
         Buffer.from(expectedSignature)
@@ -114,39 +110,35 @@ class DiditService {
       const accessToken = await this.getAccessToken();
       console.log('Got access token for KYC session');
 
+      // Create session according to documentation
       const sessionData = {
-        callback_url: this.config.webhookUrl,
-        webhook_url: this.config.webhookUrl,
+        callback: this.config.webhookUrl,
         features: 'OCR + FACE',
-        scope: ['IDENTITY'],
-        vendor_data: user.id.toString(),
-        email: user.email,
-        full_name: user.name
+        vendor_data: user.id.toString()
       };
 
       console.log('Creating KYC session with data:', sessionData);
 
       const response = await axios.post(
-        'https://verify.didit.me/api/sessions', 
+        'https://verification.didit.me/v1/session/', 
         sessionData,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Content-Type': 'application/json'
           }
         }
       );
 
       console.log('KYC session response:', response.data);
 
-      if (!response.data || !response.data.session_url) {
+      if (!response.data || !response.data.url) {
         console.error('Invalid session response:', response.data);
         throw new Error("Invalid response format from Didit API");
       }
 
       await this.updateUserKycStatus(userId, 'pending');
-      return response.data.session_url;
+      return response.data.url;
 
     } catch (error: any) {
       console.error("Error initializing KYC session:", error.response?.data || error.message);
@@ -169,7 +161,7 @@ class DiditService {
       const accessToken = await this.getAccessToken();
 
       const response = await axios.get(
-        `https://verify.didit.me/api/sessions/${user.id}/status`,
+        `https://verification.didit.me/v1/session/${user.id}/status`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
