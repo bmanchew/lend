@@ -11,11 +11,6 @@ interface DiditConfig {
   webhookSecret: string;
 }
 
-interface DiditAuthResponse {
-  access_token: string;
-  expires_in: number;
-}
-
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_BASE = 5000; // 5 seconds base delay
 
@@ -39,11 +34,7 @@ class DiditService {
     };
   }
 
-  private calculateRetryDelay(attempt: number): number {
-    return Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), 60000); // Max 1 minute delay
-  }
-
-  public async getAccessToken(): Promise<string> {
+  private async getAccessToken(): Promise<string> {
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
@@ -53,7 +44,9 @@ class DiditService {
         `${this.config.clientId}:${this.config.clientSecret}`
       ).toString('base64');
 
-      const response = await axios.post('https://apx.didit.me/auth/v2/token/',
+      console.log('Getting new access token...');
+
+      const response = await axios.post('https://apx.didit.me/auth/v2/token',
         'grant_type=client_credentials',
         {
           headers: {
@@ -63,6 +56,12 @@ class DiditService {
         }
       );
 
+      console.log('Token response:', {
+        status: response.status,
+        hasToken: !!response.data.access_token,
+        expiresIn: response.data.expires_in
+      });
+
       const { access_token, expires_in } = response.data;
 
       this.accessToken = access_token;
@@ -70,14 +69,17 @@ class DiditService {
 
       return access_token;
     } catch (error: any) {
-      console.error('Error getting access token:', error.response?.data || error.message);
+      console.error('Error getting access token:', {
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      });
       throw new Error('Failed to authenticate with Didit API');
     }
   }
 
   private async createDiditSession(userId: number): Promise<{ url: string; sessionId: string }> {
     const accessToken = await this.getAccessToken();
-    console.log('Creating Didit session with token:', accessToken.substring(0, 10) + '...');
+    console.log('Creating Didit session...');
 
     const sessionData = {
       callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
@@ -85,30 +87,39 @@ class DiditService {
       vendor_data: userId.toString()
     };
 
-    const response = await axios.post(
-      'https://verification.didit.me/v1/session/',
-      sessionData,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+    try {
+      const response = await axios.post(
+        'https://verification.didit.me/v1/session',
+        sessionData,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
         }
+      );
+
+      console.log('Session creation response:', {
+        status: response.status,
+        sessionId: response.data?.session_id,
+        hasUrl: !!response.data?.url
+      });
+
+      if (!response.data?.url || !response.data?.session_id) {
+        throw new Error('Invalid response format from Didit API');
       }
-    );
 
-    console.log('Didit session creation response:', {
-      status: response.status,
-      data: response.data
-    });
-
-    if (!response.data?.url || !response.data?.session_id) {
-      throw new Error('Invalid response format from Didit API');
+      return {
+        url: response.data.url,
+        sessionId: response.data.session_id
+      };
+    } catch (error: any) {
+      console.error('Error creating session:', {
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      });
+      throw new Error('Failed to create verification session');
     }
-
-    return {
-      url: response.data.url,
-      sessionId: response.data.session_id
-    };
   }
 
   async initializeKycSession(userId: number): Promise<string> {
@@ -152,10 +163,103 @@ class DiditService {
     }
   }
 
+  async getSessionStatus(sessionId: string): Promise<string> {
+    try {
+      console.log('Getting session status for:', sessionId);
+      const accessToken = await this.getAccessToken();
+
+      const response = await axios.get(
+        `https://verification.didit.me/v1/session/${sessionId}/status`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('Status response:', {
+        status: response.status,
+        data: response.data
+      });
+
+      // If we get a valid status response
+      if (response.data?.status) {
+        // Map Didit statuses to our internal statuses
+        switch (response.data.status.toLowerCase()) {
+          case 'pending':
+          case 'in_progress':
+            return 'retrieved';
+          case 'completed':
+            return 'confirmed';
+          case 'rejected':
+            return 'declined';
+          default:
+            return response.data.status;
+        }
+      }
+
+      // If session exists but no status, consider it pending
+      return 'initialized';
+
+    } catch (error: any) {
+      console.error('Status check error:', {
+        sessionId,
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      });
+
+      // Handle specific error cases
+      if (error.response?.status === 404) {
+        // Session not found - could be not started yet
+        return 'initialized';
+      }
+
+      if (error.response?.status === 401) {
+        // Auth error - try refreshing token once
+        try {
+          this.accessToken = null;
+          const newToken = await this.getAccessToken();
+
+          const retryResponse = await axios.get(
+            `https://verification.didit.me/v1/session/${sessionId}/status`,
+            {
+              headers: {
+                'Authorization': `Bearer ${newToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (retryResponse.data?.status) {
+            return retryResponse.data.status;
+          }
+        } catch (retryError) {
+          console.error('Retry failed:', retryError);
+        }
+      }
+
+      // For any other errors, keep the current status
+      const [session] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId))
+        .limit(1);
+
+      return session?.status || 'initialized';
+    }
+  }
+
+  private calculateRetryDelay(attempt: number): number {
+    return Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), 60000);
+  }
+
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     try {
       const timestamp = parseInt(timestampHeader);
       const currentTime = Math.floor(Date.now() / 1000);
+
+      // Verify timestamp is within 5 minutes
       if (Math.abs(currentTime - timestamp) > 300) {
         console.error('Webhook timestamp is stale');
         return false;
@@ -171,7 +275,7 @@ class DiditService {
         Buffer.from(expectedSignature)
       );
     } catch (error) {
-      console.error('Error verifying webhook signature:', error);
+      console.error('Signature verification error:', error);
       return false;
     }
   }
@@ -189,7 +293,7 @@ class DiditService {
         createdAt: new Date(),
       });
 
-      // Update verification session
+      // Update verification session and user status
       await db.transaction(async (tx) => {
         // Update session status
         await tx
@@ -201,7 +305,7 @@ class DiditService {
           })
           .where(eq(verificationSessions.sessionId, session_id));
 
-        // Update user KYC status if final status received
+        // Update user KYC status if final decision received
         if (status === 'Approved' || status === 'Declined') {
           const userId = parseInt(vendor_data);
           await tx
@@ -212,7 +316,7 @@ class DiditService {
             .where(eq(users.id, userId));
         }
 
-        // Mark webhook event as processed
+        // Mark webhook as processed
         await tx
           .update(webhookEvents)
           .set({
@@ -222,7 +326,7 @@ class DiditService {
           .where(eq(webhookEvents.sessionId, session_id));
       });
     } catch (error) {
-      console.error('Error processing webhook:', error);
+      console.error('Webhook processing error:', error);
       await this.scheduleWebhookRetry(session_id);
       throw error;
     }
@@ -264,6 +368,18 @@ class DiditService {
     }
   }
 
+  async updateUserKycStatus(userId: number, status: string): Promise<void> {
+    try {
+      await db
+        .update(users)
+        .set({ kycStatus: status as "pending" | "verified" | "failed" })
+        .where(eq(users.id, userId));
+    } catch (error) {
+      console.error("Error updating user KYC status:", error);
+      throw error;
+    }
+  }
+
   async retryFailedWebhooks(): Promise<void> {
     try {
       const failedEvents = await db
@@ -288,133 +404,6 @@ class DiditService {
       console.error('Error processing retry queue:', error);
     }
   }
-
-  async checkVerificationStatus(userId: number): Promise<string> {
-    try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      const accessToken = await this.getAccessToken();
-
-      const response = await axios.get(
-        `https://verification.didit.me/v1/session/${user.id}/status`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.data && response.data.status) {
-        await this.updateUserKycStatus(userId, response.data.status);
-        return response.data.status;
-      }
-
-      return user.kycStatus || 'pending';
-    } catch (error: any) {
-      console.error("Error checking verification status:", error.response?.data || error.message);
-      throw error;
-    }
-  }
-
-  async updateUserKycStatus(userId: number, status: string): Promise<void> {
-    try {
-      await db
-        .update(users)
-        .set({ kycStatus: status as "pending" | "verified" | "failed" })
-        .where(eq(users.id, userId));
-    } catch (error) {
-      console.error("Error updating user KYC status:", error);
-      throw error;
-    }
-  }
-
-
-  async getSessionStatus(sessionId: string): Promise<string> {
-    try {
-      console.log('Getting session status from Didit API for session:', sessionId);
-      const accessToken = await this.getAccessToken();
-
-      console.log('Making request to Didit API with token:', accessToken.substring(0, 10) + '...');
-
-      const response = await axios.get(
-        `https://verification.didit.me/v1/session/${sessionId}/status`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      // Log the complete response for debugging
-      console.log('Didit API complete response:', {
-        status: response.status,
-        headers: response.headers,
-        data: response.data
-      });
-
-      // If we get a response, extract the status
-      if (response.data && response.data.status) {
-        console.log('Successfully retrieved status:', response.data.status);
-        return response.data.status;
-      }
-
-      console.log('No status found in response data:', response.data);
-      return 'not_found';
-    } catch (error: any) {
-      console.error("Error getting session status:", {
-        sessionId,
-        error: error.response?.data || error.message,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
-
-      // If session not found, return appropriate status
-      if (error.response?.status === 404) {
-        console.log('Session not found in Didit system');
-        return 'not_found';
-      }
-
-      // If we got an auth error, try refreshing the token and retry once
-      if (error.response?.status === 401) {
-        console.log('Got auth error, attempting token refresh and retry');
-        this.accessToken = null;  // Force token refresh
-        try {
-          const newToken = await this.getAccessToken();
-          console.log('Retrying with new token:', newToken.substring(0, 10) + '...');
-
-          const retryResponse = await axios.get(
-            `https://verification.didit.me/v1/session/${sessionId}/status`,
-            {
-              headers: {
-                'Authorization': `Bearer ${newToken}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-
-          if (retryResponse.data && retryResponse.data.status) {
-            console.log('Successfully retrieved status after retry:', retryResponse.data.status);
-            return retryResponse.data.status;
-          }
-        } catch (retryError) {
-          console.error("Retry failed after token refresh:", retryError);
-        }
-      }
-
-      throw error;
-    }
-  }
 }
 
-// Export singleton instance
 export const diditService = new DiditService();

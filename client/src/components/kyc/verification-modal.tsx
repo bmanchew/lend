@@ -4,10 +4,12 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // Query to check KYC status
   const { data: kycStatus, isLoading: isCheckingStatus } = useQuery({
@@ -27,7 +29,11 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       return response.json();
     },
     onSuccess: (data) => {
-      // Handle redirect to Didit verification flow
+      // Store the session ID in localStorage for later status checks
+      if (user?.id) {
+        localStorage.setItem(`kyc_session_${user.id}`, data.sessionId);
+      }
+      // Redirect to Didit verification flow
       window.location.href = data.redirectUrl;
     },
     onError: (error) => {
@@ -36,6 +42,33 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
         description: "Failed to start verification process. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  // Handle verification status updates
+  useQuery({
+    queryKey: ['kyc-callback-status', localStorage.getItem(`kyc_session_${user?.id}`)],
+    enabled: !!localStorage.getItem(`kyc_session_${user?.id}`),
+    refetchInterval: 5000, // Poll every 5 seconds
+    onSuccess: (data) => {
+      if (data?.status === 'Approved') {
+        toast({
+          title: "Verification Complete",
+          description: "Your identity has been verified successfully.",
+        });
+        localStorage.removeItem(`kyc_session_${user?.id}`);
+        onClose();
+        setLocation('/loan-application?verified=true');
+      } else if (data?.status === 'Declined') {
+        toast({
+          title: "Verification Failed",
+          description: "Unfortunately, your verification was not successful. Please try again later.",
+          variant: "destructive",
+        });
+        localStorage.removeItem(`kyc_session_${user?.id}`);
+        onClose();
+        setLocation('/dashboard?kyc=failed');
+      }
     },
   });
 

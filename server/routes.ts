@@ -468,17 +468,50 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Missing session ID' });
       }
 
-      // Get the session status using the new method
+      // Get the session status
       const status = await diditService.getSessionStatus(sessionId as string);
 
-      // Redirect to appropriate page based on status
-      let redirectUrl = '/dashboard';
-      if (status === 'Approved') {
-        redirectUrl = '/loan-offers?verified=true';
-      } else if (status === 'Declined') {
-        redirectUrl = '/dashboard?kyc=failed';
+      // Get the verification session to find the associated user
+      const [session] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId as string))
+        .limit(1);
+
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
       }
 
+      // Update user's KYC status if needed
+      if (['Approved', 'Declined'].includes(status)) {
+        await db
+          .update(users)
+          .set({
+            kycStatus: status === 'Approved' ? 'verified' : 'failed'
+          })
+          .where(eq(users.id, session.userId));
+      }
+
+      // Redirect based on verification outcome
+      let redirectUrl = '/dashboard';
+      if (status === 'Approved') {
+        redirectUrl = '/loan-application?verified=true';
+      } else if (status === 'Declined') {
+        redirectUrl = '/dashboard?kyc=failed';
+      } else {
+        redirectUrl = '/dashboard?kyc=pending';
+      }
+
+      // For API clients, return JSON response
+      if (req.headers.accept?.includes('application/json')) {
+        return res.json({
+          status,
+          redirectUrl,
+          userId: session.userId
+        });
+      }
+
+      // For browser clients, perform redirect
       res.redirect(redirectUrl);
     } catch (err) {
       console.error('Error handling KYC callback:', err);
@@ -500,4 +533,17 @@ export function registerRoutes(app: Express): Server {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// Placeholder functions -  replace with your actual implementations
+async function generateVerificationToken(): Promise<string> {
+  return "token";
+}
+
+async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
+  return true;
+}
+
+async function testSendGridConnection(): Promise<boolean> {
+  return true;
 }
