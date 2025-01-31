@@ -27,8 +27,14 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       return response.json();
     },
     onSuccess: (data) => {
-      // TODO: Handle redirect to Didit verification flow
-      window.location.href = data.redirectUrl;
+      toast({
+        title: "Verification Started",
+        description: "You will be redirected to complete your verification.",
+      });
+      // Use window.location.href for full page navigation
+      setTimeout(() => {
+        window.location.href = data.redirectUrl;
+      }, 1500);
     },
     onError: (error) => {
       toast({

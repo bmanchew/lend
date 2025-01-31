@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
 import { contracts, merchants, users } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
@@ -244,6 +244,83 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+
+  // Add Didit webhook handler
+  apiRouter.post("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { 
+        sessionId,
+        userId,
+        status,
+        verificationDetails,
+        timestamp 
+      } = req.body;
+
+      console.log('Received Didit webhook:', {
+        sessionId,
+        userId,
+        status,
+        timestamp,
+        headers: req.headers
+      });
+
+      // Verify webhook signature if in production
+      if (process.env.NODE_ENV === 'production') {
+        const signature = req.headers['x-didit-signature'];
+        if (!signature) {
+          console.error('Missing Didit webhook signature');
+          return res.status(401).json({ 
+            status: "error", 
+            message: "Invalid webhook signature" 
+          });
+        }
+        // TODO: Implement signature verification
+      }
+
+      if (!userId || !status) {
+        console.error('Invalid webhook payload:', req.body);
+        return res.status(400).json({ 
+          status: "error", 
+          message: "Invalid webhook payload" 
+        });
+      }
+
+      // Update user KYC status
+      await db
+        .update(users)
+        .set({ 
+          kycStatus: status,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(users.id, parseInt(userId)));
+
+      console.log('Updated user KYC status via webhook:', {
+        userId,
+        newStatus: status,
+        sessionId
+      });
+
+      // For development, simulate successful verification
+      if (process.env.NODE_ENV !== 'production' && status === 'pending') {
+        setTimeout(async () => {
+          await db
+            .update(users)
+            .set({ 
+              kycStatus: 'verified',
+              updatedAt: sql`CURRENT_TIMESTAMP`,
+            })
+            .where(eq(users.id, parseInt(userId)));
+
+          console.log('Simulated verification completion for user:', userId);
+        }, 5000); // Simulate after 5 seconds
+      }
+
+      res.json({ status: "success" });
+    } catch (err: any) {
+      console.error('Webhook processing error:', err);
+      next(err);
+    }
+  });
 
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
