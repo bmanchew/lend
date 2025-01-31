@@ -4,36 +4,88 @@ import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
-import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
-import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { diditService } from "./services/didit";
-import axios from 'axios';
+import { Request, Response, NextFunction } from 'express';
 
-// Add Didit webhook types
-interface DiditWebhookPayload {
-  sessionId: string;
-  status: 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
-  userId: string;
-  data?: {
-    verificationStatus: string;
-    documentData?: any;
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
-  vendor_data?: string;
-  decision?: {
-    kyc?: {
-      document_data?: any;
-    };
-  };
-}
+// Mount the API router under /api prefix
+const apiRouter = express.Router();
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
-  const apiRouter = express.Router();
+
+  // Add a new endpoint to check specific session status
+  apiRouter.get("/kyc/session/:sessionId/status", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { sessionId } = req.params;
+      console.log('Checking status for session:', sessionId);
+
+      // First check our local database
+      const [session] = await db
+        .select({
+          sessionId: verificationSessions.sessionId,
+          status: verificationSessions.status,
+          userId: verificationSessions.userId,
+          updatedAt: verificationSessions.updatedAt,
+          documentData: verificationSessions.documentData
+        })
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId))
+        .limit(1);
+
+      // Get current status from Didit API
+      const currentStatus = await diditService.getSessionStatus(sessionId);
+      console.log('Current Didit API status:', currentStatus);
+
+      if (!session) {
+        return res.status(404).json({
+          sessionId,
+          status: currentStatus,
+          message: 'Session found in Didit but not in local database'
+        });
+      }
+
+      // Check if we need to update our local status
+      if (currentStatus !== session.status) {
+        console.log('Updating local status from', session.status, 'to', currentStatus);
+
+        await db
+          .update(verificationSessions)
+          .set({
+            status: currentStatus,
+            updatedAt: new Date()
+          })
+          .where(eq(verificationSessions.sessionId, sessionId));
+
+        if (['Approved', 'Declined'].includes(currentStatus)) {
+          await db
+            .update(users)
+            .set({
+              kycStatus: currentStatus === 'Approved' ? 'verified' : 'failed'
+            })
+            .where(eq(users.id, session.userId));
+        }
+
+        return res.json({
+          ...session,
+          status: currentStatus,
+          statusUpdated: true
+        });
+      }
+
+      return res.json({
+        ...session,
+        status: currentStatus
+      });
+
+    } catch (err) {
+      console.error('Error checking session status:', err);
+      return res.status(500).json({
+        error: 'Failed to check session status',
+        details: err.message
+      });
+    }
+  });
 
   // Customer routes
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
@@ -350,6 +402,8 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
+
+
 
   // Update the webhook endpoint to include more logging
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {

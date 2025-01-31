@@ -319,12 +319,13 @@ class DiditService {
   }
 
 
-  // Add method to check session status by session ID
   async getSessionStatus(sessionId: string): Promise<string> {
     try {
+      console.log('Getting session status from Didit API for session:', sessionId);
       const accessToken = await this.getAccessToken();
+
       const response = await axios.get(
-        `https://verification.didit.me/v1/session/${sessionId}/status`,
+        `https://verification.didit.me/v1/session/${sessionId}`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -333,9 +334,20 @@ class DiditService {
         }
       );
 
+      console.log('Didit API response:', response.data);
       return response.data.status;
     } catch (error: any) {
-      console.error("Error getting session status:", error.response?.data || error.message);
+      console.error("Error getting session status:", {
+        sessionId,
+        error: error.response?.data || error.message,
+        status: error.response?.status
+      });
+
+      // If session not found, return appropriate status
+      if (error.response?.status === 404) {
+        return 'not_found';
+      }
+
       throw error;
     }
   }
