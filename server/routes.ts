@@ -214,12 +214,22 @@ export function registerRoutes(app: Express): Server {
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-      const sessionId = await diditService.initializeKycSession(userId);
-      // TODO: When we have the actual Didit credentials, we'll generate the proper redirect URL
-      const redirectUrl = `https://verify.didit.com/session/${sessionId}`;
-      res.json({ redirectUrl });
-    } catch (err) {
-      next(err);
+      console.log('Starting KYC process for user:', userId);
+
+      if (!userId) {
+        return res.status(400).json({ error: 'Missing user ID' });
+      }
+
+      const sessionUrl = await diditService.initializeKycSession(userId);
+      console.log('Generated KYC session URL:', sessionUrl);
+
+      res.json({ redirectUrl: sessionUrl });
+    } catch (err: any) {
+      console.error('Error starting KYC process:', err);
+      res.status(500).json({ 
+        error: 'Failed to start verification process', 
+        details: err.message 
+      });
     }
   });
 

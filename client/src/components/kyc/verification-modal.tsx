@@ -27,7 +27,7 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       return response.json();
     },
     onSuccess: (data) => {
-      // TODO: Handle redirect to Didit verification flow
+      // Handle redirect to Didit verification flow
       window.location.href = data.redirectUrl;
     },
     onError: (error) => {

@@ -28,7 +28,7 @@ class DiditService {
       apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl: 'https://verify.staging.didit.me', 
+      baseUrl: 'https://verify.staging.didit.me',
       webhookUrl: DIDIT_WEBHOOK_URL,
       webhookSecret: DIDIT_WEBHOOK_SECRET
     };
@@ -37,8 +37,8 @@ class DiditService {
       baseURL: this.config.baseUrl,
       headers: {
         'Authorization': `Bearer ${this.config.apiKey}`,
-        'X-Client-ID': this.config.clientId,
         'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
     });
   }
@@ -84,23 +84,34 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      const response = await this.axios.post('/api/sessions', {
-        userId: user.id.toString(),
+      console.log('Initializing KYC session for user:', {
+        userId: user.id,
         email: user.email,
-        name: user.name,
-        callbackUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
-        webhookUrl: this.config.webhookUrl,
+        name: user.name
       });
 
-      if (response.data && response.data.sessionId) {
+      // Create session with required parameters based on documentation
+      const response = await this.axios.post('/api/sessions', {
+        vendor_data: user.id.toString(), // Used to identify the session in webhooks
+        callback_url: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
+        webhook_url: this.config.webhookUrl,
+        features: 'OCR + FACE', // Enable document verification and face matching
+        scope: ['IDENTITY'], // Request identity verification
+        email: user.email,
+        full_name: user.name,
+      });
+
+      console.log('KYC session response:', response.data);
+
+      if (response.data && response.data.session_url) {
         await this.updateUserKycStatus(userId, 'pending');
-        return response.data.sessionId;
+        return response.data.session_url;
       }
 
-      throw new Error("Failed to create KYC session");
+      throw new Error("Failed to create KYC session - Invalid response format");
     } catch (error: any) {
       console.error("Error initializing KYC session:", error.response?.data || error.message);
-      throw error;
+      throw new Error(error.response?.data?.message || "Failed to start verification process");
     }
   }
 
@@ -117,7 +128,7 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      const response = await this.axios.get(`/api/status/${user.id}`);
+      const response = await this.axios.get(`/api/sessions/${user.id}/status`);
 
       if (response.data && response.data.status) {
         await this.updateUserKycStatus(userId, response.data.status);
