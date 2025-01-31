@@ -110,6 +110,14 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: error.message });
       }
 
+      // Check if trying to create an admin
+      if (parsed.data.role === "admin") {
+        // Only allow admin creation if the current user is an admin
+        if (req.user?.role !== "admin") {
+          return res.status(403).json({ error: "Only admins can create admin accounts" });
+        }
+      }
+
       const [existingUser] = await db
         .select()
         .from(users)
@@ -120,6 +128,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "Username already exists" });
       }
 
+      // Hash password and create user
       const hashedPassword = await hashPassword(parsed.data.password);
       const [user] = await db
         .insert(users)
