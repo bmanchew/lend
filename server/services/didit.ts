@@ -337,12 +337,11 @@ class DiditService {
     }
   }
 
-  // Add method to check session status by session ID
   async getSessionStatus(sessionId: string): Promise<string> {
     try {
       const accessToken = await this.getAccessToken();
       const response = await axios.get(
-        `https://verification.didit.me/v1/session/${sessionId}/status`,
+        `https://verification.didit.me/v1/session/${sessionId}`, // Removed /status from the endpoint
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
