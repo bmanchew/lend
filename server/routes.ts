@@ -11,9 +11,13 @@ import { diditService } from "./services/didit";
 import axios from 'axios';
 
 // Add Didit webhook types
+export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+
 interface DiditWebhookPayload {
-  sessionId: string;
-  status: 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+  session_id: string;
+  status: VerificationStatus;
+  created_at: number;
+  timestamp: number;
   userId: string;
   data?: {
     verificationStatus: string;

@@ -15,6 +15,11 @@ interface KycStartResponse {
   redirectUrl: string;
 }
 
+interface KycStartError {
+  error: string;
+  details?: string;
+}
+
 export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -23,33 +28,38 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
     queryKey: ['/api/kyc/status', user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/kyc/status?userId=${user?.id}`);
+      if (!user?.id) throw new Error('User ID is required');
+      const response = await fetch(`/api/kyc/status?userId=${user.id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch KYC status');
       }
       return response.json();
     },
-    enabled: isOpen && !!user,
+    enabled: isOpen && !!user?.id,
   });
 
   // Mutation to start KYC process
-  const { mutate: startKyc, isPending: isStarting } = useMutation({
+  const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error, void>({
     mutationFn: async () => {
+      if (!user?.id) throw new Error('User ID is required');
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id }),
+        body: JSON.stringify({ userId: user.id }),
       });
-      if (!response.ok) throw new Error('Failed to start KYC process');
-      return response.json() as Promise<KycStartResponse>;
+      if (!response.ok) {
+        const errorData = await response.json() as KycStartError;
+        throw new Error(errorData.details || errorData.error || 'Failed to start KYC process');
+      }
+      return response.json();
     },
     onSuccess: (data) => {
       window.location.href = data.redirectUrl;
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to start verification process. Please try again.",
+        description: error.message || "Failed to start verification process. Please try again.",
         variant: "destructive",
       });
     },
