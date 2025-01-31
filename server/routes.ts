@@ -164,7 +164,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
   // Merchant routes
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
     try {
@@ -250,13 +249,47 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.query.userId;
-      if (!userId || isNaN(parseInt(userId as string))) {
-        return res.status(400).json({ error: 'Invalid user ID' });
+
+      // Better validation for user ID
+      if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
       }
 
-      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
-      res.json({ status });
+      const parsedUserId = parseInt(userId as string);
+      if (isNaN(parsedUserId)) {
+        return res.status(400).json({ error: 'Invalid user ID format' });
+      }
+
+      // Fetch both verification session and status
+      const [latestSession] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.userId, parsedUserId))
+        .orderBy(desc(verificationSessions.createdAt))
+        .limit(1);
+
+      let status;
+      if (latestSession) {
+        // Get real-time status from Didit API
+        status = await diditService.getSessionStatus(latestSession.sessionId);
+      } else {
+        // Check user's stored KYC status if no active session
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, parsedUserId))
+          .limit(1);
+
+        status = user?.kycStatus || 'not_started';
+      }
+
+      res.json({ 
+        status,
+        sessionId: latestSession?.sessionId,
+        lastUpdated: latestSession?.updatedAt || null
+      });
     } catch (err) {
+      console.error('Error checking KYC status:', err);
       next(err);
     }
   });
