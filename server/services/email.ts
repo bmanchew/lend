@@ -1,7 +1,4 @@
 import { MailService } from '@sendgrid/mail';
-import { users } from '@db/schema';
-import { db } from '@db';
-import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 
 const mailService = new MailService();
@@ -14,50 +11,7 @@ if (!apiKey) {
 
 mailService.setApiKey(apiKey);
 
-const FROM_EMAIL = 'merchant@shifi.io'; // Updated sender email
-
-// Test the SendGrid connection with detailed error logging
-export async function testSendGridConnection(): Promise<boolean> {
-  try {
-    console.log('Testing SendGrid connection...');
-
-    // First test - validate API key format
-    if (!apiKey.startsWith('SG.')) {
-      console.error('Invalid SendGrid API key format');
-      return false;
-    }
-
-    // Second test - simple email to test full integration
-    const msg = {
-      to: 'test@example.com',
-      from: FROM_EMAIL,
-      subject: 'SendGrid Connection Test',
-      text: 'Testing SendGrid integration for ShiFi.',
-    };
-
-    await mailService.send(msg);
-    console.log('SendGrid test email sent successfully');
-    return true;
-  } catch (error: any) {
-    // Enhanced error logging
-    console.error('SendGrid connection test failed:', {
-      message: error.message,
-      code: error.code,
-      response: error.response?.body,
-      statusCode: error.code,
-      details: error.response?.headers,
-    });
-
-    if (error.code === 403) {
-      console.error('Authentication error - Please verify:');
-      console.error('1. API key has full access or at least Mail Send permissions');
-      console.error('2. Sender email domain is verified in SendGrid');
-      console.error('3. IP restrictions are properly configured');
-    }
-
-    return false;
-  }
-}
+const FROM_EMAIL = 'merchant@shifi.io'; // Sender email
 
 // Generate verification token
 export async function generateVerificationToken(): Promise<string> {
@@ -68,6 +22,11 @@ export async function generateVerificationToken(): Promise<string> {
 export async function sendVerificationEmail(to: string, token: string): Promise<boolean> {
   try {
     const verificationUrl = `${process.env.APP_URL || 'http://localhost:5000'}/verify-email?token=${token}`;
+    console.log('Attempting to send email with configuration:', {
+      to,
+      from: FROM_EMAIL,
+      verificationUrl
+    });
 
     const msg = {
       to,

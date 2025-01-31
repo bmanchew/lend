@@ -4,29 +4,59 @@ import { db } from "@db";
 import { contracts, merchants, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
-import { testSendGridConnection, sendVerificationEmail } from "./services/email";
-import { Request, Response, NextFunction } from 'express'; // Added for type safety
+import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
+import { Request, Response, NextFunction } from 'express';
+import express from 'express';
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
+  // API routes
+  const apiRouter = express.Router();
+
   // Test SendGrid connection with improved error handling
-  app.get("/api/test-email", async (req:Request, res:Response) => {
+  apiRouter.post("/test-verification-email", async (req: Request, res: Response) => {
     try {
-      const isConnected = await testSendGridConnection();
-      if (isConnected) {
-        res.json({ status: "success", message: "SendGrid connection successful" });
-      } else {
-        res.status(500).json({ status: "error", message: "SendGrid connection failed.  See logs for details." });
+      console.log('Received test email request:', req.body);
+      const testEmail = req.body.email;
+
+      if (!testEmail) {
+        return res.status(400).json({ 
+          status: "error", 
+          message: "Email address is required" 
+        });
       }
-    } catch (err:any) {
-      console.error('SendGrid test error:', err);
-      res.status(500).json({ status: "error", message: `SendGrid test failed: ${err.message}` });
+
+      console.log('Generating verification token for:', testEmail);
+      const token = await generateVerificationToken();
+
+      console.log('Attempting to send verification email to:', testEmail);
+      const sent = await sendVerificationEmail(testEmail, token);
+
+      if (sent) {
+        console.log('Email sent successfully to:', testEmail);
+        return res.json({ 
+          status: "success", 
+          message: "Verification email sent successfully" 
+        });
+      } else {
+        console.error('Failed to send email to:', testEmail);
+        return res.status(500).json({ 
+          status: "error", 
+          message: "Failed to send verification email" 
+        });
+      }
+    } catch (err: any) {
+      console.error('Test verification email error:', err);
+      return res.status(500).json({ 
+        status: "error", 
+        message: `Failed to send test email: ${err.message}` 
+      });
     }
   });
 
   //New route to verify SendGrid setup
-  app.get("/api/verify-sendgrid", async (req:Request, res:Response) => {
+  apiRouter.get("/verify-sendgrid", async (req:Request, res:Response) => {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
       if (!apiKey || !apiKey.startsWith('SG.')) {
@@ -43,9 +73,24 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ status: "error", message: `SendGrid verification failed: ${err.message}` });
     }
   });
+    
+  // Test SendGrid connection with improved error handling
+  apiRouter.get("/test-email", async (req:Request, res:Response) => {
+    try {
+      const isConnected = await testSendGridConnection();
+      if (isConnected) {
+        res.json({ status: "success", message: "SendGrid connection successful" });
+      } else {
+        res.status(500).json({ status: "error", message: "SendGrid connection failed.  See logs for details." });
+      }
+    } catch (err:any) {
+      console.error('SendGrid test error:', err);
+      res.status(500).json({ status: "error", message: `SendGrid test failed: ${err.message}` });
+    }
+  });
 
   // Customer routes
-  app.get("/api/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const customerContracts = await db.query.contracts.findMany({
         where: eq(contracts.customerId, parseInt(req.params.id)),
@@ -55,25 +100,25 @@ export function registerRoutes(app: Express): Server {
       });
       res.json(customerContracts);
     } catch (err:any) {
-      console.error("Error fetching customer contracts:", err); //Added logging
+      console.error("Error fetching customer contracts:", err); 
       next(err);
     }
   });
 
   // Merchant routes
-  app.get("/api/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const [merchant] = await db.query.merchants.findMany({
         where: eq(merchants.userId, parseInt(req.params.userId)),
       });
       res.json(merchant);
     } catch (err:any) {
-      console.error("Error fetching merchant by user:", err); //Added logging
+      console.error("Error fetching merchant by user:", err); 
       next(err);
     }
   });
 
-  app.get("/api/merchants/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const merchantContracts = await db.query.contracts.findMany({
         where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -83,13 +128,13 @@ export function registerRoutes(app: Express): Server {
       });
       res.json(merchantContracts);
     } catch (err:any) {
-      console.error("Error fetching merchant contracts:", err); //Added logging
+      console.error("Error fetching merchant contracts:", err); 
       next(err);
     }
   });
 
   // Admin routes
-  app.get("/api/merchants", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const allMerchants = await db.query.merchants.findMany({
         with: {
@@ -98,12 +143,12 @@ export function registerRoutes(app: Express): Server {
       });
       res.json(allMerchants);
     } catch (err:any) {
-      console.error("Error fetching all merchants:", err); //Added logging
+      console.error("Error fetching all merchants:", err); 
       next(err);
     }
   });
 
-  app.get("/api/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const allContracts = await db.query.contracts.findMany({
         with: {
@@ -113,16 +158,19 @@ export function registerRoutes(app: Express): Server {
       });
       res.json(allContracts);
     } catch (err:any) {
-      console.error("Error fetching all contracts:", err); //Added logging
+      console.error("Error fetching all contracts:", err); 
       next(err);
     }
   });
 
-  // Global error handler
+  // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    console.error("Global error handler caught:", err); //Added logging
+    console.error("Global error handler caught:", err); 
     res.status(500).json({ error: "Internal server error" });
   });
+
+  // Mount API router under /api prefix
+  app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
   return httpServer;
