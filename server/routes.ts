@@ -68,9 +68,9 @@ export function registerRoutes(app: Express): Server {
       const testEmail = req.body.email;
 
       if (!testEmail) {
-        return res.status(400).json({ 
-          status: "error", 
-          message: "Email address is required" 
+        return res.status(400).json({
+          status: "error",
+          message: "Email address is required"
         });
       }
 
@@ -89,96 +89,96 @@ export function registerRoutes(app: Express): Server {
 
       if (sent) {
         console.log('Email sent successfully to:', testEmail);
-        return res.json({ 
-          status: "success", 
-          message: "Verification email sent successfully" 
+        return res.json({
+          status: "success",
+          message: "Verification email sent successfully"
         });
       } else {
         console.error('Failed to send email to:', testEmail);
-        return res.status(500).json({ 
-          status: "error", 
-          message: "Failed to send verification email" 
+        return res.status(500).json({
+          status: "error",
+          message: "Failed to send verification email"
         });
       }
     } catch (err: any) {
       console.error('Test verification email error:', err);
-      return res.status(500).json({ 
-        status: "error", 
-        message: err.message || "Failed to send test email" 
+      return res.status(500).json({
+        status: "error",
+        message: err.message || "Failed to send test email"
       });
     }
   });
 
   //New route to verify SendGrid setup
-  apiRouter.get("/verify-sendgrid", async (req:Request, res:Response) => {
+  apiRouter.get("/verify-sendgrid", async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
       if (!apiKey || !apiKey.startsWith('SG.')) {
-        return res.status(500).json({ 
-          status: "error", 
-          message: "Invalid or missing SendGrid API key." 
+        return res.status(500).json({
+          status: "error",
+          message: "Invalid or missing SendGrid API key."
         });
       }
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ 
-          status: "success", 
-          message: "SendGrid setup verified successfully." 
+        res.json({
+          status: "success",
+          message: "SendGrid setup verified successfully."
         });
       } else {
-        res.status(500).json({ 
-          status: "error", 
-          message: "SendGrid setup verification failed. Check API key and connection." 
+        res.status(500).json({
+          status: "error",
+          message: "SendGrid setup verification failed. Check API key and connection."
         });
       }
-    } catch (err:any) {
+    } catch (err: any) {
       console.error('SendGrid verification error:', err);
-      res.status(500).json({ 
-        status: "error", 
-        message: err.message || "SendGrid verification failed" 
+      res.status(500).json({
+        status: "error",
+        message: err.message || "SendGrid verification failed"
       });
     }
   });
 
   // Test SendGrid connection with improved error handling
-  apiRouter.get("/test-email", async (req:Request, res:Response) => {
+  apiRouter.get("/test-email", async (req: Request, res: Response) => {
     try {
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ 
-          status: "success", 
-          message: "SendGrid connection successful" 
+        res.json({
+          status: "success",
+          message: "SendGrid connection successful"
         });
       } else {
-        res.status(500).json({ 
-          status: "error", 
-          message: "SendGrid connection failed. See logs for details." 
+        res.status(500).json({
+          status: "error",
+          message: "SendGrid connection failed. See logs for details."
         });
       }
-    } catch (err:any) {
+    } catch (err: any) {
       console.error('SendGrid test error:', err);
-      res.status(500).json({ 
-        status: "error", 
-        message: err.message || "SendGrid test failed" 
+      res.status(500).json({
+        status: "error",
+        message: err.message || "SendGrid test failed"
       });
     }
   });
 
 
   // Merchant routes
-  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/by-user/:userId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const [merchant] = await db.query.merchants.findMany({
         where: eq(merchants.userId, parseInt(req.params.userId)),
       });
       res.json(merchant);
-    } catch (err:any) {
-      console.error("Error fetching merchant by user:", err); 
+    } catch (err: any) {
+      console.error("Error fetching merchant by user:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const merchantContracts = await db.query.contracts.findMany({
         where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -187,14 +187,14 @@ export function registerRoutes(app: Express): Server {
         },
       });
       res.json(merchantContracts);
-    } catch (err:any) {
-      console.error("Error fetching merchant contracts:", err); 
+    } catch (err: any) {
+      console.error("Error fetching merchant contracts:", err);
       next(err);
     }
   });
 
   // Admin routes
-  apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const allMerchants = await db.query.merchants.findMany({
         with: {
@@ -202,13 +202,13 @@ export function registerRoutes(app: Express): Server {
         },
       });
       res.json(allMerchants);
-    } catch (err:any) {
-      console.error("Error fetching all merchants:", err); 
+    } catch (err: any) {
+      console.error("Error fetching all merchants:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const allContracts = await db.query.contracts.findMany({
         with: {
@@ -217,8 +217,8 @@ export function registerRoutes(app: Express): Server {
         },
       });
       res.json(allContracts);
-    } catch (err:any) {
-      console.error("Error fetching all contracts:", err); 
+    } catch (err: any) {
+      console.error("Error fetching all contracts:", err);
       next(err);
     }
   });
@@ -257,9 +257,9 @@ export function registerRoutes(app: Express): Server {
       res.json({ redirectUrl: sessionUrl });
     } catch (err: any) {
       console.error('Error starting KYC process:', err);
-      res.status(500).json({ 
-        error: 'Failed to start verification process', 
-        details: err.message 
+      res.status(500).json({
+        error: 'Failed to start verification process',
+        details: err.message
       });
     }
   });
@@ -293,17 +293,80 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Updated webhook endpoint with better error handling and logging
+  // Add this route after the existing /kyc/status endpoint
+  apiRouter.get("/kyc/verification-status/:sessionId", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { sessionId } = req.params;
+
+      // First check our local database
+      const [session] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId))
+        .limit(1);
+
+      if (!session) {
+        return res.status(404).json({ error: 'Verification session not found' });
+      }
+
+      // If status is not final, check with Didit API
+      if (!['Approved', 'Declined'].includes(session.status)) {
+        const diditStatus = await diditService.getSessionStatus(sessionId);
+
+        // Update our local status if it changed
+        if (diditStatus !== session.status) {
+          await db
+            .update(verificationSessions)
+            .set({
+              status: diditStatus,
+              updatedAt: new Date()
+            })
+            .where(eq(verificationSessions.sessionId, sessionId));
+
+          // If status is final, update user KYC status
+          if (['Approved', 'Declined'].includes(diditStatus)) {
+            await db
+              .update(users)
+              .set({
+                kycStatus: diditStatus === 'Approved' ? 'verified' : 'failed'
+              })
+              .where(eq(users.id, session.userId));
+          }
+
+          return res.json({
+            status: diditStatus,
+            updatedAt: new Date(),
+            sessionId
+          });
+        }
+      }
+
+      return res.json({
+        status: session.status,
+        updatedAt: session.updatedAt,
+        sessionId: session.sessionId
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Update the webhook endpoint to include more logging
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payload = req.body;
-      console.log('Received Didit webhook:', payload);
+      console.log('Received Didit webhook payload:', {
+        session_id: payload.session_id,
+        status: payload.status,
+        hasDecision: !!payload.decision
+      });
 
       // Get required headers
       const signature = req.headers['x-signature'];
       const timestamp = req.headers['x-timestamp'];
 
       if (!signature || !timestamp) {
+        console.error('Missing webhook headers:', { signature: !!signature, timestamp: !!timestamp });
         return res.status(401).json({ error: 'Missing required headers' });
       }
 
@@ -313,11 +376,15 @@ export function registerRoutes(app: Express): Server {
         signature as string,
         timestamp as string
       )) {
+        console.error('Invalid webhook signature');
         return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
       }
 
+      console.log('Processing verified webhook with status:', payload.status);
+
       // Process webhook asynchronously
       await diditService.processWebhook(payload);
+      console.log('Successfully processed webhook for session:', payload.session_id);
 
       res.json({ status: 'success' });
     } catch (err) {
@@ -366,11 +433,11 @@ export function registerRoutes(app: Express): Server {
 
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    console.error("Global error handler caught:", err); 
+    console.error("Global error handler caught:", err);
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(500).json({
         status: "error",
-        message: err.message || "Internal server error" 
+        message: err.message || "Internal server error"
       });
     }
   });
