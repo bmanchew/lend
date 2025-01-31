@@ -29,12 +29,16 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       return response.json();
     },
     onSuccess: (data) => {
-      // Store the session ID in localStorage for later status checks
-      if (user?.id) {
-        localStorage.setItem(`kyc_session_${user.id}`, data.sessionId);
+      if (data.redirectUrl) {
+        // Store the session ID in localStorage for later status checks
+        if (user?.id) {
+          localStorage.setItem(`kyc_session_${user.id}`, data.sessionId);
+        }
+        // Redirect to Didit verification flow
+        window.location.href = data.redirectUrl;
+      } else {
+        throw new Error('Invalid response from server');
       }
-      // Redirect to Didit verification flow
-      window.location.href = data.redirectUrl;
     },
     onError: (error) => {
       toast({
@@ -47,7 +51,15 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
 
   // Handle verification status updates
   useQuery({
-    queryKey: ['kyc-callback-status', localStorage.getItem(`kyc_session_${user?.id}`)],
+    queryKey: ['/api/kyc/verification-status', localStorage.getItem(`kyc_session_${user?.id}`)],
+    queryFn: async ({ queryKey }) => {
+      const sessionId = queryKey[1];
+      if (!sessionId) return null;
+
+      const response = await fetch(`/api/kyc/verification-status/${sessionId}`);
+      if (!response.ok) throw new Error('Failed to check verification status');
+      return response.json();
+    },
     enabled: !!localStorage.getItem(`kyc_session_${user?.id}`),
     refetchInterval: 5000, // Poll every 5 seconds
     onSuccess: (data) => {
