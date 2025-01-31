@@ -8,6 +8,7 @@ import { testSendGridConnection, sendVerificationEmail, generateVerificationToke
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { diditService } from "./services/didit";
+import axios from 'axios';
 
 // Add Didit webhook types
 interface DiditWebhookPayload {
@@ -317,18 +318,21 @@ export function registerRoutes(app: Express): Server {
   // Add callback URL endpoint for mobile app redirect
   apiRouter.get("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { session_id: sessionId, status } = req.query;
+      const { session_id: sessionId } = req.query;
 
       if (!sessionId) {
         return res.status(400).json({ error: 'Missing session ID' });
       }
 
+      // Get the session status using the new method
+      const status = await diditService.getSessionStatus(sessionId as string);
+
       // Redirect to appropriate page based on status
       let redirectUrl = '/dashboard';
-      if (status === 'success') {
-        redirectUrl += '?kyc=success';
-      } else if (status === 'failed') {
-        redirectUrl += '?kyc=failed';
+      if (status === 'Approved') {
+        redirectUrl = '/loan-offers?verified=true';
+      } else if (status === 'Declined') {
+        redirectUrl = '/dashboard?kyc=failed';
       }
 
       res.redirect(redirectUrl);

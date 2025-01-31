@@ -36,8 +36,8 @@ class DiditService {
     };
   }
 
-  private async getAccessToken(): Promise<string> {
-    // Check if we have a valid token
+  // Make getAccessToken public so it can be used by routes
+  public async getAccessToken(): Promise<string> {
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
@@ -112,7 +112,7 @@ class DiditService {
 
       // Create session according to documentation
       const sessionData = {
-        callback: this.config.webhookUrl,
+        callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
         features: 'OCR + FACE',
         vendor_data: user.id.toString()
       };
@@ -190,6 +190,27 @@ class DiditService {
         .where(eq(users.id, userId));
     } catch (error) {
       console.error("Error updating user KYC status:", error);
+      throw error;
+    }
+  }
+
+  // Add method to check session status by session ID
+  async getSessionStatus(sessionId: string): Promise<string> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const response = await axios.get(
+        `https://verification.didit.me/v1/session/${sessionId}/status`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return response.data.status;
+    } catch (error: any) {
+      console.error("Error getting session status:", error.response?.data || error.message);
       throw error;
     }
   }
