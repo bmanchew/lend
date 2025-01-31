@@ -10,6 +10,7 @@ import AuthPage from "@/pages/auth-page";
 import CustomerDashboard from "@/pages/customer/dashboard";
 import MerchantDashboard from "@/pages/merchant/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
+import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 
 function Router() {
   return (
@@ -21,6 +22,7 @@ function Router() {
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
       <ProtectedRoute path="/merchant" component={MerchantDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
+      <ProtectedRoute path="/admin/kyc-verifications" component={KycVerificationsPage} />
       <Route component={NotFound} />
     </Switch>
   );

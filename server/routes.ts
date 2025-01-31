@@ -358,6 +358,28 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
+  
+  apiRouter.get("/kyc/sessions", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sessions = await db
+        .select({
+          id: verificationSessions.id,
+          userId: verificationSessions.userId,
+          sessionId: verificationSessions.sessionId,
+          status: verificationSessions.status,
+          features: verificationSessions.features,
+          createdAt: verificationSessions.createdAt,
+          updatedAt: verificationSessions.updatedAt
+        })
+        .from(verificationSessions)
+        .orderBy(desc(verificationSessions.createdAt));
+
+      res.json(sessions);
+    } catch (err) {
+      console.error('Error fetching verification sessions:', err);
+      next(err);
+    }
+  });
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     console.error("Global error handler caught:", err); 
