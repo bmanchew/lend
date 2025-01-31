@@ -2,6 +2,7 @@ import { users } from "@db/schema";
 import { db } from "@db";
 import { eq } from "drizzle-orm";
 import axios from "axios";
+import crypto from 'crypto';
 
 interface DiditConfig {
   apiKey: string;
@@ -25,7 +26,7 @@ class DiditService {
       apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl: 'https://api.didit.com/v1', // Replace with actual Didit API base URL
+      baseUrl: 'https://api.didit.com/v1',
     };
 
     this.axios = axios.create({
@@ -36,6 +37,19 @@ class DiditService {
         'Content-Type': 'application/json',
       }
     });
+  }
+
+  // Verify webhook signature
+  verifyWebhookSignature(payload: string, signature: string): boolean {
+    const expectedSignature = crypto
+      .createHmac('sha256', this.config.clientSecret)
+      .update(payload)
+      .digest('hex');
+
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
   }
 
   // Initialize KYC verification session
@@ -56,10 +70,10 @@ class DiditService {
         email: user.email,
         name: user.name,
         callbackUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
+        webhookUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/webhook`,
       });
 
       if (response.data && response.data.sessionId) {
-        // Update user's KYC status to pending
         await this.updateUserKycStatus(userId, 'pending');
         return response.data.sessionId;
       }
@@ -103,7 +117,7 @@ class DiditService {
     try {
       await db
         .update(users)
-        .set({ kycStatus: status })
+        .set({ kycStatus: status as "pending" | "verified" | "failed" })
         .where(eq(users.id, userId));
     } catch (error) {
       console.error("Error updating user KYC status:", error);

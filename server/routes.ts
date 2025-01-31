@@ -9,10 +9,23 @@ import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { diditService } from "./services/didit";
 
+// Add Didit webhook types
+interface DiditWebhookPayload {
+  sessionId: string;
+  status: 'initialized' | 'retrieved' | 'confirmed' | 'declined';
+  userId: string;
+  data?: {
+    verificationStatus: string;
+    documentData?: any;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
-
-  // API routes
   const apiRouter = express.Router();
 
   // Test SendGrid connection with improved error handling
@@ -215,6 +228,84 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+
+  // Add KYC Webhook endpoints
+  apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = req.body as DiditWebhookPayload;
+      console.log('Received Didit webhook:', payload);
+
+      // Verify webhook authenticity
+      const signature = req.headers['x-didit-signature'];
+      if (!signature) {
+        return res.status(401).json({ error: 'Missing webhook signature' });
+      }
+
+      // TODO: Implement signature verification when we have the webhook secret
+
+      switch (payload.status) {
+        case 'retrieved':
+          // Update session status when user opens verification in mobile app
+          console.log('User retrieved verification session:', payload.sessionId);
+          break;
+
+        case 'confirmed':
+          if (payload.data) {
+            // Update user's KYC status based on verification result
+            const userId = parseInt(payload.userId);
+            await diditService.updateUserKycStatus(
+              userId, 
+              payload.data.verificationStatus === 'success' ? 'verified' : 'failed'
+            );
+
+            // Store any additional verification data
+            if (payload.data.documentData) {
+              // TODO: Store relevant document data securely
+              console.log('Received verified document data for user:', userId);
+            }
+          }
+          break;
+
+        case 'declined':
+          // Handle user declining the verification
+          const userId = parseInt(payload.userId);
+          await diditService.updateUserKycStatus(userId, 'failed');
+          if (payload.error) {
+            console.error('Verification declined:', payload.error);
+          }
+          break;
+      }
+
+      res.json({ status: 'success' });
+    } catch (err) {
+      console.error('Error processing Didit webhook:', err);
+      next(err);
+    }
+  });
+
+  // Add callback URL endpoint for mobile app redirect
+  apiRouter.get("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { session_id: sessionId, status } = req.query;
+
+      if (!sessionId) {
+        return res.status(400).json({ error: 'Missing session ID' });
+      }
+
+      // Redirect to appropriate page based on status
+      let redirectUrl = '/dashboard';
+      if (status === 'success') {
+        redirectUrl += '?kyc=success';
+      } else if (status === 'failed') {
+        redirectUrl += '?kyc=failed';
+      }
+
+      res.redirect(redirectUrl);
+    } catch (err) {
+      console.error('Error handling KYC callback:', err);
+      next(err);
+    }
+  });
 
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
