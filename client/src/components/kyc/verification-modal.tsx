@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 
 interface KycStatus {
   status: string;
@@ -23,16 +24,16 @@ interface KycStartError {
 export function KycVerificationModal({ 
   isOpen, 
   onClose,
-  returnUrl = '/dashboard'
+  onVerificationComplete
 }: { 
   isOpen: boolean; 
   onClose: () => void;
-  returnUrl?: string;
+  onVerificationComplete?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Query to check KYC status
+  // Query to check KYC status with polling
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
     queryKey: ['/api/kyc/status', user?.id],
     queryFn: async () => {
@@ -44,7 +45,26 @@ export function KycVerificationModal({
       return response.json();
     },
     enabled: isOpen && !!user?.id,
+    refetchInterval: (data) => {
+      // Poll every 2 seconds if verification is in progress
+      if (data?.status === 'pending' || data?.status === 'in_progress') {
+        return 2000;
+      }
+      // Stop polling once we have a final status
+      if (data?.status === 'Approved' || data?.status === 'Declined') {
+        return false;
+      }
+      // Default polling interval
+      return false;
+    },
   });
+
+  // Effect to handle verification completion
+  useEffect(() => {
+    if (kycData?.status === 'Approved' && onVerificationComplete) {
+      onVerificationComplete();
+    }
+  }, [kycData?.status, onVerificationComplete]);
 
   // Mutation to start KYC process
   const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error, void>({
@@ -53,10 +73,7 @@ export function KycVerificationModal({
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user.id,
-          returnUrl
-        }),
+        body: JSON.stringify({ userId: user.id }),
       });
       if (!response.ok) {
         const errorData = await response.json() as KycStartError;
@@ -65,7 +82,8 @@ export function KycVerificationModal({
       return response.json();
     },
     onSuccess: (data) => {
-      window.location.href = data.redirectUrl;
+      // Open Didit verification in a new window
+      window.open(data.redirectUrl, 'verification', 'width=800,height=800');
     },
     onError: (error: Error) => {
       toast({
@@ -85,14 +103,14 @@ export function KycVerificationModal({
       );
     }
 
-    if (kycData?.status === 'verified') {
+    if (kycData?.status === 'Approved') {
       return (
         <div className="space-y-4">
           <p className="text-green-600 font-medium">
             Your identity has been verified successfully!
           </p>
           <div className="flex justify-end">
-            <Button onClick={onClose}>Close</Button>
+            <Button onClick={onClose}>Continue</Button>
           </div>
         </div>
       );
@@ -102,7 +120,33 @@ export function KycVerificationModal({
       return (
         <div className="space-y-4">
           <p className="text-amber-600">
-            Your verification is in progress. Please complete the verification process.
+            Please complete the verification process in the opened window.
+          </p>
+          <div className="flex justify-center items-center space-x-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm text-muted-foreground">
+              Waiting for verification...
+            </span>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={onClose}>Later</Button>
+            <Button 
+              onClick={() => startKyc()} 
+              disabled={isStarting}
+            >
+              {isStarting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Restart Verification
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (kycData?.status === 'Declined') {
+      return (
+        <div className="space-y-4">
+          <p className="text-red-600">
+            Your verification was not successful. Please try again.
           </p>
           <div className="flex justify-end space-x-2">
             <Button variant="outline" onClick={onClose}>Later</Button>
@@ -111,7 +155,7 @@ export function KycVerificationModal({
               disabled={isStarting}
             >
               {isStarting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Continue Verification
+              Retry Verification
             </Button>
           </div>
         </div>

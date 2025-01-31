@@ -97,18 +97,21 @@ class DiditService {
       // Construct callback URL with session tracking
       const callbackUrl = new URL('/api/kyc/callback', replitDomain);
 
+      // Construct the complete return URL
+      const completeReturnUrl = new URL(returnUrl || '/dashboard', replitDomain).toString();
+
+      console.log('Initializing KYC session with:', {
+        callback: callbackUrl.toString(),
+        baseUrl: replitDomain,
+        returnUrl: completeReturnUrl
+      });
+
       const sessionData = {
         callback: callbackUrl.toString(),
         features: 'OCR + FACE',
         vendor_data: user.id.toString(),
-        redirect_url: returnUrl // Add redirect_url for Didit to use after verification
+        redirect_url: completeReturnUrl // Set the redirect_url to the full URL
       };
-
-      console.log('Initializing KYC session with:', {
-        ...sessionData,
-        callback: callbackUrl.toString(),
-        baseUrl: replitDomain
-      });
 
       const response = await axios.post(
         'https://verification.didit.me/v1/session/', 
@@ -134,7 +137,7 @@ class DiditService {
         sessionId: response.data.session_id,
         status: 'initialized',
         features: sessionData.features,
-        returnUrl: returnUrl || '/dashboard',
+        returnUrl: completeReturnUrl,
         createdAt: new Date(),
         updatedAt: new Date(),
         expiresAt,

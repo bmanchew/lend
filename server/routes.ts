@@ -221,7 +221,7 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId, returnUrl } = req.body;
+      const { userId } = req.body;
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
@@ -229,7 +229,7 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Starting KYC process for user:', userId);
 
-      const sessionUrl = await diditService.initializeKycSession(userId, returnUrl);
+      const sessionUrl = await diditService.initializeKycSession(userId);
       console.log('Generated KYC session URL:', sessionUrl);
 
       res.json({ redirectUrl: sessionUrl });
@@ -265,6 +265,17 @@ export function registerRoutes(app: Express): Server {
       let status;
       if (latestSession) {
         status = await diditService.getSessionStatus(latestSession.sessionId);
+
+        // Update the session status if it has changed
+        if (status !== latestSession.status) {
+          await db
+            .update(verificationSessions)
+            .set({ 
+              status: status as VerificationStatus,
+              updatedAt: new Date()
+            })
+            .where(eq(verificationSessions.sessionId, latestSession.sessionId));
+        }
       } else {
         const [user] = await db
           .select()
@@ -321,50 +332,6 @@ export function registerRoutes(app: Express): Server {
       res.json({ status: 'success' });
     } catch (err) {
       next(err);
-    }
-  });
-
-  apiRouter.get("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { session_id: sessionId } = req.query;
-
-      if (!sessionId) {
-        return res.status(400).json({ error: 'Missing session ID' });
-      }
-
-      const [session] = await db
-        .select()
-        .from(verificationSessions)
-        .where(eq(verificationSessions.sessionId, sessionId as string))
-        .limit(1);
-
-      if (!session) {
-        return res.status(404).json({ error: 'Session not found' });
-      }
-
-      const status = await diditService.getSessionStatus(sessionId as string);
-
-      await db
-        .update(verificationSessions)
-        .set({ 
-          status: status as VerificationStatus,
-          updatedAt: new Date()
-        })
-        .where(eq(verificationSessions.sessionId, sessionId as string));
-
-      const redirectUrl = new URL(session.returnUrl || '/dashboard');
-      redirectUrl.searchParams.append('kyc_status', status);
-
-      if (status === 'Approved') {
-        redirectUrl.searchParams.append('verified', 'true');
-      } else if (status === 'Declined') {
-        redirectUrl.searchParams.append('verified', 'false');
-      }
-
-      res.redirect(redirectUrl.toString());
-    } catch (err) {
-      console.error('Error handling KYC callback:', err);
-      res.redirect('/dashboard?kyc_error=true');
     }
   });
 
