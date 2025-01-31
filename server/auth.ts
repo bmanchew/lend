@@ -7,7 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db, pool } from "@db";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 
 const scryptAsync = promisify(scrypt);
@@ -30,6 +30,17 @@ async function comparePasswords(supplied: string, stored: string) {
     return false;
   }
 }
+
+// Add types for user roles
+type UserRole = "admin" | "customer" | "merchant";
+type User = {
+  id: number;
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+  role: UserRole;
+};
 
 export function setupAuth(app: Express) {
   // Session setup
@@ -84,7 +95,7 @@ export function setupAuth(app: Express) {
     })
   );
 
-  passport.serializeUser((user: any, done) => {
+  passport.serializeUser((user: User, done) => {
     done(null, user.id);
   });
 
@@ -107,25 +118,36 @@ export function setupAuth(app: Express) {
       const parsed = insertUserSchema.safeParse(req.body);
       if (!parsed.success) {
         const error = fromZodError(parsed.error);
-        return res.status(400).json({ error: error.message });
+        return res.status(400).json({ message: error.message });
       }
 
       // Check if trying to create an admin
       if (parsed.data.role === "admin") {
         // Only allow admin creation if the current user is an admin
-        if (req.user?.role !== "admin") {
-          return res.status(403).json({ error: "Only admins can create admin accounts" });
+        if (!req.user || (req.user as User).role !== "admin") {
+          return res.status(403).json({ message: "Only admins can create admin accounts" });
         }
       }
 
+      // Check for existing username or email
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.username, parsed.data.username))
+        .where(
+          or(
+            eq(users.username, parsed.data.username),
+            eq(users.email, parsed.data.email)
+          )
+        )
         .limit(1);
 
       if (existingUser) {
-        return res.status(400).json({ error: "Username already exists" });
+        if (existingUser.username === parsed.data.username) {
+          return res.status(400).json({ message: "Username already exists" });
+        }
+        if (existingUser.email === parsed.data.email) {
+          return res.status(400).json({ message: "Email already exists" });
+        }
       }
 
       // Hash password and create user
@@ -140,29 +162,29 @@ export function setupAuth(app: Express) {
 
       req.login(user, (err) => {
         if (err) {
-          return res.status(500).json({ error: "Login failed after registration" });
+          return res.status(500).json({ message: "Login failed after registration" });
         }
         res.status(201).json(user);
       });
     } catch (err) {
       console.error('Registration error:', err);
-      res.status(500).json({ error: "Registration failed" });
+      res.status(500).json({ message: "Registration failed" });
     }
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: any, info: any) => {
+    passport.authenticate("local", (err: any, user: User | false, info: any) => {
       if (err) {
         console.error('Login error:', err);
-        return res.status(500).json({ error: "Login failed" });
+        return res.status(500).json({ message: "Login failed" });
       }
       if (!user) {
-        return res.status(401).json({ error: info?.message || "Invalid credentials" });
+        return res.status(401).json({ message: info?.message || "Invalid credentials" });
       }
       req.login(user, (err) => {
         if (err) {
           console.error('Login session error:', err);
-          return res.status(500).json({ error: "Login failed" });
+          return res.status(500).json({ message: "Login failed" });
         }
         res.json(user);
       });
