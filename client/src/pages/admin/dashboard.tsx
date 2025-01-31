@@ -10,10 +10,36 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import type { SelectMerchant, SelectContract } from "@db/schema";
+import type { SelectMerchant, SelectContract, InsertUser } from "@db/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertUserSchema } from "@db/schema";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, registerMutation } = useAuth();
+  const { toast } = useToast();
+
+  const form = useForm<InsertUser>({
+    resolver: zodResolver(insertUserSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+      email: "",
+      name: "",
+      role: "admin" as const,
+    },
+  });
 
   const { data: merchants } = useQuery<SelectMerchant[]>({
     queryKey: ["/api/merchants"],
@@ -30,6 +56,19 @@ export default function AdminDashboard() {
     { name: "Apr", value: 8000 },
     { name: "May", value: 7000 },
   ];
+
+  const onSubmit = async (data: InsertUser) => {
+    try {
+      await registerMutation.mutateAsync(data);
+      toast({
+        title: "Success",
+        description: "New admin user created successfully",
+      });
+      form.reset();
+    } catch (error) {
+      // Error handling is already done in the mutation
+    }
+  };
 
   return (
     <PortalLayout>
@@ -83,7 +122,78 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create Admin User</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={registerMutation.isPending}
+                  >
+                    Create Admin User
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Platform Performance</CardTitle>
@@ -104,8 +214,8 @@ export default function AdminDashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-
-          <Card>
+        </div>
+        <Card className="col-span-2">
             <CardHeader>
               <CardTitle>Active Merchants</CardTitle>
             </CardHeader>
@@ -129,7 +239,6 @@ export default function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
-        </div>
       </div>
     </PortalLayout>
   );
