@@ -23,16 +23,14 @@ class DiditService {
       throw new Error("Missing required Didit API credentials");
     }
 
-    // Use sandbox URL for development and testing
-    const baseUrl = NODE_ENV === 'production' 
-      ? 'https://api.didit.com/v1'
-      : 'https://sandbox-api.didit.com/v1';
-
+    // For development/testing, we'll simulate the API since we don't have access to actual sandbox
     this.config = {
       apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl,
+      baseUrl: NODE_ENV === 'production' 
+        ? 'https://api.didit.com/v1'
+        : 'http://localhost:5000/mock-didit', // Mock API for development
     };
 
     this.axios = axios.create({
@@ -66,6 +64,13 @@ class DiditService {
         environment: process.env.NODE_ENV || 'development'
       });
 
+      // For development, simulate a successful response
+      if (process.env.NODE_ENV !== 'production') {
+        await this.updateUserKycStatus(userId, 'pending');
+        const mockSessionId = `mock-session-${Date.now()}`;
+        return mockSessionId;
+      }
+
       const payload = {
         userId: user.id.toString(),
         email: user.email,
@@ -78,13 +83,13 @@ class DiditService {
       };
 
       const response = await this.axios.post('/kyc/sessions', payload);
+
       console.log('KYC session created successfully:', {
         sessionId: response.data?.sessionId,
         status: response.status,
       });
 
       if (response.data && response.data.sessionId) {
-        // Update user's KYC status to pending
         await this.updateUserKycStatus(userId, 'pending');
         return response.data.sessionId;
       }
@@ -95,10 +100,6 @@ class DiditService {
         error: error.message,
         response: error.response?.data,
         status: error.response?.status,
-        config: {
-          url: this.config.baseUrl + '/kyc/sessions',
-          method: 'POST',
-        }
       });
       throw new Error(error.response?.data?.message || "Failed to initialize KYC session");
     }
@@ -107,6 +108,11 @@ class DiditService {
   // Check KYC verification status
   async checkVerificationStatus(userId: number): Promise<KycStatus> {
     try {
+      if (!userId || isNaN(userId)) {
+        console.error('Invalid user ID provided:', userId);
+        return 'pending';
+      }
+
       const [user] = await db
         .select()
         .from(users)
@@ -123,7 +129,13 @@ class DiditService {
         environment: process.env.NODE_ENV || 'development'
       });
 
+      // For development, simulate status check
+      if (process.env.NODE_ENV !== 'production') {
+        return user.kycStatus as KycStatus || 'pending';
+      }
+
       const response = await this.axios.get(`/kyc/status/${user.id}`);
+
       console.log('KYC status response:', {
         status: response.data?.status,
         httpStatus: response.status,
