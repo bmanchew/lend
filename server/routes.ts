@@ -12,7 +12,7 @@ import { diditService } from "./services/didit";
 // Add Didit webhook types
 interface DiditWebhookPayload {
   sessionId: string;
-  status: 'initialized' | 'retrieved' | 'confirmed' | 'declined';
+  status: 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
   userId: string;
   data?: {
     verificationStatus: string;
@@ -21,6 +21,12 @@ interface DiditWebhookPayload {
   error?: {
     code: string;
     message: string;
+  };
+  vendor_data?: string;
+  decision?: {
+    kyc?: {
+      document_data?: any;
+    };
   };
 }
 
@@ -235,50 +241,60 @@ export function registerRoutes(app: Express): Server {
   // Add KYC Webhook endpoints
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = req.body as DiditWebhookPayload;
+      const payload = req.body;
       console.log('Received Didit webhook:', payload);
 
-      // Verify webhook authenticity
-      const signature = req.headers['x-didit-signature'];
-      if (!signature) {
-        return res.status(401).json({ error: 'Missing webhook signature' });
+      // Get required headers
+      const signature = req.headers['x-signature'];
+      const timestamp = req.headers['x-timestamp'];
+
+      if (!signature || !timestamp) {
+        return res.status(401).json({ error: 'Missing required headers' });
       }
 
       // Verify webhook signature using the configured secret
-      if (!diditService.verifyWebhookSignature(JSON.stringify(req.body), signature as string)) {
-        return res.status(401).json({ error: 'Invalid webhook signature' });
+      if (!diditService.verifyWebhookSignature(
+        JSON.stringify(payload),
+        signature as string,
+        timestamp as string
+      )) {
+        return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
       }
 
-      switch (payload.status) {
+      const { session_id, status, vendor_data, decision } = payload;
+
+      // Log detailed information about the webhook
+      console.log('Processing webhook:', {
+        sessionId: session_id,
+        status,
+        vendorData: vendor_data,
+        hasDecision: !!decision
+      });
+
+      // Handle different webhook statuses
+      switch (status) {
         case 'retrieved':
           // Update session status when user opens verification in mobile app
-          console.log('User retrieved verification session:', payload.sessionId);
+          console.log('User retrieved verification session:', session_id);
           break;
 
-        case 'confirmed':
-          if (payload.data) {
-            // Update user's KYC status based on verification result
-            const userId = parseInt(payload.userId);
+        case 'Approved':
+        case 'Declined':
+          if (decision) {
+            const userId = parseInt(vendor_data);
             await diditService.updateUserKycStatus(
-              userId, 
-              payload.data.verificationStatus === 'success' ? 'verified' : 'failed'
+              userId,
+              status === 'Approved' ? 'verified' : 'failed'
             );
 
-            // Store any additional verification data
-            if (payload.data.documentData) {
+            if (decision.kyc?.document_data) {
               console.log('Received verified document data for user:', userId);
             }
           }
           break;
 
-        case 'declined':
-          // Handle user declining the verification
-          const userId = parseInt(payload.userId);
-          await diditService.updateUserKycStatus(userId, 'failed');
-          if (payload.error) {
-            console.error('Verification declined:', payload.error);
-          }
-          break;
+        default:
+          console.log('Unhandled webhook status:', status);
       }
 
       res.json({ status: 'success' });

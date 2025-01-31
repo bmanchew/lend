@@ -28,7 +28,7 @@ class DiditService {
       apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl: 'https://api.didit.com/v1',
+      baseUrl: 'https://verify.staging.didit.me', 
       webhookUrl: DIDIT_WEBHOOK_URL,
       webhookSecret: DIDIT_WEBHOOK_SECRET
     };
@@ -44,16 +44,31 @@ class DiditService {
   }
 
   // Verify webhook signature using the provided secret
-  verifyWebhookSignature(payload: string, signature: string): boolean {
-    const expectedSignature = crypto
-      .createHmac('sha256', this.config.webhookSecret)
-      .update(payload)
-      .digest('hex');
+  verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
+    try {
+      // Check if timestamp is recent (within 5 minutes)
+      const timestamp = parseInt(timestampHeader);
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (Math.abs(currentTime - timestamp) > 300) {
+        console.error('Webhook timestamp is stale');
+        return false;
+      }
 
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
+      // Calculate expected signature
+      const expectedSignature = crypto
+        .createHmac('sha256', this.config.webhookSecret)
+        .update(requestBody)
+        .digest('hex');
+
+      // Compare signatures using constant-time comparison
+      return crypto.timingSafeEqual(
+        Buffer.from(signatureHeader),
+        Buffer.from(expectedSignature)
+      );
+    } catch (error) {
+      console.error('Error verifying webhook signature:', error);
+      return false;
+    }
   }
 
   // Initialize KYC verification session
@@ -69,7 +84,7 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      const response = await this.axios.post('/kyc/sessions', {
+      const response = await this.axios.post('/api/sessions', {
         userId: user.id.toString(),
         email: user.email,
         name: user.name,
@@ -102,7 +117,7 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      const response = await this.axios.get(`/kyc/status/${user.id}`);
+      const response = await this.axios.get(`/api/status/${user.id}`);
 
       if (response.data && response.data.status) {
         await this.updateUserKycStatus(userId, response.data.status);
