@@ -7,7 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db, pool } from "@db";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 
 const scryptAsync = promisify(scrypt);
@@ -121,21 +121,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: error.message });
       }
 
-      // Check if trying to create an admin
-      if (parsed.data.role === "admin") {
-        // Allow first admin creation or require admin privileges
-        const [existingAdmin] = await db
-          .select()
-          .from(users)
-          .where(eq(users.role, "admin"))
-          .limit(1);
-
-        if (existingAdmin && (!req.user || (req.user as User).role !== "admin")) {
-          return res.status(403).json({ message: "Only admins can create admin accounts" });
-        }
-      }
-
-      // Check for existing username or email
+      // First, check for existing username or email to prevent unnecessary admin checks
       const [existingUser] = await db
         .select()
         .from(users)
@@ -156,6 +142,22 @@ export function setupAuth(app: Express) {
         }
       }
 
+      // If registering as admin, check if it's the first admin or if user has admin privileges
+      if (parsed.data.role === "admin") {
+        // Check for existing admins
+        const adminCount = await db
+          .select({ count: sql`count(*)` })
+          .from(users)
+          .where(eq(users.role, "admin"));
+
+        const isFirstAdmin = adminCount[0].count === 0;
+        const isAdminUser = req.user && (req.user as User).role === "admin";
+
+        if (!isFirstAdmin && !isAdminUser) {
+          return res.status(403).json({ message: "Only admins can create admin accounts" });
+        }
+      }
+
       // Hash password and create user
       const hashedPassword = await hashPassword(parsed.data.password);
       const [user] = await db
@@ -168,6 +170,7 @@ export function setupAuth(app: Express) {
 
       req.login(user, (err) => {
         if (err) {
+          console.error('Login after registration error:', err);
           return res.status(500).json({ message: "Login failed after registration" });
         }
         res.status(201).json(user);
