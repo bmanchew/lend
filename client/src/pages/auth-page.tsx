@@ -5,7 +5,7 @@ import { Shield } from "lucide-react";
 import { Redirect } from "wouter";
 
 export default function AuthPage() {
-  const { user, login } = useAuth();
+  const { user, loginWithDidit } = useAuth();
 
   if (user) {
     return <Redirect to="/customer" />;
@@ -57,7 +57,7 @@ export default function AuthPage() {
             <div className="mt-6">
               <Button 
                 className="w-full flex items-center justify-center"
-                onClick={login}
+                onClick={loginWithDidit}
               >
                 <Shield className="mr-2 h-4 w-4" />
                 Continue with Didit
