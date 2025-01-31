@@ -9,6 +9,8 @@ interface DiditConfig {
   clientId: string;
   clientSecret: string;
   baseUrl: string;
+  webhookUrl: string;
+  webhookSecret: string;
 }
 
 class DiditService {
@@ -16,10 +18,10 @@ class DiditService {
   private axios: any;
 
   constructor() {
-    const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET } = process.env;
+    const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, DIDIT_WEBHOOK_URL, DIDIT_WEBHOOK_SECRET } = process.env;
 
-    if (!DIDIT_API_KEY || !DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET) {
-      throw new Error("Missing required Didit API credentials");
+    if (!DIDIT_API_KEY || !DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET || !DIDIT_WEBHOOK_URL || !DIDIT_WEBHOOK_SECRET) {
+      throw new Error("Missing required Didit API credentials or webhook configuration");
     }
 
     this.config = {
@@ -27,6 +29,8 @@ class DiditService {
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
       baseUrl: 'https://api.didit.com/v1',
+      webhookUrl: DIDIT_WEBHOOK_URL,
+      webhookSecret: DIDIT_WEBHOOK_SECRET
     };
 
     this.axios = axios.create({
@@ -39,10 +43,10 @@ class DiditService {
     });
   }
 
-  // Verify webhook signature
+  // Verify webhook signature using the provided secret
   verifyWebhookSignature(payload: string, signature: string): boolean {
     const expectedSignature = crypto
-      .createHmac('sha256', this.config.clientSecret)
+      .createHmac('sha256', this.config.webhookSecret)
       .update(payload)
       .digest('hex');
 
@@ -70,7 +74,7 @@ class DiditService {
         email: user.email,
         name: user.name,
         callbackUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
-        webhookUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/webhook`,
+        webhookUrl: this.config.webhookUrl,
       });
 
       if (response.data && response.data.sessionId) {

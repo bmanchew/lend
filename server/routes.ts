@@ -134,12 +134,11 @@ export function registerRoutes(app: Express): Server {
   // Customer routes
   apiRouter.get("/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
-      const customerContracts = await db.query.contracts.findMany({
-        where: eq(contracts.customerId, parseInt(req.params.id)),
-        with: {
-          merchant: true,
-        },
-      });
+      const customerContracts = await db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.customerId, parseInt(req.params.id)));
+
       res.json(customerContracts);
     } catch (err:any) {
       console.error("Error fetching customer contracts:", err); 
@@ -220,8 +219,12 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = parseInt(req.query.userId as string);
-      const status = await diditService.checkVerificationStatus(userId);
+      const userId = req.query.userId;
+      if (!userId || isNaN(parseInt(userId as string))) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+
+      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
       res.json({ status });
     } catch (err) {
       next(err);
@@ -241,7 +244,10 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Missing webhook signature' });
       }
 
-      // TODO: Implement signature verification when we have the webhook secret
+      // Verify webhook signature using the configured secret
+      if (!diditService.verifyWebhookSignature(JSON.stringify(req.body), signature as string)) {
+        return res.status(401).json({ error: 'Invalid webhook signature' });
+      }
 
       switch (payload.status) {
         case 'retrieved':
@@ -260,7 +266,6 @@ export function registerRoutes(app: Express): Server {
 
             // Store any additional verification data
             if (payload.data.documentData) {
-              // TODO: Store relevant document data securely
               console.log('Received verified document data for user:', userId);
             }
           }
