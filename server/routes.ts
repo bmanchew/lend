@@ -324,14 +324,17 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Redirect to appropriate page based on status
-      let redirectUrl = '/dashboard';
+      const baseUrl = process.env.APP_URL || 'http://localhost:5000';
+      let redirectPath = '/dashboard';
+
       if (status === 'success') {
-        redirectUrl += '?kyc=success';
+        redirectPath += '?kyc=success';
       } else if (status === 'failed') {
-        redirectUrl += '?kyc=failed';
+        redirectPath += '?kyc=failed';
       }
 
-      res.redirect(redirectUrl);
+      // Redirect to frontend application
+      res.redirect(`${baseUrl}${redirectPath}`);
     } catch (err) {
       console.error('Error handling KYC callback:', err);
       next(err);

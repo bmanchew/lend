@@ -112,7 +112,7 @@ class DiditService {
 
       // Create session according to documentation
       const sessionData = {
-        callback: this.config.webhookUrl,
+        callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`, // Frontend callback URL
         features: 'OCR + FACE',
         vendor_data: user.id.toString()
       };

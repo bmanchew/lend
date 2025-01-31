@@ -4,10 +4,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
+import React from 'react';
 
 export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // Query to check KYC status
   const { data: kycStatus, isLoading: isCheckingStatus } = useQuery({
@@ -27,6 +30,8 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       return response.json();
     },
     onSuccess: (data) => {
+      // Store current page URL in sessionStorage before redirect
+      sessionStorage.setItem('returnToUrl', window.location.pathname);
       // Handle redirect to Didit verification flow
       window.location.href = data.redirectUrl;
     },
@@ -38,6 +43,33 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       });
     },
   });
+
+  // Handle KYC status from URL params after redirect
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const kycParam = params.get('kyc');
+    const returnUrl = sessionStorage.getItem('returnToUrl');
+
+    if (kycParam) {
+      if (kycParam === 'success') {
+        toast({
+          title: "Verification Successful",
+          description: "Your identity has been verified successfully.",
+        });
+      } else if (kycParam === 'failed') {
+        toast({
+          title: "Verification Failed",
+          description: "Identity verification failed. Please try again.",
+          variant: "destructive",
+        });
+      }
+
+      // Clear KYC param from URL and redirect back
+      const newUrl = returnUrl || '/dashboard';
+      setLocation(newUrl);
+      sessionStorage.removeItem('returnToUrl');
+    }
+  }, [toast, setLocation]);
 
   if (isCheckingStatus) {
     return (
