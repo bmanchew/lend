@@ -302,13 +302,27 @@ export function registerRoutes(app: Express): Server {
       if (activeSession) {
         // Get a fresh session URL from Didit service
         const sessionUrl = await diditService.getSessionStatus(activeSession.sessionId);
-        return res.json({ redirectUrl: sessionUrl });
+        return res.json({
+          redirectUrl: sessionUrl,
+          sessionId: activeSession.sessionId
+        });
       }
 
-      const sessionUrl = await diditService.initializeKycSession(userId);
-      console.log('Generated KYC session URL:', sessionUrl);
+      const redirectUrl = await diditService.initializeKycSession(userId);
+      console.log('Generated KYC session URL:', redirectUrl);
 
-      res.json({ redirectUrl: sessionUrl });
+      // Get the newly created session
+      const [newSession] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.userId, userId))
+        .orderBy(desc(verificationSessions.createdAt))
+        .limit(1);
+
+      res.json({
+        redirectUrl,
+        sessionId: newSession.sessionId
+      });
     } catch (err: any) {
       console.error('Error starting KYC process:', err);
       res.status(500).json({

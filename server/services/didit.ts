@@ -77,19 +77,29 @@ class DiditService {
     }
   }
 
-  private async createDiditSession(userId: number): Promise<{ url: string; sessionId: string }> {
-    const accessToken = await this.getAccessToken();
-    console.log('Creating Didit session...');
-
-    const sessionData = {
-      callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
-      features: 'OCR + FACE',
-      vendor_data: userId.toString()
-    };
-
+  async initializeKycSession(userId: number): Promise<string> {
     try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const accessToken = await this.getAccessToken();
+      console.log('Creating Didit session...');
+
+      const sessionData = {
+        callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
+        features: 'OCR + FACE',
+        vendor_data: userId.toString()
+      };
+
       const response = await axios.post(
-        'https://verification.didit.me/v1/session/',  // Added trailing slash
+        'https://verification.didit.me/v1/session/',
         sessionData,
         {
           headers: {
@@ -109,41 +119,13 @@ class DiditService {
         throw new Error('Invalid response format from Didit API');
       }
 
-      return {
-        url: response.data.url,
-        sessionId: response.data.session_id
-      };
-    } catch (error: any) {
-      console.error('Error creating session:', {
-        error: error.response?.data || error.message,
-        status: error.response?.status
-      });
-      throw new Error('Failed to create verification session');
-    }
-  }
-
-  async initializeKycSession(userId: number): Promise<string> {
-    try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      // Create new session with Didit
-      const { url, sessionId } = await this.createDiditSession(userId);
-
       // Create verification session record
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiration
 
       await db.insert(verificationSessions).values({
         userId,
-        sessionId,
+        sessionId: response.data.session_id,
         status: 'initialized',
         features: 'OCR + FACE',
         createdAt: new Date(),
@@ -152,8 +134,8 @@ class DiditService {
       });
 
       await this.updateUserKycStatus(userId, 'pending');
-      return url;
 
+      return response.data.url;
     } catch (error: any) {
       console.error("Error initializing KYC session:", {
         error: error.response?.data || error.message,
