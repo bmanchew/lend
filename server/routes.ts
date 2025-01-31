@@ -7,6 +7,7 @@ import { setupAuth } from "./auth.js";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
+import { diditService } from "./services/didit";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -190,6 +191,30 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
+
+  // Add KYC routes here
+  apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.body;
+      const sessionId = await diditService.initializeKycSession(userId);
+      // TODO: When we have the actual Didit credentials, we'll generate the proper redirect URL
+      const redirectUrl = `https://verify.didit.com/session/${sessionId}`;
+      res.json({ redirectUrl });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = parseInt(req.query.userId as string);
+      const status = await diditService.checkVerificationStatus(userId);
+      res.json({ status });
+    } catch (err) {
+      next(err);
+    }
+  });
+
 
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

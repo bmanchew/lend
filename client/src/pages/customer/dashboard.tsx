@@ -4,9 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
+import { KycVerificationModal } from "@/components/kyc/verification-modal";
+import { useState, useEffect } from "react";
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
+  const [showKycModal, setShowKycModal] = useState(false);
+
+  // Check if KYC is needed on first load
+  useEffect(() => {
+    if (user && user.role === 'customer' && (!user.kycStatus || user.kycStatus === 'pending')) {
+      setShowKycModal(true);
+    }
+  }, [user]);
 
   const { data: contracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/customers/${user?.id}/contracts`],
@@ -16,7 +26,27 @@ export default function CustomerDashboard() {
     <PortalLayout>
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.name}</h1>
-        
+
+        {/* KYC Verification Modal */}
+        <KycVerificationModal 
+          isOpen={showKycModal} 
+          onClose={() => setShowKycModal(false)} 
+        />
+
+        {/* Show verification status if pending */}
+        {user?.kycStatus === 'pending' && (
+          <Card className="bg-yellow-50 border-yellow-200">
+            <CardHeader>
+              <CardTitle className="text-yellow-800">Verification in Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-yellow-700">
+                Your identity verification is being processed. This usually takes 1-2 business days.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
