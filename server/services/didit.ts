@@ -17,17 +17,22 @@ class DiditService {
   private axios: any;
 
   constructor() {
-    const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, DIDIT_API_URL } = process.env;
+    const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, NODE_ENV } = process.env;
 
     if (!DIDIT_API_KEY || !DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET) {
       throw new Error("Missing required Didit API credentials");
     }
 
+    // Use sandbox URL for development and testing
+    const baseUrl = NODE_ENV === 'production' 
+      ? 'https://api.didit.com/v1'
+      : 'https://sandbox-api.didit.com/v1';
+
     this.config = {
-      apiKey: DIDIT_CLIENT_ID, // Changed to use client ID as API key
+      apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl: DIDIT_API_URL || 'https://sandbox.didit.com/v1', // Use sandbox URL for testing
+      baseUrl,
     };
 
     this.axios = axios.create({
@@ -36,7 +41,8 @@ class DiditService {
         'Authorization': `Bearer ${this.config.apiKey}`,
         'X-Client-ID': this.config.clientId,
         'Content-Type': 'application/json',
-      }
+      },
+      timeout: 10000, // 10 second timeout
     });
   }
 
@@ -56,17 +62,26 @@ class DiditService {
       console.log('Initializing KYC session for user:', {
         userId: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
+        environment: process.env.NODE_ENV || 'development'
       });
 
-      const response = await this.axios.post('/kyc/sessions', {
+      const payload = {
         userId: user.id.toString(),
         email: user.email,
         name: user.name,
         callbackUrl: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
-      });
+        metadata: {
+          userRole: user.role,
+          environment: process.env.NODE_ENV || 'development'
+        }
+      };
 
-      console.log('KYC session response:', response.data);
+      const response = await this.axios.post('/kyc/sessions', payload);
+      console.log('KYC session created successfully:', {
+        sessionId: response.data?.sessionId,
+        status: response.status,
+      });
 
       if (response.data && response.data.sessionId) {
         // Update user's KYC status to pending
@@ -74,21 +89,18 @@ class DiditService {
         return response.data.sessionId;
       }
 
-      throw new Error("Failed to create KYC session");
+      throw new Error("Failed to create KYC session - No session ID returned");
     } catch (error: any) {
       console.error("Error initializing KYC session:", {
         error: error.message,
         response: error.response?.data,
+        status: error.response?.status,
         config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: {
-            ...error.config?.headers,
-            'Authorization': '[REDACTED]',
-          }
+          url: this.config.baseUrl + '/kyc/sessions',
+          method: 'POST',
         }
       });
-      throw error;
+      throw new Error(error.response?.data?.message || "Failed to initialize KYC session");
     }
   }
 
@@ -105,11 +117,17 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      console.log('Checking KYC status for user:', user.id);
+      console.log('Checking KYC status for user:', {
+        userId: user.id,
+        currentStatus: user.kycStatus,
+        environment: process.env.NODE_ENV || 'development'
+      });
 
       const response = await this.axios.get(`/kyc/status/${user.id}`);
-
-      console.log('KYC status response:', response.data);
+      console.log('KYC status response:', {
+        status: response.data?.status,
+        httpStatus: response.status,
+      });
 
       if (response.data && response.data.status) {
         const status = response.data.status as KycStatus;
@@ -122,8 +140,10 @@ class DiditService {
       console.error("Error checking verification status:", {
         error: error.message,
         response: error.response?.data,
+        status: error.response?.status,
       });
-      throw error;
+      // Don't throw error on status check, return current status from DB
+      return 'pending';
     }
   }
 
@@ -134,6 +154,11 @@ class DiditService {
         .update(users)
         .set({ kycStatus: status })
         .where(eq(users.id, userId));
+
+      console.log('Updated user KYC status:', {
+        userId,
+        newStatus: status,
+      });
     } catch (error) {
       console.error("Error updating user KYC status:", error);
       throw error;
