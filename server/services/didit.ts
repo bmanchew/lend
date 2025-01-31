@@ -90,13 +90,15 @@ class DiditService {
       }
 
       const accessToken = await this.getAccessToken();
-      console.log('Creating Didit session...');
+      console.log('Creating Didit session with token:', accessToken.substring(0, 10) + '...');
 
       const sessionData = {
         callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
         features: 'OCR + FACE',
         vendor_data: userId.toString()
       };
+
+      console.log('Session request data:', sessionData);
 
       const response = await axios.post(
         'https://verification.didit.me/v1/session/',
@@ -109,13 +111,14 @@ class DiditService {
         }
       );
 
-      console.log('Session creation response:', {
+      console.log('Session creation complete response:', {
         status: response.status,
-        sessionId: response.data?.session_id,
-        hasUrl: !!response.data?.url
+        data: response.data,
+        headers: response.headers
       });
 
       if (!response.data?.url || !response.data?.session_id) {
+        console.error('Invalid response format:', response.data);
         throw new Error('Invalid response format from Didit API');
       }
 
@@ -123,7 +126,7 @@ class DiditService {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiration
 
-      await db.insert(verificationSessions).values({
+      const sessionValues = {
         userId,
         sessionId: response.data.session_id,
         status: 'initialized',
@@ -131,17 +134,28 @@ class DiditService {
         createdAt: new Date(),
         updatedAt: new Date(),
         expiresAt,
-      });
+      };
+
+      console.log('Creating local verification session:', sessionValues);
+
+      await db.insert(verificationSessions).values(sessionValues);
 
       await this.updateUserKycStatus(userId, 'pending');
+
+      console.log('Successfully initialized KYC session:', {
+        userId,
+        sessionId: response.data.session_id,
+        redirectUrl: response.data.url
+      });
 
       return response.data.url;
     } catch (error: any) {
       console.error("Error initializing KYC session:", {
         error: error.response?.data || error.message,
-        status: error.response?.status
+        status: error.response?.status,
+        headers: error.response?.headers
       });
-      throw new Error(error.response?.data?.message || "Failed to start verification process");
+      throw error;
     }
   }
 
@@ -149,6 +163,8 @@ class DiditService {
     try {
       console.log('Getting session status for:', sessionId);
       const accessToken = await this.getAccessToken();
+
+      console.log('Making status request with token:', accessToken.substring(0, 10) + '...');
 
       const response = await axios.get(
         `https://verification.didit.me/v1/session/${sessionId}`,
@@ -160,76 +176,66 @@ class DiditService {
         }
       );
 
-      console.log('Status response:', {
+      console.log('Status response details:', {
         status: response.status,
+        headers: response.headers,
         data: response.data
       });
 
-      // If we get a valid status response
       if (response.data?.status) {
-        // Map Didit statuses to our internal statuses
-        switch (response.data.status.toLowerCase()) {
-          case 'pending':
-          case 'in_progress':
-            return 'retrieved';
-          case 'completed':
-            return 'confirmed';
-          case 'rejected':
-            return 'declined';
-          default:
-            return response.data.status;
-        }
+        const mappedStatus = this.mapDiditStatus(response.data.status);
+        console.log('Mapped status:', {
+          original: response.data.status,
+          mapped: mappedStatus
+        });
+        return mappedStatus;
       }
 
-      // If session exists but no status, consider it pending
       return 'initialized';
 
     } catch (error: any) {
-      console.error('Status check error:', {
+      console.error('Status check detailed error:', {
         sessionId,
         error: error.response?.data || error.message,
-        status: error.response?.status
+        status: error.response?.status,
+        headers: error.response?.headers,
+        stack: error.stack
       });
 
-      // Handle specific error cases
       if (error.response?.status === 404) {
-        // Session not found - could be not started yet
-        return 'initialized';
+        console.log('Session not found - checking local database');
+        return this.getLocalSessionStatus(sessionId);
       }
 
-      if (error.response?.status === 401) {
-        // Auth error - try refreshing token once
-        try {
-          this.accessToken = null;
-          const newToken = await this.getAccessToken();
-
-          const retryResponse = await axios.get(
-            `https://verification.didit.me/v1/session/${sessionId}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${newToken}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-
-          if (retryResponse.data?.status) {
-            return retryResponse.data.status;
-          }
-        } catch (retryError) {
-          console.error('Retry failed:', retryError);
-        }
-      }
-
-      // For any other errors, keep the current status
-      const [session] = await db
-        .select()
-        .from(verificationSessions)
-        .where(eq(verificationSessions.sessionId, sessionId))
-        .limit(1);
-
-      return session?.status || 'initialized';
+      throw error;
     }
+  }
+
+  private async getLocalSessionStatus(sessionId: string): Promise<string> {
+    const [session] = await db
+      .select()
+      .from(verificationSessions)
+      .where(eq(verificationSessions.sessionId, sessionId))
+      .limit(1);
+
+    console.log('Local session status:', {
+      sessionId,
+      found: !!session,
+      status: session?.status
+    });
+
+    return session?.status || 'initialized';
+  }
+
+  private mapDiditStatus(status: string): string {
+    const statusMap: Record<string, string> = {
+      'pending': 'retrieved',
+      'in_progress': 'retrieved',
+      'completed': 'confirmed',
+      'rejected': 'declined'
+    };
+
+    return statusMap[status.toLowerCase()] || status;
   }
 
   private calculateRetryDelay(attempt: number): number {
