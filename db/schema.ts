@@ -15,6 +15,37 @@ export const users = pgTable("users", {
   phoneNumber: text("phone_number"),
 });
 
+export const verificationSessions = pgTable("verification_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  sessionId: text("session_id").notNull(),
+  status: text("status", {
+    enum: ["initialized", "retrieved", "confirmed", "declined", "Approved", "Declined"]
+  }).notNull(),
+  features: text("features").notNull(),
+  documentData: jsonb("document_data"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at"),
+  expiresAt: timestamp("expires_at"),
+  retryCount: integer("retry_count").default(0),
+  errorMessage: text("error_message"),
+});
+
+export const webhookEvents = pgTable("webhook_events", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  eventType: text("event_type").notNull(),
+  status: text("status", {
+    enum: ["pending", "processed", "failed", "retrying"]
+  }).notNull(),
+  payload: jsonb("payload").notNull(),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  retryCount: integer("retry_count").default(0),
+  nextRetryAt: timestamp("next_retry_at"),
+  errorMessage: text("error_message"),
+});
+
 export const merchants = pgTable("merchants", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -72,10 +103,10 @@ export const notifications = pgTable("notifications", {
   sentAt: timestamp("sent_at"),
 });
 
-// Relations
 export const usersRelations = relations(users, ({ many }) => ({
   contracts: many(contracts, { relationName: "customer_contracts" }),
   notifications: many(notifications),
+  verificationSessions: many(verificationSessions),
 }));
 
 export const merchantsRelations = relations(merchants, ({ one, many }) => ({
@@ -98,7 +129,13 @@ export const contractsRelations = relations(contracts, ({ one, many }) => ({
   payments: many(payments),
 }));
 
-// Schemas for validation
+export const verificationSessionsRelations = relations(verificationSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [verificationSessions.userId],
+    references: [users.id],
+  }),
+}));
+
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
 export const insertMerchantSchema = createInsertSchema(merchants);
@@ -109,8 +146,11 @@ export const insertPaymentSchema = createInsertSchema(payments);
 export const selectPaymentSchema = createSelectSchema(payments);
 export const insertNotificationSchema = createInsertSchema(notifications);
 export const selectNotificationSchema = createSelectSchema(notifications);
+export const insertVerificationSessionSchema = createInsertSchema(verificationSessions);
+export const selectVerificationSessionSchema = createSelectSchema(verificationSessions);
+export const insertWebhookEventSchema = createInsertSchema(webhookEvents);
+export const selectWebhookEventSchema = createSelectSchema(webhookEvents);
 
-// Types for TypeScript
 export type InsertUser = typeof users.$inferInsert;
 export type SelectUser = typeof users.$inferSelect;
 export type InsertMerchant = typeof merchants.$inferInsert;
@@ -121,3 +161,7 @@ export type InsertPayment = typeof payments.$inferInsert;
 export type SelectPayment = typeof payments.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 export type SelectNotification = typeof notifications.$inferSelect;
+export type InsertVerificationSession = typeof verificationSessions.$inferInsert;
+export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
+export type InsertWebhookEvent = typeof webhookEvents.$inferInsert;
+export type SelectWebhookEvent = typeof webhookEvents.$inferSelect;

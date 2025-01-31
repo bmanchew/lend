@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { contracts, merchants, users } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { contracts, merchants, users, verificationSessions, webhookEvents } from "@db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
@@ -211,7 +211,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add KYC routes here
+  // Updated KYC routes
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
@@ -219,6 +219,24 @@ export function registerRoutes(app: Express): Server {
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
+      }
+
+      // Check for any existing active sessions
+      const [activeSession] = await db
+        .select()
+        .from(verificationSessions)
+        .where(
+          and(
+            eq(verificationSessions.userId, userId),
+            eq(verificationSessions.status, 'initialized')
+          )
+        )
+        .limit(1);
+
+      if (activeSession) {
+        // Get a fresh session URL from Didit service
+        const sessionUrl = await diditService.getSessionStatus(activeSession.sessionId);
+        return res.json({ redirectUrl: sessionUrl });
       }
 
       const sessionUrl = await diditService.initializeKycSession(userId);
@@ -241,15 +259,29 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
-      res.json({ status });
+      // Get latest verification session
+      const [latestSession] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.userId, parseInt(userId as string)))
+        .orderBy(desc(verificationSessions.createdAt))
+        .limit(1);
+
+      if (!latestSession) {
+        return res.json({ status: 'not_started' });
+      }
+
+      res.json({
+        status: latestSession.status,
+        updatedAt: latestSession.updatedAt,
+        sessionId: latestSession.sessionId
+      });
     } catch (err) {
       next(err);
     }
   });
 
-
-  // Add KYC Webhook endpoints
+  // Updated webhook endpoint with better error handling and logging
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payload = req.body;
@@ -263,7 +295,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Missing required headers' });
       }
 
-      // Verify webhook signature using the configured secret
+      // Verify webhook signature
       if (!diditService.verifyWebhookSignature(
         JSON.stringify(payload),
         signature as string,
@@ -272,45 +304,23 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
       }
 
-      const { session_id, status, vendor_data, decision } = payload;
-
-      // Log detailed information about the webhook
-      console.log('Processing webhook:', {
-        sessionId: session_id,
-        status,
-        vendorData: vendor_data,
-        hasDecision: !!decision
-      });
-
-      // Handle different webhook statuses
-      switch (status) {
-        case 'retrieved':
-          // Update session status when user opens verification in mobile app
-          console.log('User retrieved verification session:', session_id);
-          break;
-
-        case 'Approved':
-        case 'Declined':
-          if (decision) {
-            const userId = parseInt(vendor_data);
-            await diditService.updateUserKycStatus(
-              userId,
-              status === 'Approved' ? 'verified' : 'failed'
-            );
-
-            if (decision.kyc?.document_data) {
-              console.log('Received verified document data for user:', userId);
-            }
-          }
-          break;
-
-        default:
-          console.log('Unhandled webhook status:', status);
-      }
+      // Process webhook asynchronously
+      await diditService.processWebhook(payload);
 
       res.json({ status: 'success' });
     } catch (err) {
       console.error('Error processing Didit webhook:', err);
+      // Still return 200 to acknowledge receipt
+      res.status(200).json({ status: 'queued_for_retry' });
+    }
+  });
+
+  // Add endpoint to retry failed webhooks manually
+  apiRouter.post("/kyc/retry-webhooks", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await diditService.retryFailedWebhooks();
+      res.json({ status: 'success' });
+    } catch (err) {
       next(err);
     }
   });
