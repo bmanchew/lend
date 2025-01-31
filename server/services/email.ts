@@ -38,9 +38,33 @@ if (!validation.isValid) {
 
 mailService.setApiKey(apiKey!);
 
-// Generate verification token
-export async function generateVerificationToken(): Promise<string> {
-  return crypto.randomBytes(32).toString('hex');
+// Test SendGrid connection
+export async function testSendGridConnection(): Promise<boolean> {
+  try {
+    console.log('Testing SendGrid connection with configuration:', {
+      fromEmail: FROM_EMAIL,
+      apiKeyPrefix: apiKey?.substring(0, 5) + '...' // Log only the prefix for security
+    });
+
+    const msg = {
+      to: 'test@example.com',
+      from: FROM_EMAIL,
+      subject: 'SendGrid Connection Test',
+      text: 'This is a test email to verify SendGrid configuration.',
+    };
+
+    await mailService.send(msg);
+    console.log('SendGrid test successful');
+    return true;
+  } catch (error: any) {
+    console.error('SendGrid test failed:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.body,
+      details: error.response?.headers,
+    });
+    return false;
+  }
 }
 
 // Send verification email
@@ -82,31 +106,7 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   }
 }
 
-// Test SendGrid connection
-export async function testSendGridConnection(): Promise<boolean> {
-  try {
-    console.log('Testing SendGrid connection with configuration:', {
-      fromEmail: FROM_EMAIL,
-      apiKeyPrefix: apiKey?.substring(0, 5) + '...' // Log only the prefix for security
-    });
-
-    const msg = {
-      to: 'test@example.com',
-      from: FROM_EMAIL,
-      subject: 'SendGrid Connection Test',
-      text: 'This is a test email to verify SendGrid configuration.',
-    };
-
-    await mailService.send(msg);
-    console.log('SendGrid test successful');
-    return true;
-  } catch (error: any) {
-    console.error('SendGrid test failed:', {
-      message: error.message,
-      code: error.code,
-      response: error.response?.body,
-      details: error.response?.headers,
-    });
-    return false;
-  }
+// Generate verification token
+export async function generateVerificationToken(): Promise<string> {
+  return crypto.randomBytes(32).toString('hex');
 }
