@@ -293,60 +293,25 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add this route after the existing /kyc/status endpoint
-  apiRouter.get("/kyc/verification-status/:sessionId", async (req: Request, res: Response, next: NextFunction) => {
+  // Add endpoint to update verification status manually
+  apiRouter.patch("/kyc/verification-status/:sessionId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { sessionId } = req.params;
+      const { new_status, comment } = req.body;
 
-      // First check our local database
-      const [session] = await db
-        .select()
-        .from(verificationSessions)
-        .where(eq(verificationSessions.sessionId, sessionId))
-        .limit(1);
-
-      if (!session) {
-        return res.status(404).json({ error: 'Verification session not found' });
+      if (!sessionId || !new_status) {
+        return res.status(400).json({ error: 'Session ID and new status are required' });
       }
 
-      // If status is not final, check with Didit API
-      if (!['Approved', 'Declined'].includes(session.status)) {
-        const diditStatus = await diditService.getSessionStatus(sessionId);
-
-        // Update our local status if it changed
-        if (diditStatus !== session.status) {
-          await db
-            .update(verificationSessions)
-            .set({
-              status: diditStatus,
-              updatedAt: new Date()
-            })
-            .where(eq(verificationSessions.sessionId, sessionId));
-
-          // If status is final, update user KYC status
-          if (['Approved', 'Declined'].includes(diditStatus)) {
-            await db
-              .update(users)
-              .set({
-                kycStatus: diditStatus === 'Approved' ? 'verified' : 'failed'
-              })
-              .where(eq(users.id, session.userId));
-          }
-
-          return res.json({
-            status: diditStatus,
-            updatedAt: new Date(),
-            sessionId
-          });
-        }
+      if (!['Approved', 'Declined'].includes(new_status)) {
+        return res.status(400).json({ error: 'Invalid status. Must be either Approved or Declined' });
       }
 
-      return res.json({
-        status: session.status,
-        updatedAt: session.updatedAt,
-        sessionId: session.sessionId
-      });
-    } catch (err) {
+      await diditService.updateSessionStatus(sessionId, new_status as 'Approved' | 'Declined', comment);
+
+      res.json({ status: 'success', message: 'Verification status updated successfully' });
+    } catch (err: any) {
+      console.error('Error updating verification status:', err);
       next(err);
     }
   });

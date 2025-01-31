@@ -339,6 +339,57 @@ class DiditService {
       throw error;
     }
   }
+
+  async updateSessionStatus(sessionId: string, newStatus: 'Approved' | 'Declined', comment?: string): Promise<void> {
+    try {
+      const accessToken = await this.getAccessToken();
+
+      const response = await axios.patch(
+        `https://verification.didit.me/v1/session/${sessionId}/update-status/`,
+        {
+          new_status: newStatus,
+          comment
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        // Update local session status
+        await db
+          .update(verificationSessions)
+          .set({
+            status: newStatus,
+            updatedAt: new Date()
+          })
+          .where(eq(verificationSessions.sessionId, sessionId));
+
+        // Get the user ID associated with this session
+        const [session] = await db
+          .select()
+          .from(verificationSessions)
+          .where(eq(verificationSessions.sessionId, sessionId))
+          .limit(1);
+
+        if (session) {
+          // Update user KYC status
+          await this.updateUserKycStatus(
+            session.userId,
+            newStatus === 'Approved' ? 'verified' : 'failed'
+          );
+        }
+      } else {
+        throw new Error('Failed to update session status');
+      }
+    } catch (error: any) {
+      console.error("Error updating session status:", error.response?.data || error.message);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
