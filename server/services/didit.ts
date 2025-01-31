@@ -75,7 +75,7 @@ class DiditService {
     }
   }
 
-  async initializeKycSession(userId: number): Promise<string> {
+  async initializeKycSession(userId: number, returnUrl?: string): Promise<string> {
     try {
       const [user] = await db
         .select()
@@ -110,7 +110,7 @@ class DiditService {
         throw new Error("Invalid response format from Didit API");
       }
 
-      // Create verification session record
+      // Create verification session record with returnUrl
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiration
 
@@ -119,6 +119,7 @@ class DiditService {
         sessionId: response.data.session_id,
         status: 'initialized',
         features: sessionData.features,
+        returnUrl: returnUrl || '/dashboard', // Store the return URL
         createdAt: new Date(),
         updatedAt: new Date(),
         expiresAt,
@@ -317,7 +318,6 @@ class DiditService {
       throw error;
     }
   }
-
 
   // Add method to check session status by session ID
   async getSessionStatus(sessionId: string): Promise<string> {

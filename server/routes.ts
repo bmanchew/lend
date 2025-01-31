@@ -10,7 +10,6 @@ import express from 'express';
 import { diditService } from "./services/didit";
 import axios from 'axios';
 
-// Add Didit webhook types
 export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
 
 interface DiditWebhookPayload {
@@ -39,7 +38,6 @@ export function registerRoutes(app: Express): Server {
   setupAuth(app);
   const apiRouter = express.Router();
 
-  // Customer routes
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const customerContracts = await db
@@ -65,7 +63,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Test SendGrid connection with improved error handling
   apiRouter.post("/test-verification-email", async (req: Request, res: Response) => {
     try {
       console.log('Received test email request:', req.body);
@@ -113,7 +110,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  //New route to verify SendGrid setup
   apiRouter.get("/verify-sendgrid", async (req:Request, res:Response) => {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
@@ -144,7 +140,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Test SendGrid connection with improved error handling
   apiRouter.get("/test-email", async (req:Request, res:Response) => {
     try {
       const isConnected = await testSendGridConnection();
@@ -168,7 +163,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Merchant routes
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const [merchant] = await db.query.merchants.findMany({
@@ -196,7 +190,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Admin routes
   apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const allMerchants = await db.query.merchants.findMany({
@@ -226,10 +219,9 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Updated KYC routes
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId } = req.body;
+      const { userId, returnUrl } = req.body;
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
@@ -237,7 +229,7 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Starting KYC process for user:', userId);
 
-      const sessionUrl = await diditService.initializeKycSession(userId);
+      const sessionUrl = await diditService.initializeKycSession(userId, returnUrl);
       console.log('Generated KYC session URL:', sessionUrl);
 
       res.json({ redirectUrl: sessionUrl });
@@ -254,7 +246,6 @@ export function registerRoutes(app: Express): Server {
     try {
       const userId = req.query.userId;
 
-      // Better validation for user ID
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
       }
@@ -264,7 +255,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
 
-      // Fetch both verification session and status
       const [latestSession] = await db
         .select()
         .from(verificationSessions)
@@ -274,10 +264,8 @@ export function registerRoutes(app: Express): Server {
 
       let status;
       if (latestSession) {
-        // Get real-time status from Didit API
         status = await diditService.getSessionStatus(latestSession.sessionId);
       } else {
-        // Check user's stored KYC status if no active session
         const [user] = await db
           .select()
           .from(users)
@@ -298,13 +286,11 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Updated webhook endpoint with better error handling and logging
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payload = req.body;
       console.log('Received Didit webhook:', payload);
 
-      // Get required headers
       const signature = req.headers['x-signature'];
       const timestamp = req.headers['x-timestamp'];
 
@@ -312,7 +298,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Missing required headers' });
       }
 
-      // Verify webhook signature
       if (!diditService.verifyWebhookSignature(
         JSON.stringify(payload),
         signature as string,
@@ -321,18 +306,15 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
       }
 
-      // Process webhook asynchronously
       await diditService.processWebhook(payload);
 
       res.json({ status: 'success' });
     } catch (err) {
       console.error('Error processing Didit webhook:', err);
-      // Still return 200 to acknowledge receipt
       res.status(200).json({ status: 'queued_for_retry' });
     }
   });
 
-  // Add endpoint to retry failed webhooks manually
   apiRouter.post("/kyc/retry-webhooks", async (req: Request, res: Response, next: NextFunction) => {
     try {
       await diditService.retryFailedWebhooks();
@@ -342,7 +324,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add callback URL endpoint for mobile app redirect
   apiRouter.get("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { session_id: sessionId } = req.query;
@@ -351,25 +332,42 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Missing session ID' });
       }
 
-      // Get the session status using the new method
-      const status = await diditService.getSessionStatus(sessionId as string);
+      const [session] = await db
+        .select()
+        .from(verificationSessions)
+        .where(eq(verificationSessions.sessionId, sessionId as string))
+        .limit(1);
 
-      // Redirect to appropriate page based on status
-      let redirectUrl = '/dashboard';
-      if (status === 'Approved') {
-        redirectUrl = '/loan-offers?verified=true';
-      } else if (status === 'Declined') {
-        redirectUrl = '/dashboard?kyc=failed';
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
       }
 
-      res.redirect(redirectUrl);
+      const status = await diditService.getSessionStatus(sessionId as string);
+
+      await db
+        .update(verificationSessions)
+        .set({ 
+          status: status as VerificationStatus,
+          updatedAt: new Date()
+        })
+        .where(eq(verificationSessions.sessionId, sessionId as string));
+
+      const redirectUrl = new URL(session.returnUrl || '/dashboard');
+      redirectUrl.searchParams.append('kyc_status', status);
+
+      if (status === 'Approved') {
+        redirectUrl.searchParams.append('verified', 'true');
+      } else if (status === 'Declined') {
+        redirectUrl.searchParams.append('verified', 'false');
+      }
+
+      res.redirect(redirectUrl.toString());
     } catch (err) {
       console.error('Error handling KYC callback:', err);
-      next(err);
+      res.redirect('/dashboard?kyc_error=true');
     }
   });
 
-  // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     console.error("Global error handler caught:", err); 
     if (!res.headersSent) {
@@ -380,7 +378,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Mount API router under /api prefix
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);

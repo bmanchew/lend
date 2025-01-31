@@ -20,7 +20,15 @@ interface KycStartError {
   details?: string;
 }
 
-export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function KycVerificationModal({ 
+  isOpen, 
+  onClose,
+  returnUrl = '/dashboard'
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  returnUrl?: string;
+}) {
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -45,7 +53,10 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ 
+          userId: user.id,
+          returnUrl
+        }),
       });
       if (!response.ok) {
         const errorData = await response.json() as KycStartError;
