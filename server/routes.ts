@@ -300,10 +300,8 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (activeSession) {
-        // Get a fresh session URL from Didit service
-        const sessionUrl = await diditService.getSessionStatus(activeSession.sessionId);
         return res.json({
-          redirectUrl: sessionUrl,
+          redirectUrl: activeSession.sessionId,
           sessionId: activeSession.sessionId
         });
       }
@@ -318,6 +316,10 @@ export function registerRoutes(app: Express): Server {
         .where(eq(verificationSessions.userId, userId))
         .orderBy(desc(verificationSessions.createdAt))
         .limit(1);
+
+      if (!redirectUrl || !newSession) {
+        throw new Error('Failed to create verification session');
+      }
 
       res.json({
         redirectUrl,
