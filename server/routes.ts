@@ -154,6 +154,15 @@ export function registerRoutes(app: Express): Server {
   if (process.env.NODE_ENV !== 'production') {
     apiRouter.get("/mock-kyc/:sessionId", async (req: Request, res: Response) => {
       const { sessionId } = req.params;
+      const userId = req.query.userId;
+
+      if (!userId) {
+        return res.status(400).send('User ID is required');
+      }
+
+      // Extract the user ID from the session ID as a fallback
+      const sessionUserId = sessionId.split('-').pop();
+
       res.send(`
         <html>
           <head>
@@ -161,31 +170,38 @@ export function registerRoutes(app: Express): Server {
             <script>
               async function completeVerification() {
                 try {
-                  // Get userId from sessionId (mock implementation)
-                  const userId = ${req.query.userId || 'null'};
+                  const userId = '${userId}' || '${sessionUserId}';
 
                   if (!userId) {
                     alert('User ID not found');
                     return;
                   }
 
+                  console.log('Completing verification for user:', userId);
+
                   // Call webhook endpoint
-                  await fetch('/api/kyc/callback', {
+                  const response = await fetch('/api/kyc/callback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       sessionId: '${sessionId}',
-                      userId,
+                      userId: parseInt(userId),
                       status: 'verified',
                       timestamp: new Date().toISOString()
                     })
                   });
 
+                  if (!response.ok) {
+                    throw new Error('Verification failed');
+                  }
+
+                  alert('Verification completed successfully! Redirecting to dashboard...');
+
                   // Redirect back to dashboard
                   window.location.href = '/customer';
                 } catch (error) {
                   console.error('Error:', error);
-                  alert('Verification failed');
+                  alert('Verification failed: ' + error.message);
                 }
               }
             </script>
@@ -194,6 +210,7 @@ export function registerRoutes(app: Express): Server {
             <div style="text-align: center;">
               <h1>Mock KYC Verification</h1>
               <p>Session ID: ${sessionId}</p>
+              <p>User ID: ${userId || sessionUserId}</p>
               <button 
                 onclick="completeVerification()"
                 style="padding: 10px 20px; background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer;"

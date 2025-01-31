@@ -23,14 +23,13 @@ class DiditService {
       throw new Error("Missing required Didit API credentials");
     }
 
-    // For development/testing, we'll simulate the API since we don't have access to actual sandbox
     this.config = {
       apiKey: DIDIT_API_KEY,
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
       baseUrl: NODE_ENV === 'production' 
         ? 'https://api.didit.com/v1'
-        : 'http://localhost:5000/mock-didit', // Mock API for development
+        : 'http://localhost:5000/mock-didit',
     };
 
     this.axios = axios.create({
@@ -40,11 +39,10 @@ class DiditService {
         'X-Client-ID': this.config.clientId,
         'Content-Type': 'application/json',
       },
-      timeout: 10000, // 10 second timeout
+      timeout: 10000,
     });
   }
 
-  // Initialize KYC verification session
   async initializeKycSession(userId: number): Promise<string> {
     try {
       const [user] = await db
@@ -67,7 +65,7 @@ class DiditService {
       // For development, simulate a successful response
       if (process.env.NODE_ENV !== 'production') {
         await this.updateUserKycStatus(userId, 'pending');
-        const mockSessionId = `mock-session-${Date.now()}`;
+        const mockSessionId = `mock-session-${Date.now()}-${userId}`;
         return mockSessionId;
       }
 
@@ -84,28 +82,22 @@ class DiditService {
 
       const response = await this.axios.post('/kyc/sessions', payload);
 
-      console.log('KYC session created successfully:', {
-        sessionId: response.data?.sessionId,
-        status: response.status,
-      });
-
-      if (response.data && response.data.sessionId) {
-        await this.updateUserKycStatus(userId, 'pending');
-        return response.data.sessionId;
+      if (!response.data?.sessionId) {
+        throw new Error("Failed to create KYC session - No session ID returned");
       }
 
-      throw new Error("Failed to create KYC session - No session ID returned");
+      await this.updateUserKycStatus(userId, 'pending');
+      return response.data.sessionId;
     } catch (error: any) {
       console.error("Error initializing KYC session:", {
         error: error.message,
         response: error.response?.data,
         status: error.response?.status,
       });
-      throw new Error(error.response?.data?.message || "Failed to initialize KYC session");
+      throw error;
     }
   }
 
-  // Check KYC verification status
   async checkVerificationStatus(userId: number): Promise<KycStatus> {
     try {
       if (!userId || isNaN(userId)) {
@@ -129,21 +121,18 @@ class DiditService {
         environment: process.env.NODE_ENV || 'development'
       });
 
-      // For development, simulate status check
+      // For development, return current status from database
       if (process.env.NODE_ENV !== 'production') {
         return user.kycStatus as KycStatus || 'pending';
       }
 
       const response = await this.axios.get(`/kyc/status/${user.id}`);
 
-      console.log('KYC status response:', {
-        status: response.data?.status,
-        httpStatus: response.status,
-      });
-
-      if (response.data && response.data.status) {
+      if (response.data?.status) {
         const status = response.data.status as KycStatus;
-        await this.updateUserKycStatus(userId, status);
+        if (status !== user.kycStatus) {
+          await this.updateUserKycStatus(userId, status);
+        }
         return status;
       }
 
@@ -154,12 +143,10 @@ class DiditService {
         response: error.response?.data,
         status: error.response?.status,
       });
-      // Don't throw error on status check, return current status from DB
-      return 'pending';
+      return user?.kycStatus as KycStatus || 'pending';
     }
   }
 
-  // Update user's KYC status in our database
   private async updateUserKycStatus(userId: number, status: KycStatus): Promise<void> {
     try {
       await db
@@ -178,5 +165,4 @@ class DiditService {
   }
 }
 
-// Export singleton instance
 export const diditService = new DiditService();
