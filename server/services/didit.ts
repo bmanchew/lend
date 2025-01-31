@@ -13,19 +13,26 @@ interface DiditConfig {
   webhookSecret: string;
 }
 
+interface DiditAuthResponse {
+  access_token: string;
+  expires_in: number;
+}
+
 class DiditService {
   private config: DiditConfig;
   private axios: any;
+  private accessToken: string | null = null;
+  private tokenExpiry: number | null = null;
 
   constructor() {
     const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, DIDIT_WEBHOOK_URL, DIDIT_WEBHOOK_SECRET } = process.env;
 
-    if (!DIDIT_API_KEY || !DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET || !DIDIT_WEBHOOK_URL || !DIDIT_WEBHOOK_SECRET) {
+    if (!DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET || !DIDIT_WEBHOOK_URL || !DIDIT_WEBHOOK_SECRET) {
       throw new Error("Missing required Didit API credentials or webhook configuration");
     }
 
     this.config = {
-      apiKey: DIDIT_API_KEY,
+      apiKey: DIDIT_API_KEY || '',
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
       baseUrl: 'https://verify.staging.didit.me',
@@ -36,12 +43,46 @@ class DiditService {
     this.axios = axios.create({
       baseURL: this.config.baseUrl,
       headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Client-Id': this.config.clientId
+        'Accept': 'application/json'
       }
     });
+  }
+
+  private async getAccessToken(): Promise<string> {
+    // Check if we have a valid token
+    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+
+    try {
+      // Create base64 encoded credentials
+      const credentials = Buffer.from(
+        `${this.config.clientId}:${this.config.clientSecret}`
+      ).toString('base64');
+
+      // Get new access token
+      const response = await axios.post('https://apx.didit.me/auth/v2/token/', 
+        'grant_type=client_credentials',
+        {
+          headers: {
+            'Authorization': `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      const { access_token, expires_in } = response.data;
+
+      // Store token and expiry
+      this.accessToken = access_token;
+      this.tokenExpiry = Date.now() + (expires_in * 1000);
+
+      return access_token;
+    } catch (error: any) {
+      console.error('Error getting access token:', error.response?.data || error.message);
+      throw new Error('Failed to authenticate with Didit API');
+    }
   }
 
   // Verify webhook signature using the provided secret
@@ -91,7 +132,10 @@ class DiditService {
         name: user.name
       });
 
-      // Create session with required parameters based on documentation
+      // Get fresh access token
+      const accessToken = await this.getAccessToken();
+
+      // Create session with required parameters
       const response = await this.axios.post('/api/sessions', {
         vendor_data: user.id.toString(),
         callback_url: this.config.webhookUrl,
@@ -99,9 +143,11 @@ class DiditService {
         features: 'OCR + FACE',
         scope: ['IDENTITY'],
         email: user.email,
-        full_name: user.name,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret
+        full_name: user.name
+      }, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
       });
 
       console.log('KYC session response:', response.data);
@@ -133,7 +179,12 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      const response = await this.axios.get(`/api/sessions/${user.id}/status`);
+      const accessToken = await this.getAccessToken();
+      const response = await this.axios.get(`/api/sessions/${user.id}/status`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
 
       if (response.data && response.data.status) {
         await this.updateUserKycStatus(userId, response.data.status);
