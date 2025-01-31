@@ -4,9 +4,25 @@ import { db } from "@db";
 import { contracts, merchants, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
+import { testSendGridConnection } from "./services/email";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
+
+  // Test SendGrid connection
+  app.get("/api/test-email", async (req, res) => {
+    try {
+      const isConnected = await testSendGridConnection();
+      if (isConnected) {
+        res.json({ status: "success", message: "SendGrid connection successful" });
+      } else {
+        res.status(500).json({ status: "error", message: "SendGrid connection failed" });
+      }
+    } catch (err) {
+      console.error('SendGrid test error:', err);
+      res.status(500).json({ status: "error", message: "SendGrid test failed" });
+    }
+  });
 
   // Customer routes
   app.get("/api/customers/:id/contracts", async (req, res, next) => {
