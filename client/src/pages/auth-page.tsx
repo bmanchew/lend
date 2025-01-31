@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Redirect } from "wouter";
+import type { InsertUser } from "@db/schema";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
-  
+
   const loginForm = useForm({
     defaultValues: {
       username: "",
@@ -25,14 +26,14 @@ export default function AuthPage() {
     },
   });
 
-  const registerForm = useForm({
+  const registerForm = useForm<InsertUser>({
     resolver: zodResolver(insertUserSchema),
     defaultValues: {
       username: "",
       password: "",
       email: "",
       name: "",
-      role: "customer",
+      role: "customer" as const,
     },
   });
 
