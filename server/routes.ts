@@ -121,12 +121,17 @@ export function registerRoutes(app: Express): Server {
   // Customer routes
   apiRouter.get("/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
-      const customerContracts = await db.query.contracts.findMany({
-        where: eq(contracts.customerId, parseInt(req.params.id)),
-        with: {
-          merchant: true,
-        },
-      });
+      const customerId = parseInt(req.params.id);
+      if (isNaN(customerId)) {
+        return res.status(400).json({ message: "Invalid customer ID" });
+      }
+
+      const customerContracts = await db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.customerId, customerId))
+        .leftJoin(merchants, eq(contracts.merchantId, merchants.id));
+
       res.json(customerContracts);
     } catch (err:any) {
       console.error("Error fetching customer contracts:", err); 
@@ -192,25 +197,49 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add KYC routes here
+  // KYC routes
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-      const sessionId = await diditService.initializeKycSession(userId);
-      // TODO: When we have the actual Didit credentials, we'll generate the proper redirect URL
-      const redirectUrl = `https://verify.didit.com/session/${sessionId}`;
-      res.json({ redirectUrl });
-    } catch (err) {
+
+      if (!userId || isNaN(parseInt(userId))) {
+        return res.status(400).json({ 
+          status: "error", 
+          message: "Invalid user ID provided" 
+        });
+      }
+
+      console.log('Starting KYC process for user:', userId);
+      const sessionId = await diditService.initializeKycSession(parseInt(userId));
+
+      // For development, we'll use a mock redirect URL
+      const redirectUrl = process.env.NODE_ENV === 'production'
+        ? `https://verify.didit.com/session/${sessionId}`
+        : `http://localhost:5000/mock-kyc/${sessionId}`;
+
+      res.json({ redirectUrl, sessionId });
+    } catch (err: any) {
+      console.error('KYC initialization error:', err);
       next(err);
     }
   });
 
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = parseInt(req.query.userId as string);
-      const status = await diditService.checkVerificationStatus(userId);
+      const userId = req.query.userId;
+
+      if (!userId || isNaN(parseInt(userId as string))) {
+        return res.status(400).json({ 
+          status: "error", 
+          message: "Invalid user ID provided" 
+        });
+      }
+
+      console.log('Checking KYC status for user:', userId);
+      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
       res.json({ status });
-    } catch (err) {
+    } catch (err: any) {
+      console.error('KYC status check error:', err);
       next(err);
     }
   });
