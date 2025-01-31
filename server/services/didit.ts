@@ -89,11 +89,26 @@ class DiditService {
 
       const accessToken = await this.getAccessToken();
 
+      // Construct the Replit-specific callback URL
+      const replitDomain = process.env.REPL_SLUG && process.env.REPL_OWNER
+        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : 'http://localhost:3000';
+
+      // Construct callback URL with session tracking
+      const callbackUrl = new URL('/api/kyc/callback', replitDomain);
+
       const sessionData = {
-        callback: `${process.env.APP_URL || 'http://localhost:5000'}/api/kyc/callback`,
+        callback: callbackUrl.toString(),
         features: 'OCR + FACE',
-        vendor_data: user.id.toString()
+        vendor_data: user.id.toString(),
+        redirect_url: returnUrl // Add redirect_url for Didit to use after verification
       };
+
+      console.log('Initializing KYC session with:', {
+        ...sessionData,
+        callback: callbackUrl.toString(),
+        baseUrl: replitDomain
+      });
 
       const response = await axios.post(
         'https://verification.didit.me/v1/session/', 
@@ -119,7 +134,7 @@ class DiditService {
         sessionId: response.data.session_id,
         status: 'initialized',
         features: sessionData.features,
-        returnUrl: returnUrl || '/dashboard', // Store the return URL
+        returnUrl: returnUrl || '/dashboard',
         createdAt: new Date(),
         updatedAt: new Date(),
         expiresAt,
