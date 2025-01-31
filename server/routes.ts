@@ -27,6 +27,13 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
+      if (!process.env.SENDGRID_API_KEY) {
+        return res.status(500).json({
+          status: "error",
+          message: "SendGrid API key is not configured"
+        });
+      }
+
       console.log('Generating verification token for:', testEmail);
       const token = await generateVerificationToken();
 
@@ -50,7 +57,7 @@ export function registerRoutes(app: Express): Server {
       console.error('Test verification email error:', err);
       return res.status(500).json({ 
         status: "error", 
-        message: `Failed to send test email: ${err.message}` 
+        message: err.message || "Failed to send test email" 
       });
     }
   });
@@ -60,32 +67,53 @@ export function registerRoutes(app: Express): Server {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
       if (!apiKey || !apiKey.startsWith('SG.')) {
-        return res.status(500).json({ status: "error", message: "Invalid or missing SendGrid API key." });
+        return res.status(500).json({ 
+          status: "error", 
+          message: "Invalid or missing SendGrid API key." 
+        });
       }
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ status: "success", message: "SendGrid setup verified successfully." });
+        res.json({ 
+          status: "success", 
+          message: "SendGrid setup verified successfully." 
+        });
       } else {
-        res.status(500).json({ status: "error", message: "SendGrid setup verification failed. Check API key and connection." });
+        res.status(500).json({ 
+          status: "error", 
+          message: "SendGrid setup verification failed. Check API key and connection." 
+        });
       }
     } catch (err:any) {
       console.error('SendGrid verification error:', err);
-      res.status(500).json({ status: "error", message: `SendGrid verification failed: ${err.message}` });
+      res.status(500).json({ 
+        status: "error", 
+        message: err.message || "SendGrid verification failed" 
+      });
     }
   });
-    
+
   // Test SendGrid connection with improved error handling
   apiRouter.get("/test-email", async (req:Request, res:Response) => {
     try {
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ status: "success", message: "SendGrid connection successful" });
+        res.json({ 
+          status: "success", 
+          message: "SendGrid connection successful" 
+        });
       } else {
-        res.status(500).json({ status: "error", message: "SendGrid connection failed.  See logs for details." });
+        res.status(500).json({ 
+          status: "error", 
+          message: "SendGrid connection failed. See logs for details." 
+        });
       }
     } catch (err:any) {
       console.error('SendGrid test error:', err);
-      res.status(500).json({ status: "error", message: `SendGrid test failed: ${err.message}` });
+      res.status(500).json({ 
+        status: "error", 
+        message: err.message || "SendGrid test failed" 
+      });
     }
   });
 
@@ -166,7 +194,12 @@ export function registerRoutes(app: Express): Server {
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     console.error("Global error handler caught:", err); 
-    res.status(500).json({ error: "Internal server error" });
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        status: "error",
+        message: err.message || "Internal server error" 
+      });
+    }
   });
 
   // Mount API router under /api prefix
