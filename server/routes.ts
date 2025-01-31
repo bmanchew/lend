@@ -35,6 +35,32 @@ export function registerRoutes(app: Express): Server {
   setupAuth(app);
   const apiRouter = express.Router();
 
+  // Customer routes
+  apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const customerContracts = await db
+        .select({
+          id: contracts.id,
+          merchantId: contracts.merchantId,
+          customerId: contracts.customerId,
+          amount: contracts.amount,
+          term: contracts.term,
+          interestRate: contracts.interestRate,
+          status: contracts.status,
+          creditScore: contracts.creditScore,
+          signedDocumentUrl: contracts.signedDocumentUrl,
+          createdAt: contracts.createdAt
+        })
+        .from(contracts)
+        .where(eq(contracts.customerId, parseInt(req.params.id)));
+
+      res.json(customerContracts);
+    } catch (err: any) {
+      console.error("Error fetching customer contracts:", err);
+      next(err);
+    }
+  });
+
   // Test SendGrid connection with improved error handling
   apiRouter.post("/test-verification-email", async (req: Request, res: Response) => {
     try {
@@ -138,20 +164,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Customer routes
-  apiRouter.get("/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
-    try {
-      const customerContracts = await db
-        .select()
-        .from(contracts)
-        .where(eq(contracts.customerId, parseInt(req.params.id)));
-
-      res.json(customerContracts);
-    } catch (err:any) {
-      console.error("Error fetching customer contracts:", err); 
-      next(err);
-    }
-  });
 
   // Merchant routes
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
