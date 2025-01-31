@@ -14,7 +14,7 @@ if (!apiKey) {
 
 mailService.setApiKey(apiKey);
 
-const FROM_EMAIL = 'noreply@shifi.com'; // This should be your verified sender
+const FROM_EMAIL = 'merchant@shifi.io'; // Updated sender email
 
 // Test the SendGrid connection with detailed error logging
 export async function testSendGridConnection(): Promise<boolean> {
