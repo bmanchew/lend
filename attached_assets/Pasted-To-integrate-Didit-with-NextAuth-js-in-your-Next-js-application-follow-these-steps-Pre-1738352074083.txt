@@ -1,0 +1,133 @@
+To integrate **Didit** with **NextAuth.js** in your Next.js application, follow these steps:
+
+## Prerequisites
+
+1. **Next.js Application with NextAuth.js**: Ensure you have a Next.js application with NextAuth.js installed. If not, follow the [official NextAuth.js guide](https://next-auth.js.org/getting-started/introduction) to set it up.
+
+2. **Didit Business Console Account**: Create an account on the [Didit Business Console](https://business.didit.me).
+
+## Set Up Didit
+
+1. **Log In**: Access your [Didit Business Console](https://business.didit.me) account.
+
+2. **Create Application**:
+   - Navigate to the "Applications" section in the left sidebar.
+   - Click on "Create Application."
+   - Provide a name for your application.
+   - For the Redirect URI, enter:
+     - For development: `http://localhost:3000/auth/callback/didit`
+     - For production: `https://{YOUR_DOMAIN}/auth/callback/didit`
+   - Click "Create."
+
+3. **Note Credentials**: After creating the application, note the following details for later use:
+   - Client ID
+   - Client Secret
+
+## Configure NextAuth.js
+
+1. **Install Dependencies**: Ensure you have the necessary packages installed:
+
+   ```bash
+   npm install next-auth
+   ```
+
+2. **Create NextAuth.js Configuration**:
+   - Create a file named `[...nextauth].ts` (or `.js`) in the `pages/api/auth` directory of your Next.js project.
+   - Configure the Didit provider as follows:
+
+     ```javascript
+     import NextAuth from "next-auth";
+     import { Provider } from "next-auth/providers";
+
+     const diditProvider: Provider = {
+       id: "didit",
+       name: "Didit",
+       type: "oauth",
+       authorization: {
+         url: process.env.DIDIT_IS_STAGING === "true"
+           ? "https://auth.staging.didit.me"
+           : "https://auth.didit.me",
+         params: { scope: "openid names document_detail" },
+       },
+       token: {
+         url: process.env.DIDIT_IS_STAGING === "true"
+           ? "https://apx.staging.didit.me/auth/v2/token"
+           : "https://apx.didit.me/auth/v2/token",
+       },
+       userinfo: {
+         url: process.env.DIDIT_IS_STAGING === "true"
+           ? "https://apx.staging.didit.me/auth/v2/users/retrieve/"
+           : "https://apx.didit.me/auth/v2/users/retrieve/",
+       },
+       issuer: process.env.DIDIT_IS_STAGING === "true"
+         ? "https://auth.staging.didit.me/"
+         : "https://auth.didit.me/",
+       clientId: process.env.DIDIT_CLIENT_ID,
+       clientSecret: process.env.DIDIT_CLIENT_SECRET,
+       checks: ["state", "pkce"],
+       profile(profile) {
+         return {
+           user_data: profile,
+           user_id: profile.user_id,
+           name: profile.names?.full_name,
+           email: profile.email?.email,
+           image: profile.picture,
+         };
+       },
+       style: {
+         logo: "/didit.png",
+       },
+     };
+
+     export default NextAuth({
+       providers: [diditProvider],
+       secret: process.env.AUTH_SECRET,
+       session: { strategy: "jwt" },
+       callbacks: {
+         async jwt({ token, account, profile }) {
+           if (account && profile) {
+             token.id = profile.user_id;
+           }
+           return token;
+         },
+         async session({ session, token }) {
+           session.user.id = token.id;
+           return session;
+         },
+       },
+     });
+     ```
+
+3. **Environment Variables**:
+   - Create a `.env.local` file in the root of your project and add the following variables:
+
+     ```
+     AUTH_SECRET=your_nextauth_secret
+     DIDIT_CLIENT_ID=your_client_id
+     DIDIT_CLIENT_SECRET=your_client_secret
+     DIDIT_IS_STAGING=false
+     ```
+
+     - Replace `your_nextauth_secret` with a generated secret (you can generate one using `npx next-auth secret`).
+     - Replace `your_client_id` and `your_client_secret` with the credentials obtained from the Didit Business Console.
+
+4. **Add Didit Logo** (Optional):
+   - Place the Didit logo image (`didit.png`) in your public directory to display it on the sign-in page.
+
+## Features
+
+Integrating Didit with NextAuth.js provides:
+
+- **Secure Authentication**: Leverages Didit's robust authentication mechanisms.
+- **User Profile Retrieval**: Access to detailed user profiles, including names and document details.
+- **JWT-Based Sessions**: Utilizes JSON Web Tokens for session management.
+
+## Troubleshooting
+
+- **Callback URL Mismatch**: Ensure that the Redirect URI in the Didit Business Console matches the callback URL configured in your NextAuth.js setup.
+- **Environment Variables**: Double-check that all environment variables are correctly set in your `.env.local` file.
+- **Staging vs. Production**: Set `DIDIT_IS_STAGING` to `true` if you're testing with Didit's staging environment; otherwise, set it to `false`.
+
+For a practical example, refer to the [Didit with NextAuth.js demo](https://nextauth.didit.me) and its [source code](https://github.com/didit-protocol/template-nextauth).
+
+By following these steps, you can successfully integrate Didit authentication into your Next.js application using NextAuth.js. 

@@ -13,14 +13,17 @@ export default function CustomerDashboard() {
 
   // Check if KYC is needed on first load
   useEffect(() => {
-    if (user && user.role === 'customer' && (!user.kycStatus || user.kycStatus === 'pending')) {
+    if (user && !user.kycStatus) {
       setShowKycModal(true);
     }
   }, [user]);
 
   const { data: contracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/customers/${user?.id}/contracts`],
+    enabled: !!user?.id,
   });
+
+  if (!user) return null;
 
   return (
     <PortalLayout>
