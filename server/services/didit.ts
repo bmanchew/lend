@@ -5,10 +5,8 @@ import axios from "axios";
 import crypto from 'crypto';
 
 interface DiditConfig {
-  apiKey: string;
   clientId: string;
   clientSecret: string;
-  baseUrl: string;
   webhookUrl: string;
   webhookSecret: string;
 }
@@ -20,33 +18,22 @@ interface DiditAuthResponse {
 
 class DiditService {
   private config: DiditConfig;
-  private axios: any;
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
 
   constructor() {
-    const { DIDIT_API_KEY, DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, DIDIT_WEBHOOK_URL, DIDIT_WEBHOOK_SECRET } = process.env;
+    const { DIDIT_CLIENT_ID, DIDIT_CLIENT_SECRET, DIDIT_WEBHOOK_URL, DIDIT_WEBHOOK_SECRET } = process.env;
 
     if (!DIDIT_CLIENT_ID || !DIDIT_CLIENT_SECRET || !DIDIT_WEBHOOK_URL || !DIDIT_WEBHOOK_SECRET) {
       throw new Error("Missing required Didit API credentials or webhook configuration");
     }
 
     this.config = {
-      apiKey: DIDIT_API_KEY || '',
       clientId: DIDIT_CLIENT_ID,
       clientSecret: DIDIT_CLIENT_SECRET,
-      baseUrl: 'https://verify.staging.didit.me',
       webhookUrl: DIDIT_WEBHOOK_URL,
       webhookSecret: DIDIT_WEBHOOK_SECRET
     };
-
-    this.axios = axios.create({
-      baseURL: this.config.baseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
   }
 
   private async getAccessToken(): Promise<string> {
@@ -56,12 +43,10 @@ class DiditService {
     }
 
     try {
-      // Create base64 encoded credentials
       const credentials = Buffer.from(
         `${this.config.clientId}:${this.config.clientSecret}`
       ).toString('base64');
 
-      // Get new access token
       const response = await axios.post('https://apx.didit.me/auth/v2/token/', 
         'grant_type=client_credentials',
         {
@@ -72,9 +57,10 @@ class DiditService {
         }
       );
 
+      console.log('Auth response:', response.data);
+
       const { access_token, expires_in } = response.data;
 
-      // Store token and expiry
       this.accessToken = access_token;
       this.tokenExpiry = Date.now() + (expires_in * 1000);
 
@@ -113,7 +99,6 @@ class DiditService {
     }
   }
 
-  // Initialize KYC verification session
   async initializeKycSession(userId: number): Promise<string> {
     try {
       const [user] = await db
@@ -126,29 +111,32 @@ class DiditService {
         throw new Error("User not found");
       }
 
-      console.log('Initializing KYC session for user:', {
-        userId: user.id,
-        email: user.email,
-        name: user.name
-      });
-
-      // Get fresh access token
       const accessToken = await this.getAccessToken();
+      console.log('Got access token for KYC session');
 
-      // Create session with required parameters
-      const response = await this.axios.post('/api/sessions', {
-        vendor_data: user.id.toString(),
+      const sessionData = {
         callback_url: this.config.webhookUrl,
         webhook_url: this.config.webhookUrl,
         features: 'OCR + FACE',
         scope: ['IDENTITY'],
+        vendor_data: user.id.toString(),
         email: user.email,
         full_name: user.name
-      }, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
+      };
+
+      console.log('Creating KYC session with data:', sessionData);
+
+      const response = await axios.post(
+        'https://verify.didit.me/api/sessions', 
+        sessionData,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
         }
-      });
+      );
 
       console.log('KYC session response:', response.data);
 
@@ -166,7 +154,6 @@ class DiditService {
     }
   }
 
-  // Check KYC verification status
   async checkVerificationStatus(userId: number): Promise<string> {
     try {
       const [user] = await db
@@ -180,11 +167,16 @@ class DiditService {
       }
 
       const accessToken = await this.getAccessToken();
-      const response = await this.axios.get(`/api/sessions/${user.id}/status`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
+
+      const response = await axios.get(
+        `https://verify.didit.me/api/sessions/${user.id}/status`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
 
       if (response.data && response.data.status) {
         await this.updateUserKycStatus(userId, response.data.status);
@@ -198,7 +190,6 @@ class DiditService {
     }
   }
 
-  // Update user's KYC status in our database
   async updateUserKycStatus(userId: number, status: string): Promise<void> {
     try {
       await db
