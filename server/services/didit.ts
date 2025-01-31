@@ -89,7 +89,7 @@ class DiditService {
 
     try {
       const response = await axios.post(
-        'https://verification.didit.me/v1/session',
+        'https://verification.didit.me/v1/session/',  // Added trailing slash
         sessionData,
         {
           headers: {
