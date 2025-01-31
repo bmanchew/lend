@@ -12,47 +12,25 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
   // Query to check KYC status
   const { data: kycStatus, isLoading: isCheckingStatus } = useQuery({
     queryKey: ['/api/kyc/status', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const response = await fetch(`/api/kyc/status?userId=${user.id}`);
-      if (!response.ok) throw new Error('Failed to check KYC status');
-      return response.json();
-    },
     enabled: isOpen && !!user,
   });
 
   // Mutation to start KYC process
   const { mutate: startKyc, isPending: isStarting } = useMutation({
     mutationFn: async () => {
-      if (!user?.id) throw new Error('User not found');
-
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user?.id }),
       });
-
       if (!response.ok) throw new Error('Failed to start KYC process');
       return response.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Verification Started",
-        description: "You will be redirected to complete your verification.",
-      });
-
-      // Add userId to redirectUrl for development mode
-      const redirectUrl = new URL(data.redirectUrl);
-      if (import.meta.env.VITE_NODE_ENV !== 'production') {
-        redirectUrl.searchParams.append('userId', user?.id.toString() || '');
-      }
-
-      // Use window.location.href for full page navigation
-      setTimeout(() => {
-        window.location.href = redirectUrl.toString();
-      }, 1500);
+      // TODO: Handle redirect to Didit verification flow
+      window.location.href = data.redirectUrl;
     },
-    onError: (error: Error) => {
+    onError: (error) => {
       toast({
         title: "Error",
         description: "Failed to start verification process. Please try again.",
@@ -84,7 +62,7 @@ export function KycVerificationModal({ isOpen, onClose }: { isOpen: boolean; onC
         </DialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Before you can proceed, we need to verify your identity.
+            Before you can proceed with your loan application, we need to verify your identity.
             This process is quick and secure.
           </p>
           <div className="space-y-2">

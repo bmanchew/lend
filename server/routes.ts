@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
 import { contracts, merchants, users } from "@db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
@@ -121,108 +121,18 @@ export function registerRoutes(app: Express): Server {
   // Customer routes
   apiRouter.get("/customers/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
-      const customerId = parseInt(req.params.id);
-      if (isNaN(customerId)) {
-        return res.status(400).json({ message: "Invalid customer ID" });
-      }
-
-      const customerContracts = await db
-        .select({
-          id: contracts.id,
-          merchantId: contracts.merchantId,
-          customerId: contracts.customerId,
-          amount: contracts.amount,
-          term: contracts.term,
-          interestRate: contracts.interestRate,
-          status: contracts.status,
-          creditScore: contracts.creditScore,
-          createdAt: contracts.createdAt,
-          merchantName: merchants.companyName,
-        })
-        .from(contracts)
-        .where(eq(contracts.customerId, customerId))
-        .leftJoin(merchants, eq(contracts.merchantId, merchants.id));
-
+      const customerContracts = await db.query.contracts.findMany({
+        where: eq(contracts.customerId, parseInt(req.params.id)),
+        with: {
+          merchant: true,
+        },
+      });
       res.json(customerContracts);
     } catch (err:any) {
       console.error("Error fetching customer contracts:", err); 
       next(err);
     }
   });
-
-  // Add mock KYC endpoint for development
-  if (process.env.NODE_ENV !== 'production') {
-    apiRouter.get("/mock-kyc/:sessionId", async (req: Request, res: Response) => {
-      const { sessionId } = req.params;
-      const userId = req.query.userId;
-
-      if (!userId) {
-        return res.status(400).send('User ID is required');
-      }
-
-      // Extract the user ID from the session ID as a fallback
-      const sessionUserId = sessionId.split('-').pop();
-
-      res.send(`
-        <html>
-          <head>
-            <title>Mock KYC Verification</title>
-            <script>
-              async function completeVerification() {
-                try {
-                  const userId = '${userId}' || '${sessionUserId}';
-
-                  if (!userId) {
-                    alert('User ID not found');
-                    return;
-                  }
-
-                  console.log('Completing verification for user:', userId);
-
-                  // Call webhook endpoint
-                  const response = await fetch('/api/kyc/callback', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      sessionId: '${sessionId}',
-                      userId: parseInt(userId),
-                      status: 'verified',
-                      timestamp: new Date().toISOString()
-                    })
-                  });
-
-                  if (!response.ok) {
-                    throw new Error('Verification failed');
-                  }
-
-                  alert('Verification completed successfully! Redirecting to dashboard...');
-
-                  // Redirect back to dashboard
-                  window.location.href = '/customer';
-                } catch (error) {
-                  console.error('Error:', error);
-                  alert('Verification failed: ' + error.message);
-                }
-              }
-            </script>
-          </head>
-          <body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: system-ui;">
-            <div style="text-align: center;">
-              <h1>Mock KYC Verification</h1>
-              <p>Session ID: ${sessionId}</p>
-              <p>User ID: ${userId || sessionUserId}</p>
-              <button 
-                onclick="completeVerification()"
-                style="padding: 10px 20px; background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer;"
-              >
-                Complete Verification
-              </button>
-            </div>
-          </body>
-        </html>
-      `);
-    });
-  }
 
   // Merchant routes
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
@@ -282,130 +192,29 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // KYC routes
+  // Add KYC routes here
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-
-      if (!userId || isNaN(parseInt(userId))) {
-        return res.status(400).json({ 
-          status: "error", 
-          message: "Invalid user ID provided" 
-        });
-      }
-
-      console.log('Starting KYC process for user:', userId);
-      const sessionId = await diditService.initializeKycSession(parseInt(userId));
-
-      // For development, we'll use a mock redirect URL
-      const redirectUrl = process.env.NODE_ENV === 'production'
-        ? `https://verify.didit.com/session/${sessionId}`
-        : `http://localhost:5000/mock-kyc/${sessionId}`;
-
-      res.json({ redirectUrl, sessionId });
-    } catch (err: any) {
-      console.error('KYC initialization error:', err);
+      const sessionId = await diditService.initializeKycSession(userId);
+      // TODO: When we have the actual Didit credentials, we'll generate the proper redirect URL
+      const redirectUrl = `https://verify.didit.com/session/${sessionId}`;
+      res.json({ redirectUrl });
+    } catch (err) {
       next(err);
     }
   });
 
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.query.userId;
-
-      if (!userId || isNaN(parseInt(userId as string))) {
-        return res.status(400).json({ 
-          status: "error", 
-          message: "Invalid user ID provided" 
-        });
-      }
-
-      console.log('Checking KYC status for user:', userId);
-      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
+      const userId = parseInt(req.query.userId as string);
+      const status = await diditService.checkVerificationStatus(userId);
       res.json({ status });
-    } catch (err: any) {
-      console.error('KYC status check error:', err);
+    } catch (err) {
       next(err);
     }
   });
 
-
-  // Add Didit webhook handler
-  apiRouter.post("/kyc/callback", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { 
-        sessionId,
-        userId,
-        status,
-        verificationDetails,
-        timestamp 
-      } = req.body;
-
-      console.log('Received Didit webhook:', {
-        sessionId,
-        userId,
-        status,
-        timestamp,
-        headers: req.headers
-      });
-
-      // Verify webhook signature if in production
-      if (process.env.NODE_ENV === 'production') {
-        const signature = req.headers['x-didit-signature'];
-        if (!signature) {
-          console.error('Missing Didit webhook signature');
-          return res.status(401).json({ 
-            status: "error", 
-            message: "Invalid webhook signature" 
-          });
-        }
-        // TODO: Implement signature verification
-      }
-
-      if (!userId || !status) {
-        console.error('Invalid webhook payload:', req.body);
-        return res.status(400).json({ 
-          status: "error", 
-          message: "Invalid webhook payload" 
-        });
-      }
-
-      // Update user KYC status
-      await db
-        .update(users)
-        .set({ 
-          kycStatus: status,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(eq(users.id, parseInt(userId)));
-
-      console.log('Updated user KYC status via webhook:', {
-        userId,
-        newStatus: status,
-        sessionId
-      });
-
-      // For development, simulate successful verification
-      if (process.env.NODE_ENV !== 'production' && status === 'pending') {
-        setTimeout(async () => {
-          await db
-            .update(users)
-            .set({ 
-              kycStatus: 'verified',
-              updatedAt: sql`CURRENT_TIMESTAMP`,
-            })
-            .where(eq(users.id, parseInt(userId)));
-
-          console.log('Simulated verification completion for user:', userId);
-        }, 5000); // Simulate after 5 seconds
-      }
-
-      res.json({ status: "success" });
-    } catch (err: any) {
-      console.error('Webhook processing error:', err);
-      next(err);
-    }
-  });
 
   // Global error handler.  This remains outside the apiRouter.
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

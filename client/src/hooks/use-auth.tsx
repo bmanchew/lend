@@ -1,68 +1,102 @@
-import React, { createContext, useContext, ReactNode } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import React from "react";
+import {
+  useQuery,
+  useMutation,
+  UseMutationResult,
+} from "@tanstack/react-query";
+import type { SelectUser, InsertUser } from "@db/schema";
+import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
-interface User {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-  role: "admin" | "customer" | "merchant";
-  kycStatus?: "pending" | "verified" | "failed";
-}
-
-interface AuthContextType {
-  user: User | null;
+type AuthContextType = {
+  user: SelectUser | null;
   isLoading: boolean;
-  loginWithDidit: () => Promise<void>;
-  logout: () => Promise<void>;
-}
+  error: Error | null;
+  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  logoutMutation: UseMutationResult<void, Error, void>;
+  registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+};
 
-const AuthContext = createContext<AuthContextType | null>(null);
+type LoginData = Pick<InsertUser, "username" | "password">;
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export const AuthContext = React.createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const { data: user, isLoading } = useQuery<User>({
+  const {
+    data: user,
+    error,
+    isLoading,
+  } = useQuery<SelectUser | null>({
     queryKey: ["/api/user"],
-    retry: false,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const loginWithDidit = async () => {
-    try {
-      // Redirect to Didit OAuth flow
-      window.location.href = "/api/auth/didit";
-    } catch (error: any) {
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: LoginData) => {
+      const res = await apiRequest("POST", "/api/login", credentials);
+      return await res.json();
+    },
+    onSuccess: (user: SelectUser) => {
+      queryClient.setQueryData(["/api/user"], user);
+      setLocation(`/${user.role}`);
+    },
+    onError: (error: Error) => {
       toast({
-        title: "Authentication failed",
+        title: "Login failed",
         description: error.message,
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
 
-  const logout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-      window.location.href = "/auth";
-    } catch (error: any) {
+  const registerMutation = useMutation({
+    mutationFn: async (newUser: InsertUser) => {
+      const res = await apiRequest("POST", "/api/register", newUser);
+      return await res.json();
+    },
+    onSuccess: (user: SelectUser) => {
+      queryClient.setQueryData(["/api/user"], user);
+      setLocation(`/${user.role}`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Registration failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/logout");
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/user"], null);
+      setLocation("/auth");
+    },
+    onError: (error: Error) => {
       toast({
         title: "Logout failed",
         description: error.message,
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
 
   return (
     <AuthContext.Provider
       value={{
         user: user ?? null,
         isLoading,
-        loginWithDidit,
-        logout,
+        error,
+        loginMutation,
+        logoutMutation,
+        registerMutation,
       }}
     >
       {children}
@@ -71,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context = React.useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
