@@ -12,11 +12,6 @@ if (!apiKey) {
   throw new Error('SendGrid API key is not set');
 }
 
-if (!apiKey.startsWith('SG.')) {
-  console.error('Invalid SendGrid API key format - should start with SG.');
-  throw new Error('Invalid SendGrid API key format');
-}
-
 mailService.setApiKey(apiKey);
 
 const FROM_EMAIL = 'noreply@shifi.com'; // This should be your verified sender
@@ -25,25 +20,41 @@ const FROM_EMAIL = 'noreply@shifi.com'; // This should be your verified sender
 export async function testSendGridConnection(): Promise<boolean> {
   try {
     console.log('Testing SendGrid connection...');
-    console.log('Using API key starting with:', apiKey.substring(0, 5));
 
+    // First test - validate API key format
+    if (!apiKey.startsWith('SG.')) {
+      console.error('Invalid SendGrid API key format');
+      return false;
+    }
+
+    // Second test - simple email to test full integration
     const msg = {
       to: 'test@example.com',
       from: FROM_EMAIL,
-      subject: 'SendGrid Test',
-      text: 'This is a test email to verify SendGrid configuration.',
-      html: '<strong>This is a test email to verify SendGrid configuration.</strong>',
+      subject: 'SendGrid Connection Test',
+      text: 'Testing SendGrid integration for ShiFi.',
     };
 
     await mailService.send(msg);
     console.log('SendGrid test email sent successfully');
     return true;
   } catch (error: any) {
+    // Enhanced error logging
     console.error('SendGrid connection test failed:', {
       message: error.message,
       code: error.code,
       response: error.response?.body,
+      statusCode: error.code,
+      details: error.response?.headers,
     });
+
+    if (error.code === 403) {
+      console.error('Authentication error - Please verify:');
+      console.error('1. API key has full access or at least Mail Send permissions');
+      console.error('2. Sender email domain is verified in SendGrid');
+      console.error('3. IP restrictions are properly configured');
+    }
+
     return false;
   }
 }
@@ -80,6 +91,7 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
       message: error.message,
       code: error.code,
       response: error.response?.body,
+      details: error.response?.headers,
     });
     return false;
   }
