@@ -227,29 +227,12 @@ export function registerRoutes(app: Express): Server {
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-      console.log('Starting KYC process for user:', userId);
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
       }
 
-      // Check for any existing active sessions
-      const [activeSession] = await db
-        .select()
-        .from(verificationSessions)
-        .where(
-          and(
-            eq(verificationSessions.userId, userId),
-            eq(verificationSessions.status, 'initialized')
-          )
-        )
-        .limit(1);
-
-      if (activeSession) {
-        // Get a fresh session URL from Didit service
-        const sessionUrl = await diditService.getSessionStatus(activeSession.sessionId);
-        return res.json({ redirectUrl: sessionUrl });
-      }
+      console.log('Starting KYC process for user:', userId);
 
       const sessionUrl = await diditService.initializeKycSession(userId);
       console.log('Generated KYC session URL:', sessionUrl);
@@ -271,23 +254,8 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      // Get latest verification session
-      const [latestSession] = await db
-        .select()
-        .from(verificationSessions)
-        .where(eq(verificationSessions.userId, parseInt(userId as string)))
-        .orderBy(desc(verificationSessions.createdAt))
-        .limit(1);
-
-      if (!latestSession) {
-        return res.json({ status: 'not_started' });
-      }
-
-      res.json({
-        status: latestSession.status,
-        updatedAt: latestSession.updatedAt,
-        sessionId: latestSession.sessionId
-      });
+      const status = await diditService.checkVerificationStatus(parseInt(userId as string));
+      res.json({ status });
     } catch (err) {
       next(err);
     }
