@@ -108,42 +108,15 @@ export function setupAuth(app: Express) {
       try {
         const loginType = req.body.loginType || 'customer';
         
-        if (loginType === 'customer') {
-          const [user] = await db
-            .select()
-            .from(users)
-            .where(eq(users.phoneNumber, username))
-            .limit(1);
-
-          if (!user || user.role !== 'customer') {
-            return done(null, false, { message: "Invalid phone number" });
-          }
-
-          // Verify OTP for customers
-          const isOtpValid = user.lastOtpCode === password && 
-                          user.otpExpiry && 
-                          new Date(user.otpExpiry) > new Date();
-
-          if (!isOtpValid) {
-            return done(null, false, { message: "Invalid or expired code" });
-          }
-
-          // Clear used OTP
-          await db
-            .update(users)
-            .set({ lastOtpCode: null, otpExpiry: null })
-            .where(eq(users.id, user.id));
-
-          return done(null, user);
-        } else {
-          // For admin/merchant, use regular username/password
+        // For admin/merchant, use username & password
+        if (loginType === 'admin' || loginType === 'merchant') {
           const [user] = await db
             .select()
             .from(users)
             .where(eq(users.username, username))
             .limit(1);
 
-          if (!user || user.role === 'customer') {
+          if (!user || user.role !== loginType) {
             return done(null, false, { message: "Invalid credentials" });
           }
 
@@ -151,6 +124,36 @@ export function setupAuth(app: Express) {
           if (!isValid) {
             return done(null, false, { message: "Invalid credentials" });
           }
+
+          return done(null, user);
+        }
+        
+        // For customers, use phone & OTP
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.phoneNumber, username))
+          .limit(1);
+
+        if (!user || user.role !== 'customer') {
+          return done(null, false, { message: "Invalid phone number" });
+        }
+
+        const isOtpValid = user.lastOtpCode === password && 
+                        user.otpExpiry && 
+                        new Date(user.otpExpiry) > new Date();
+
+        if (!isOtpValid) {
+          return done(null, false, { message: "Invalid or expired code" });
+        }
+
+        // Clear used OTP
+        await db
+          .update(users)
+          .set({ lastOtpCode: null, otpExpiry: null })
+          .where(eq(users.id, user.id));
+
+        return done(null, user);
 
           return done(null, user);
         }
