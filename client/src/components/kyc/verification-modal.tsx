@@ -144,8 +144,15 @@ export function KycVerificationModal({
                 const result = await startVerification.mutateAsync();
                 console.log("Verification result:", result);
                 if (result?.redirectUrl) {
-                  console.log("Redirecting to:", result.redirectUrl);
+                  console.log("Redirecting to verification URL:", result.redirectUrl);
                   window.location.href = result.redirectUrl;
+                } else {
+                  console.error("No redirect URL received from verification start");
+                  toast({
+                    title: "Error",
+                    description: "Failed to get verification link",
+                    variant: "destructive"
+                  });
                 }
               } catch (error) {
                 console.error("Verification error:", error);
