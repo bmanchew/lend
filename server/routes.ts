@@ -213,6 +213,49 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.post("/merchants/create", async (req:Request, res:Response, next:NextFunction) => {
+    try {
+      const { companyName, email, phoneNumber, address, website } = req.body;
+
+      // Generate random password
+      const tempPassword = Math.random().toString(36).slice(-8);
+      const hashedPassword = await hashPassword(tempPassword);
+
+      // Create merchant user account
+      const [merchantUser] = await db
+        .insert(users)
+        .values({
+          username: email,
+          password: hashedPassword,
+          email,
+          name: companyName,
+          role: 'merchant',
+          phoneNumber
+        })
+        .returning();
+
+      // Create merchant record
+      const [merchant] = await db
+        .insert(merchants)
+        .values({
+          userId: merchantUser.id,
+          companyName,
+          address,
+          website,
+          status: 'active'
+        })
+        .returning();
+
+      // Send login credentials via email
+      await sendMerchantCredentials(email, merchantUser.username, tempPassword);
+
+      res.status(201).json({ merchant, user: merchantUser });
+    } catch (err) {
+      console.error("Error creating merchant:", err);
+      next(err);
+    }
+  });
+
   apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
     console.log("[Merchants] Fetching all merchants");
     try {

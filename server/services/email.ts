@@ -110,3 +110,34 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
 export async function generateVerificationToken(): Promise<string> {
   return crypto.randomBytes(32).toString('hex');
 }
+
+export async function sendMerchantCredentials(
+  to: string,
+  username: string,
+  password: string
+): Promise<boolean> {
+  try {
+    const msg = {
+      to,
+      from: FROM_EMAIL,
+      subject: 'Your Merchant Account Credentials',
+      html: `
+        <div>
+          <h1>Welcome to ShiFi!</h1>
+          <p>Your merchant account has been created. Here are your login credentials:</p>
+          <p><strong>Username:</strong> ${username}</p>
+          <p><strong>Password:</strong> ${password}</p>
+          <p>Please change your password after your first login.</p>
+          <p>If you did not request this account, please contact support immediately.</p>
+        </div>
+      `,
+    };
+
+    await mailService.send(msg);
+    console.log('Merchant credentials sent successfully to:', to);
+    return true;
+  } catch (error: any) {
+    console.error('Error sending merchant credentials:', error);
+    return false;
+  }
+}

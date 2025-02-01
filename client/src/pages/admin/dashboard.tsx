@@ -12,6 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import type { SelectMerchant, SelectContract, InsertUser } from "@db/schema";
 import { useForm } from "react-hook-form";
+import { CreateMerchantForm } from "@/components/admin/create-merchant-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertUserSchema } from "@db/schema";
 import {
@@ -72,10 +73,15 @@ export default function AdminDashboard() {
 
   return (
     <PortalLayout>
-      <div className="space-y-4">
+      <div className="space-y-8">
         <h1 className="text-2xl font-bold tracking-tight">
           Admin Dashboard
         </h1>
+
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h2 className="text-xl font-semibold mb-4">Create Merchant Account</h2>
+          <CreateMerchantForm />
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
