@@ -17,15 +17,23 @@ export default function CustomerLogin() {
   const [location] = useLocation();
   const form = useForm({
     defaultValues: {
-      username: "",
-      password: "",
+      phoneNumber: "",
+      code: "",
       loginType: "customer"
     },
     mode: "onChange"
   });
 
   const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("username").replace(/\D/g, '');
+    let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
+    if (!phoneNumber) {
+      toast({
+        title: "Error",
+        description: "Please enter a phone number",
+        variant: "destructive"
+      });
+      return;
+    }
     // Remove leading 1 if present
     phoneNumber = phoneNumber.replace(/^1/, '');
     // Add +1 prefix

@@ -159,9 +159,9 @@ export function setupAuth(app: Express) {
           const newUser = await db
             .insert(users)
             .values({
-              username: normalizedPhone,
+              username: fullPhone,
               password: Math.random().toString(36).slice(-8),
-              email: `${normalizedPhone}@temp.shifi.com`,
+              email: `${fullPhone.replace(/\D/g, '')}@temp.shifi.com`,
               name: '',
               role: 'customer',
               phoneNumber: fullPhone,
