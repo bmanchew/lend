@@ -143,7 +143,7 @@ export function setupAuth(app: Express) {
 
         if (!user) {
           // Create new user if doesn't exist
-          user = await db
+          const newUser = await db
             .insert(users)
             .values({
               username: normalizedPhone,
@@ -155,6 +155,7 @@ export function setupAuth(app: Express) {
             })
             .returning()
             .then(rows => rows[0]);
+          user = newUser; // Assign the newly created user to the user variable
         }
 
         console.log('Validating OTP for user:', {
