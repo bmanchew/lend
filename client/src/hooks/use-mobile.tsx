@@ -1,3 +1,4 @@
+
 import * as React from "react"
 
 const MOBILE_BREAKPOINT = 768
@@ -19,10 +20,27 @@ export function useIsMobile() {
 }
 
 export function useMobile() {
-  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  console.log('[useMobile] Platform detection:', {
-    userAgent: navigator.userAgent,
-    isMobile
-  });
-  return isMobile;
+  const [isMobile, setIsMobile] = React.useState(false)
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      const ua = navigator.userAgent
+      const isSafari = /Safari/i.test(ua) && !/Chrome/i.test(ua)
+      const isChrome = /Chrome/i.test(ua)
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(ua)
+      
+      console.log('[useMobile] Browser detection:', {
+        userAgent: ua,
+        isSafari,
+        isChrome,
+        isMobileDevice
+      })
+      
+      setIsMobile(isMobileDevice)
+    }
+    
+    checkMobile()
+  }, [])
+
+  return isMobile
 }
