@@ -26,10 +26,11 @@ import {
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
 
+  const [isOtpSent, setIsOtpSent] = useState(false);
   const loginForm = useForm({
     defaultValues: {
-      username: "",
-      password: "",
+      phoneNumber: "",
+      code: "",
     },
   });
 
@@ -103,30 +104,55 @@ export default function AuthPage() {
                 >
                   <FormField
                     control={loginForm.control}
-                    name="username"
+                    name="phoneNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Username</FormLabel>
+                        <FormLabel>Phone Number</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={loginForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input type="password" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {isOtpSent ? (
+                    <FormField
+                      control={loginForm.control}
+                      name="code"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Verification Code</FormLabel>
+                          <FormControl>
+                            <InputOTP maxLength={6} onComplete={field.onChange}>
+                              <InputOTPGroup>
+                                <InputOTPSlot index={0} />
+                                <InputOTPSlot index={1} />
+                                <InputOTPSlot index={2} />
+                                <InputOTPSlot index={3} />
+                                <InputOTPSlot index={4} />
+                                <InputOTPSlot index={5} />
+                              </InputOTPGroup>
+                            </InputOTP>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <Button 
+                      type="button"
+                      onClick={() => {
+                        const phoneNumber = loginForm.getValues("phoneNumber");
+                        if (phoneNumber) {
+                          // Send OTP code
+                          setIsOtpSent(true);
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      Send Code
+                    </Button>
+                  )}
                   <Button 
                     type="submit" 
                     className="w-full"

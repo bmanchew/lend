@@ -319,6 +319,42 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { phoneNumber } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+
+      // Generate OTP
+      const otp = smsService.generateOTP();
+      const otpExpiry = new Date();
+      otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // 5 minute expiry
+
+      // Save OTP to user record
+      await db
+        .update(users)
+        .set({ 
+          lastOtpCode: otp,
+          otpExpiry: otpExpiry
+        })
+        .where(eq(users.phoneNumber, phoneNumber));
+
+      // Send OTP via SMS
+      const sent = await smsService.sendOTP(phoneNumber, otp);
+
+      if (sent) {
+        res.json({ success: true });
+      } else {
+        res.status(500).json({ error: "Failed to send OTP" });
+      }
+    } catch (err) {
+      console.error("Error sending OTP:", err);
+      next(err);
+    }
+  });
+
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.query.userId;
