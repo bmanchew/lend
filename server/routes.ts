@@ -624,10 +624,17 @@ export function registerRoutes(app: Express): Server {
 
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      console.log('[Loan Application] Received request:', {
+      console.log('[LoanApplication] Received request:', {
         body: req.body,
-        params: req.params
+        params: req.params,
+        headers: req.headers,
+        url: req.url
       });
+
+      if (!req.body.amount && !req.body.fundingAmount) {
+        console.warn('[LoanApplication] Missing amount in request');
+        return res.status(400).json({ error: 'Loan amount is required' });
+      }
       const { phone: borrowerPhone, firstName, lastName, amount } = req.body;
       const merchantId = parseInt(req.params.id);
 

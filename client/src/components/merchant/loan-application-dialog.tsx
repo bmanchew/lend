@@ -75,8 +75,17 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
-      console.log('Raw form data:', data);
+      console.log('[LoanDialog] Starting mutation with data:', {
+        ...data,
+        merchantId,
+        merchantName
+      });
       const fundingAmount = parseFloat(data.fundingAmount);
+      console.log('[LoanDialog] Parsed funding amount:', {
+        raw: data.fundingAmount,
+        parsed: fundingAmount,
+        isValid: !isNaN(fundingAmount)
+      });
       console.log('Parsed funding amount:', {
         raw: data.fundingAmount,
         parsed: fundingAmount,
@@ -90,8 +99,9 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         body: JSON.stringify({
           ...data,
           merchantName,
-          amount: fundingAmount || parseFloat(data.fundingAmount) || 0,
-          fundingAmount: data.fundingAmount // Include both for debugging
+          amount: fundingAmount,
+          fundingAmount: data.fundingAmount,
+          phone: data.phone?.replace(/\D/g, '')  // Clean phone number
         }),
       });
       if (!response.ok) {
