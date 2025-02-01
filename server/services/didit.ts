@@ -132,11 +132,12 @@ class DiditService {
         returnUrl: completeReturnUrl
       });
 
-      const isMobile = Boolean(user.platform === 'mobile');
+      const isMobile = Boolean(user.platform === 'mobile' || (user.userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(user.userAgent)));
       console.log("[DiditService] Initializing session with platform:", { 
         platform: user.platform, 
         isMobile,
-        userAgent: user.userAgent
+        userAgent: user.userAgent,
+        detectedFromUA: /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(user.userAgent || '')
       });
 
       const sessionData = {

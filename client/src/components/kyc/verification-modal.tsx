@@ -32,7 +32,13 @@ export function KycVerificationModal({
     refetchInterval: 5000
   });
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const platform = isMobile ? 'mobile' : 'web';
+  console.log("Device detection:", {
+    isMobile,
+    platform,
+    userAgent: navigator.userAgent
+  });
 
   const startVerification = useMutation({
     mutationFn: async () => {
@@ -41,7 +47,6 @@ export function KycVerificationModal({
       }
 
       try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         console.log("Starting verification:", {
           userId,
           isMobile,
@@ -56,7 +61,7 @@ export function KycVerificationModal({
           },
           body: JSON.stringify({ 
             userId,
-            platform: isMobile ? 'mobile' : 'web',
+            platform: platform,
             userAgent: navigator.userAgent
           })
         });
