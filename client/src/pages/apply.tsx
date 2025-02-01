@@ -29,6 +29,11 @@ export default function ApplyPage() {
       }
       
       const data = await response.json();
+      if (data.userId && data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      } else {
+        throw new Error('Invalid response from server');
+      }
       setStarted(true);
     } catch (error) {
       console.error('Error starting application:', error);
