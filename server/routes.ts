@@ -237,28 +237,35 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.email, email))
         .limit(1);
 
+      let merchantUser;
       if (existingUser.length > 0) {
-        console.error("[Merchant Creation] User already exists with email:", email);
-        return res.status(409).json({ error: 'User with this email already exists' });
+        // Update existing user to merchant role
+        [merchantUser] = await db
+          .update(users)
+          .set({ role: 'merchant' })
+          .where(eq(users.id, existingUser[0].id))
+          .returning();
+        console.log("[Merchant Creation] Updated existing user to merchant:", merchantUser);
+      } else {
+
+      // Generate random password for new users
+        const tempPassword = Math.random().toString(36).slice(-8);
+        console.log("[Merchant Creation] Generated temporary password");
+        const hashedPassword = await hashPassword(tempPassword);
+
+        console.log("[Merchant Creation] Creating new merchant user account");
+        [merchantUser] = await db
+          .insert(users)
+          .values({
+            username: email,
+            password: hashedPassword,
+            email,
+            name: companyName,
+            role: 'merchant',
+            phoneNumber
+          })
+          .returning();
       }
-
-      // Generate random password
-      const tempPassword = Math.random().toString(36).slice(-8);
-      console.log("[Merchant Creation] Generated temporary password");
-      const hashedPassword = await hashPassword(tempPassword);
-
-      console.log("[Merchant Creation] Attempting to create merchant user account");
-      const [merchantUser] = await db
-        .insert(users)
-        .values({
-          username: email,
-          password: hashedPassword,
-          email,
-          name: companyName,
-          role: 'merchant',
-          phoneNumber
-        })
-        .returning();
 
       console.log("[Merchant Creation] Created merchant user:", {
         id: merchantUser.id,
