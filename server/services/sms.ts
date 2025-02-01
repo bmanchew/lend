@@ -1,3 +1,4 @@
+
 import twilio from 'twilio';
 import crypto from 'crypto';
 
@@ -26,6 +27,11 @@ class SMSService {
 
     this.client = twilio(this.config.accountSid, this.config.authToken);
     
+    console.log("[SMSService] Initialized with configuration", {
+      fromNumber: this.config.fromNumber,
+      accountSid: this.config.accountSid.substring(0, 4) + '***'
+    });
+
     // Test API connectivity
     this.testConnection().catch(err => {
       console.error("[SMSService] API connectivity test failed:", {
@@ -47,12 +53,6 @@ class SMSService {
       });
       throw error;
     }
-  }
-
-    console.log("[SMSService] Initialized with configuration", {
-      fromNumber: this.config.fromNumber,
-      accountSid: this.config.accountSid.substring(0, 4) + '***'
-    });
   }
 
   async sendLoanApplicationLink(
