@@ -116,9 +116,7 @@ class DiditService {
 
       const accessToken = await this.getAccessToken();
 
-      const replitDomain = process.env.DEPLOYMENT_URL || (process.env.REPL_SLUG && process.env.REPL_OWNER
-        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-        : 'http://localhost:3000');
+      const replitDomain = 'https://shi-fi-lend-brandon263.replit.app';
 
       const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
       const completeReturnUrl = new URL(returnUrl || '/dashboard', replitDomain).toString();
