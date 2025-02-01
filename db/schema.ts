@@ -78,6 +78,8 @@ export const contracts = pgTable("contracts", {
   activatedAt: timestamp("activated_at"),
   completedAt: timestamp("completed_at"),
   notes: text("notes"),
+  borrowerEmail: text("borrower_email").notNull(),
+  borrowerPhone: text("borrower_phone").notNull(),
   underwritingStatus: text("underwriting_status", {
     enum: ["pending", "approved", "rejected"]
   }),

@@ -284,7 +284,9 @@ export function registerRoutes(app: Express): Server {
         totalInterest,
         status: 'draft',
         notes,
-        underwritingStatus: 'pending'
+        underwritingStatus: 'pending',
+        borrowerEmail: customerDetails.email,
+        borrowerPhone: customerDetails.phone
       }).returning();
 
       res.json(newContract[0]);
