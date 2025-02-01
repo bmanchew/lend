@@ -11,28 +11,7 @@ import { KycVerificationModal } from "@/components/kyc/verification-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Import Dialog components
 
 
-// Assume DebitCardForm component exists elsewhere and handles debit card input and submission
-//  Replace with your actual DebitCardForm component
-const DebitCardForm = ({ amount, onSuccess }) => {
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvv, setCvv] = useState('');
-
-  const handleSubmit = () => {
-    // Replace with your actual debit card processing logic
-    console.log('Processing debit card payment:', { cardNumber, expiry, cvv, amount });
-    onSuccess();
-  };
-
-  return (
-    <form>
-      <input type="text" placeholder="Card Number" value={cardNumber} onChange={e => setCardNumber(e.target.value)} />
-      <input type="text" placeholder="Expiry (MM/YY)" value={expiry} onChange={e => setExpiry(e.target.value)} />
-      <input type="text" placeholder="CVV" value={cvv} onChange={e => setCvv(e.target.value)} />
-      <button type="button" onClick={handleSubmit}>Submit Payment</button>
-    </form>
-  );
-};
+import { DebitCardForm } from '@/components/payment/debit-card-form';
 
 
 export default function CustomerDashboard() {
