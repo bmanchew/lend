@@ -53,18 +53,18 @@ export function KycVerificationModal({
         }
 
         if (isMobile) {
-          // Try to open in Didit app first
-          const appUrl = `didit://verify?session=${data.sessionId}`;
-          window.location.href = appUrl;
+          // Create hidden iframe to try native app first
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = `didit://verify?session=${data.sessionId}`;
+          document.body.appendChild(iframe);
           
-          // Set up fallback to web version after delay
+          // Set up reliable fallback for web version
           setTimeout(() => {
-            // Check if we're still on same page (app wasn't opened)
-            if (document.hidden) {
-              return; // App was opened, don't redirect
-            }
-            window.location.href = data.redirectUrl;
-          }, 1500); // Increased delay for slower devices
+            document.body.removeChild(iframe);
+            // Force open in current tab for better mobile compatibility
+            window.location.replace(data.redirectUrl);
+          }, 2000);
         } else {
           window.location.href = data.redirectUrl;
         }

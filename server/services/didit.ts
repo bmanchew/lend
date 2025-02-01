@@ -146,7 +146,9 @@ class DiditService {
         mobile_settings: {
           allow_app: true,
           fallback_to_web: true,
-          app_timeout: 1500
+          app_timeout: 2000,
+          force_mobile_flow: true,
+          universal_link_enabled: true
         }
       };
 
