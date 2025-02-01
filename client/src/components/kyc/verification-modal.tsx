@@ -125,11 +125,26 @@ export function KycVerificationModal({
             </div>
           </div>
           <Button
-            onClick={async () => {
+            type="button"
+            role="button"
+            onTouchStart={(e) => {
+              e.preventDefault();
+              console.log("Touch start detected");
+            }}
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log("Button clicked", {
+                type: e.type,
+                target: e.target,
+                currentTarget: e.currentTarget
+              });
               try {
                 console.log("Starting verification...");
                 const result = await startVerification.mutateAsync();
+                console.log("Verification result:", result);
                 if (result?.redirectUrl) {
+                  console.log("Redirecting to:", result.redirectUrl);
                   window.location.href = result.redirectUrl;
                 }
               } catch (error) {
@@ -137,7 +152,7 @@ export function KycVerificationModal({
               }
             }}
             disabled={startVerification.isPending}
-            className="w-full"
+            className="w-full touch-action-manipulation active:opacity-80 hover:opacity-90"
           >
             {startVerification.isPending ? (
               <>
