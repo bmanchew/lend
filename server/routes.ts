@@ -369,24 +369,27 @@ export function registerRoutes(app: Express): Server {
     try {
       const { firstName, lastName, email, phone } = req.body;
       
-      // Create user account for borrower
-      const [user] = await db.insert(users).values({
-        username: email,
-        password: Math.random().toString(36).slice(-8), // Temporary password
-        email,
-        name: `${firstName} ${lastName}`,
-        role: 'customer',
-        phoneNumber: phone,
-        kycStatus: 'pending'
-      })
-      .onConflictDoUpdate({
-        target: users.email,
-        set: {
+      // Find existing user by phone number
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, phone))
+        .limit(1);
+
+      if (!existingUser) {
+        console.error('User not found for phone:', phone);
+        return res.status(400).json({ error: 'Invalid application link' });
+      }
+
+      // Update user with additional details
+      const [user] = await db
+        .update(users)
+        .set({
+          email,
           name: `${firstName} ${lastName}`,
-          phoneNumber: phone,
-        },
-      })
-      .returning();
+        })
+        .where(eq(users.id, existingUser.id))
+        .returning();
 
       // Start KYC process
       const sessionUrl = await diditService.initializeKycSession(user.id);
@@ -592,11 +595,33 @@ export function registerRoutes(app: Express): Server {
       const { phone: borrowerPhone, firstName, lastName } = req.body;
       const merchantId = parseInt(req.params.id);
 
-      if (!borrowerPhone || !merchantId) {
+      if (!borrowerPhone || !merchantId || !firstName || !lastName) {
         return res.status(400).json({ 
-          error: 'Missing required fields: borrower phone number or merchant ID' 
+          error: 'Missing required fields' 
         });
       }
+
+      // Create or update user account
+      const [user] = await db
+        .insert(users)
+        .values({
+          username: borrowerPhone,
+          password: Math.random().toString(36).slice(-8),
+          email: '',
+          name: `${firstName} ${lastName}`,
+          role: 'customer',
+          phoneNumber: borrowerPhone,
+          kycStatus: 'pending'
+        })
+        .onConflictDoUpdate({
+          target: users.phoneNumber,
+          set: {
+            name: `${firstName} ${lastName}`,
+          },
+        })
+        .returning();
+
+      console.log('Created/Updated user account:', user);
 
       // Fetch merchant details to include in the SMS
       const [merchant] = await db
