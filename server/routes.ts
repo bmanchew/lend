@@ -608,24 +608,19 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.phoneNumber, borrowerPhone))
         .limit(1);
 
+      // Always use existing user if found by phone number
       let user;
       if (existingUser) {
-        // Update existing user
-        [user] = await db
-          .update(users)
-          .set({
-            name: `${firstName} ${lastName}`,
-          })
-          .where(eq(users.id, existingUser.id))
-          .returning();
+        user = existingUser;
       } else {
-        // Create new user
+        // Create new user with unique email based on phone
+        const uniqueEmail = `${borrowerPhone.replace(/\D/g, '')}@temp.shifi.com`;
         [user] = await db
           .insert(users)
           .values({
             username: borrowerPhone,
             password: Math.random().toString(36).slice(-8),
-            email: '',
+            email: uniqueEmail,
             name: `${firstName} ${lastName}`,
             role: 'customer',
             phoneNumber: borrowerPhone,
