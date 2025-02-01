@@ -111,10 +111,12 @@ class SMSService {
 
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
     try {
-      // Ensure phone number is in E.164 format
-      if (!phoneNumber.startsWith('+')) {
-        phoneNumber = '+' + phoneNumber;
-      }
+      // Clean the phone number to only digits
+      let cleanPhone = phoneNumber.replace(/\D/g, '');
+      // Remove leading 1 if present
+      cleanPhone = cleanPhone.replace(/^1/, '');
+      // Add +1 prefix for E.164 format
+      phoneNumber = '+1' + cleanPhone;
       
       // Basic validation
       if (!/^\+\d{10,15}$/.test(phoneNumber)) {

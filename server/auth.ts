@@ -129,10 +129,15 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
+        // Normalize phone number format by removing +1 or 1 prefix
+        let normalizedPhone = username.replace(/^\+?1/, '');
+        // Remove any non-digit characters
+        normalizedPhone = normalizedPhone.replace(/\D/g, '');
+
         let user = await db
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, username))
+          .where(eq(users.phoneNumber, normalizedPhone))
           .limit(1)
           .then(rows => rows[0]);
 
@@ -141,12 +146,12 @@ export function setupAuth(app: Express) {
           user = await db
             .insert(users)
             .values({
-              username: username,
+              username: normalizedPhone,
               password: Math.random().toString(36).slice(-8),
-              email: `${username.replace(/\D/g, '')}@temp.shifi.com`,
+              email: `${normalizedPhone}@temp.shifi.com`,
               name: '',
               role: 'customer',
-              phoneNumber: username,
+              phoneNumber: normalizedPhone,
             })
             .returning()
             .then(rows => rows[0]);
