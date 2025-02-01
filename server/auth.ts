@@ -165,12 +165,15 @@ export function setupAuth(app: Express) {
           user = newUser;
         }
 
-        console.log('[AUTH] Validating OTP:', {
+        console.log('[AUTH] OTP Validation Details:', {
           storedOtp: user.lastOtpCode,
           providedOtp: password,
           otpExpiry: user.otpExpiry,
+          currentTime: new Date().toISOString(),
           expiryValid: user.otpExpiry ? new Date(user.otpExpiry) > new Date() : false,
-          phoneNumber: fullPhone
+          phoneNumber: fullPhone,
+          userId: user.id,
+          role: user.role
         });
 
         console.log('Verifying OTP:', {
