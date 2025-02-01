@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +8,36 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
 import { KycVerificationModal } from "@/components/kyc/verification-modal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Import Dialog components
+
+
+// Assume DebitCardForm component exists elsewhere and handles debit card input and submission
+//  Replace with your actual DebitCardForm component
+const DebitCardForm = ({ amount, onSuccess }) => {
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+
+  const handleSubmit = () => {
+    // Replace with your actual debit card processing logic
+    console.log('Processing debit card payment:', { cardNumber, expiry, cvv, amount });
+    onSuccess();
+  };
+
+  return (
+    <form>
+      <input type="text" placeholder="Card Number" value={cardNumber} onChange={e => setCardNumber(e.target.value)} />
+      <input type="text" placeholder="Expiry (MM/YY)" value={expiry} onChange={e => setExpiry(e.target.value)} />
+      <input type="text" placeholder="CVV" value={cvv} onChange={e => setCvv(e.target.value)} />
+      <button type="button" onClick={handleSubmit}>Submit Payment</button>
+    </form>
+  );
+};
+
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
+  const [showDownPayment, setShowDownPayment] = useState(false); // State for down payment dialog
   const { toast } = useToast();
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
@@ -93,12 +119,26 @@ export default function CustomerDashboard() {
                       className="w-full mt-6" 
                       onClick={() => {
                         if (contracts?.[0]?.id) {
-                          setShowBankLink(true);
+                          setShowDownPayment(true);
                         }
                       }}
                     >
                       Accept Offer
                     </Button>
+                    <Dialog open={showDownPayment} onOpenChange={setShowDownPayment}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Complete Down Payment</DialogTitle>
+                        </DialogHeader>
+                        <DebitCardForm 
+                          amount={contracts?.[0]?.downPayment ?? 0} 
+                          onSuccess={() => {
+                            setShowDownPayment(false);
+                            setShowBankLink(true);
+                          }} 
+                        />
+                      </DialogContent>
+                    </Dialog>
                   </CardContent>
                 </Card>
                 <BankLinkDialog
