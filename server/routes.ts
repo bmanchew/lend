@@ -577,7 +577,7 @@ export function registerRoutes(app: Express): Server {
       const applicationToken = smsService.generateApplicationToken();
 
       // Construct the application URL
-      const applicationUrl = `https://${process.env.REPL_SLUG}.repl.co/apply/${applicationToken}`;
+      const applicationUrl = `https://loan-craft-brandon263.replit.app/apply/${applicationToken}`;
 
       // Send the SMS invitation
       const sent = await smsService.sendLoanApplicationLink(
