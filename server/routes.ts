@@ -206,15 +206,17 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.get("/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
+      console.log("[Routes] Fetching all contracts");
       const allContracts = await db.query.contracts.findMany({
         with: {
           merchant: true,
           customer: true,
         },
       });
+      console.log("[Routes] Successfully fetched contracts:", { count: allContracts.length });
       res.json(allContracts);
     } catch (err:any) {
-      console.error("Error fetching all contracts:", err); 
+      console.error("[Routes] Error fetching all contracts:", err); 
       next(err);
     }
   });
