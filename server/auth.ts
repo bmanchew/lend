@@ -14,19 +14,47 @@ const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
 async function hashPassword(password: string) {
+  console.log("[Auth] Generating password hash");
   const salt = randomBytes(16).toString("hex");
   const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
   return `${derivedKey.toString("hex")}.${salt}`;
 }
 
 async function comparePasswords(supplied: string, stored: string) {
+  console.log("[Auth] Comparing passwords");
   try {
+    // Validate input
+    if (!supplied || !stored) {
+      console.error("[Auth] Invalid password comparison input", {
+        suppliedExists: !!supplied,
+        storedExists: !!stored
+      });
+      return false;
+    }
+
     const [hashedPassword, salt] = stored.split(".");
+    if (!hashedPassword || !salt) {
+      console.error("[Auth] Invalid stored password format");
+      return false;
+    }
+
     const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
     const storedBuf = Buffer.from(hashedPassword, "hex");
-    return timingSafeEqual(storedBuf, suppliedBuf);
+
+    // Ensure both buffers are the same length before comparison
+    if (suppliedBuf.length !== storedBuf.length) {
+      console.error("[Auth] Buffer length mismatch", {
+        suppliedLength: suppliedBuf.length,
+        storedLength: storedBuf.length
+      });
+      return false;
+    }
+
+    const isMatch = timingSafeEqual(storedBuf, suppliedBuf);
+    console.log("[Auth] Password comparison result:", { isMatch });
+    return isMatch;
   } catch (error) {
-    console.error("Password comparison error:", error);
+    console.error("[Auth] Password comparison error:", error);
     return false;
   }
 }
