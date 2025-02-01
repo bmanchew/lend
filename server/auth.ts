@@ -129,19 +129,19 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        // Normalize phone number format
-        const fullPhone = username; // Username is already the full phone number
+        const fullPhone = username;
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
-        let user = await db
+        const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, fullPhone))
-          .limit(1)
-          .then(rows => {
-            console.log('[AUTH] Found user:', rows[0]);
-            return rows[0];
-          });
+          .where(eq(users.phoneNumber, fullPhone));
+
+        console.log('[AUTH] User lookup result:', { 
+          found: !!user,
+          user,
+          providedOtp: password
+        });
 
         if (!user) {
           console.log('[AUTH] No user found for phone:', fullPhone);
@@ -183,20 +183,38 @@ export function setupAuth(app: Express) {
         });
 
         if (!user.lastOtpCode || !user.otpExpiry) {
-          console.error('Missing OTP or expiry');
+          console.error('[AUTH] Missing OTP or expiry:', {
+            hasOtp: !!user.lastOtpCode,
+            hasExpiry: !!user.otpExpiry
+          });
           return done(null, false, { message: "No active OTP found" });
-        }
-
-        if (user.lastOtpCode !== password) {
-          console.error('OTP mismatch');
-          return done(null, false, { message: "Invalid code" });
         }
 
         const now = new Date();
         const expiry = new Date(user.otpExpiry);
+        
+        console.log('[AUTH] OTP validation:', {
+          storedOtp: user.lastOtpCode,
+          providedOtp: password,
+          now: now.toISOString(),
+          expiry: expiry.toISOString(),
+          isExpired: expiry <= now
+        });
+
+        if (user.lastOtpCode !== password) {
+          console.error('[AUTH] OTP mismatch:', {
+            stored: user.lastOtpCode,
+            provided: password
+          });
+          return done(null, false, { message: "Invalid code" });
+        }
+
         if (expiry <= now) {
-          console.error('OTP expired:', { now, expiry });
-          return done(null, false, { message: "OTP has expired" });
+          console.error('[AUTH] OTP expired:', {
+            now: now.toISOString(),
+            expiry: expiry.toISOString()
+          });
+          return done(null, false, { message: "Code has expired" });
         }
 
         // Clear used OTP
