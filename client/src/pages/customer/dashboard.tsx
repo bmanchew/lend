@@ -1,14 +1,13 @@
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
 import { KycVerificationModal } from "@/components/kyc/verification-modal";
-import { useState, useEffect } from "react";
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
