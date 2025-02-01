@@ -98,7 +98,10 @@ export function KycVerificationModal({
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id }),
+          body: JSON.stringify({ 
+            userId: user.id,
+            returnUrl: '/dashboard'
+          }),
         });
 
         if (!response.ok) {

@@ -119,7 +119,10 @@ class DiditService {
       const replitDomain = 'https://shi-fi-lend-brandon263.replit.app';
 
       const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
-      const completeReturnUrl = new URL(returnUrl || '/dashboard', replitDomain).toString();
+      // Ensure return URL is absolute and includes domain
+      const completeReturnUrl = returnUrl?.startsWith('http') 
+        ? returnUrl 
+        : new URL(returnUrl || '/', replitDomain).toString();
 
       console.log("[DiditService] Session configuration:", {
         userId,
