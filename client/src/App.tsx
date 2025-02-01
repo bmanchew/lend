@@ -13,6 +13,8 @@ import CustomerDashboard from "@/pages/customer/dashboard";
 import MerchantDashboard from "@/pages/merchant/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
 import KycVerificationsPage from "@/pages/admin/kyc-verifications";
+import ApplyPage from "@/pages/apply"; // Placeholder component
+
 
 function Router() {
   return (
@@ -27,6 +29,7 @@ function Router() {
       <ProtectedRoute path="/merchant" component={MerchantDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/admin/kyc-verifications" component={KycVerificationsPage} />
+      <Route path="/apply/:token" component={ApplyPage} />
       <Route component={NotFound} />
     </Switch>
   );
