@@ -18,6 +18,7 @@ async function createMerchant() {
     const [merchant] = await db.insert(merchants).values({
       userId: 10, // pagel's user ID
       companyName: "Pagel Enterprises",
+      ein: "",
       status: "active",
       reserveBalance: 0,
     }).returning();
