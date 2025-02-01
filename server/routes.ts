@@ -215,6 +215,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
+    console.log("[Merchants] Fetching all merchants");
     try {
       const allMerchants = await db
         .select()
