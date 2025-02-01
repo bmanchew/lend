@@ -31,7 +31,6 @@ export function KycVerificationModal({
     refetchInterval: 5000
   });
 
-  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const platform = isMobile ? 'mobile' : 'web';
 
   const startVerification = useMutation({
