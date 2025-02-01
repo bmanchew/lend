@@ -216,13 +216,38 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/merchants/create", async (req:Request, res:Response, next:NextFunction) => {
     try {
+      console.log("[Merchant Creation] Received request:", {
+        body: req.body,
+        timestamp: new Date().toISOString()
+      });
+
       const { companyName, email, phoneNumber, address, website } = req.body;
+      
+      // Validate required fields
+      if (!email || !companyName) {
+        console.error("[Merchant Creation] Missing required fields");
+        return res.status(400).json({ error: 'Email and company name are required' });
+      }
+
+      // Check for existing user first
+      console.log("[Merchant Creation] Checking for existing user with email:", email);
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        console.error("[Merchant Creation] User already exists with email:", email);
+        return res.status(409).json({ error: 'User with this email already exists' });
+      }
 
       // Generate random password
       const tempPassword = Math.random().toString(36).slice(-8);
+      console.log("[Merchant Creation] Generated temporary password");
       const hashedPassword = await hashPassword(tempPassword);
 
-      // Create merchant user account
+      console.log("[Merchant Creation] Attempting to create merchant user account");
       const [merchantUser] = await db
         .insert(users)
         .values({
@@ -234,6 +259,12 @@ export function registerRoutes(app: Express): Server {
           phoneNumber
         })
         .returning();
+
+      console.log("[Merchant Creation] Created merchant user:", {
+        id: merchantUser.id,
+        email: merchantUser.email,
+        role: merchantUser.role
+      });
 
       // Create merchant record
       const [merchant] = await db
