@@ -273,19 +273,21 @@ class DiditService {
           })
           .where(eq(verificationSessions.sessionId, session_id));
 
-        if (status === 'Approved' || status === 'Declined') {
+        const normStatus = status.toLowerCase();
+        if (normStatus === 'approved' || normStatus === 'declined') {
           const vendorData = JSON.parse(vendor_data);
           const userId = vendorData.userId;
           console.log("[DiditService] Updating user KYC status", {
             userId,
             username: vendorData.username,
-            status: status === 'Approved' ? 'verified' : 'failed'
+            status: normStatus === 'approved' ? 'verified' : 'failed',
+            originalStatus: status
           });
 
           await tx
             .update(users)
             .set({
-              kycStatus: status === 'Approved' ? 'verified' : 'failed'
+              kycStatus: normStatus === 'approved' ? 'verified' : 'failed'
             })
             .where(eq(users.id, userId));
         }
