@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract, SelectMerchant } from "@db/schema";
+import { LoanApplicationDialog } from "@/components/merchant/loan-application-dialog";
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
+          {merchant && <LoanApplicationDialog merchantId={merchant.id} />}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
