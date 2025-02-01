@@ -35,7 +35,9 @@ export default function CustomerDashboard() {
     }
   }, [user]);
 
-  const { data: contracts } = useQuery<SelectContract[]>({
+  import { KycVerificationModal } from '@/components/kyc/verification-modal';
+
+const { data: contracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/customers/${user?.id}/contracts`],
   });
 
@@ -46,7 +48,7 @@ export default function CustomerDashboard() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.name}</h1>
 
-        <VerificationModal 
+        <KycVerificationModal 
           isOpen={showKycModal} 
           onClose={() => setShowKycModal(false)}
           onVerificationComplete={() => setShowKycModal(false)}
