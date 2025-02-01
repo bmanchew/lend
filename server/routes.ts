@@ -369,6 +369,13 @@ export function registerRoutes(app: Express): Server {
     try {
       const { firstName, lastName, email, phone } = req.body;
       
+      console.log("[Apply Route] Processing application with details:", {
+        firstName,
+        lastName,
+        email,
+        phone
+      });
+
       // Find existing user by phone number
       const [existingUser] = await db
         .select()
@@ -377,9 +384,11 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!existingUser) {
-        console.error('User not found for phone:', phone);
+        console.error('[Apply Route] User not found for phone:', phone);
         return res.status(400).json({ error: 'Invalid application link' });
       }
+
+      console.log('[Apply Route] Found existing user:', existingUser);
 
       // Update user with additional details
       const [user] = await db
@@ -391,10 +400,15 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.id, existingUser.id))
         .returning();
 
-      // Start KYC process
+      console.log('[Apply Route] Updated user details:', user);
+
+      // Start KYC process with explicit userId in URL
+      const redirectUrl = `/apply/${user.id}?verification=true`;
+      console.log('[Apply Route] Redirecting to:', redirectUrl);
+      
       res.json({
         userId: user.id,
-        redirectUrl: `/apply?userId=${user.id}#verification`
+        redirectUrl
       });
     } catch (err) {
       console.error('Error creating borrower account:', err);

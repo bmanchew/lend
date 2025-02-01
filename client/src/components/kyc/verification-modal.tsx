@@ -25,13 +25,19 @@ export function KycVerificationModal({
     onVerificationComplete: !!onVerificationComplete 
   });
   const [searchParams] = useSearchParams();
-  const userId = searchParams.get('userId');
+  const location = useLocation();
+  const pathSegments = location.pathname.split('/');
+  const userId = pathSegments[2] || searchParams.get('userId');
   const { toast } = useToast();
 
-  console.log("[KYC Modal] Initializing with userId:", userId);
+  console.log("[KYC Modal] Initializing with:", {
+    userId,
+    pathSegments,
+    searchParams: Object.fromEntries(searchParams.entries())
+  });
 
   if (!userId) {
-    console.error("[KYC Modal] Missing userId in URL parameters");
+    console.error("[KYC Modal] Missing userId in both URL path and parameters");
     toast({
       title: "Error",
       description: "User ID is required to start verification",
