@@ -162,10 +162,11 @@ export function setupAuth(app: Express) {
         }
 
         console.log('Validating OTP for user:', {
-          lastOtpCode: user.lastOtpCode,
+          lastOtpCode: user?.lastOtpCode,
           inputCode: password,
-          otpExpiry: user.otpExpiry,
-          phoneNumber: fullPhone
+          otpExpiry: user?.otpExpiry,
+          phoneNumber: fullPhone,
+          foundUser: !!user
         });
 
         if (!user.lastOtpCode || !user.otpExpiry) {

@@ -13,25 +13,21 @@ export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
   const { toast } = useToast();
-
   const [location] = useLocation();
   const form = useForm({
     defaultValues: {
-      phoneNumber: "",
-      code: "",
+      username: "",
+      password: "",
       loginType: "customer"
     },
     mode: "onChange"
   });
 
   const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
-    // Remove leading 1 if present
+    let phoneNumber = form.getValues("username").replace(/\D/g, '');
     phoneNumber = phoneNumber.replace(/^1/, '');
-    // Add +1 prefix
     phoneNumber = '+1' + phoneNumber;
-    // Update form value with formatted number
-    form.setValue("phoneNumber", phoneNumber);
+    form.setValue("username", phoneNumber);
 
     try {
       const response = await axios.post("/api/sendOTP", { phoneNumber });
@@ -57,7 +53,7 @@ export default function CustomerLogin() {
     const params = new URLSearchParams(location.split('?')[1]);
     const phone = params.get('phone');
     if (phone) {
-      form.setValue('phoneNumber', phone);
+      form.setValue('username', phone);
       handleSendOTP();
     }
   }, [location]);
@@ -67,19 +63,32 @@ export default function CustomerLogin() {
       <div className="mx-auto w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold">Verify Your Identity</h1>
-          <p className="text-gray-500">Enter your phone number to continue</p>
+          <p className="text-gray-500">Enter your phone number or credentials to continue</p>
         </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-4">
             <FormField
               control={form.control}
-              name="phoneNumber"
+              name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel>Phone Number or Username</FormLabel>
                   <FormControl>
-                    <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                    <Input {...field} type="text" placeholder="Phone Number or Username" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="password" placeholder="Password" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -94,9 +103,9 @@ export default function CustomerLogin() {
                     <FormLabel className="text-center block">Enter Verification Code</FormLabel>
                     <FormControl>
                       <div className="flex flex-col items-center gap-4">
-                        <InputOTP 
-                          maxLength={6} 
-                          value={field.value} 
+                        <InputOTP
+                          maxLength={6}
+                          value={field.value}
                           onChange={field.onChange}
                           className="gap-2"
                         >
@@ -109,9 +118,9 @@ export default function CustomerLogin() {
                             <InputOTPSlot className="w-12 h-12 text-lg" index={5} />
                           </InputOTPGroup>
                         </InputOTP>
-                        <Button 
-                          type="button" 
-                          variant="link" 
+                        <Button
+                          type="button"
+                          variant="link"
                           className="text-sm text-muted-foreground"
                           onClick={handleSendOTP}
                         >
@@ -124,17 +133,12 @@ export default function CustomerLogin() {
                 )}
               />
             ) : (
-              <Button 
-                type="button"
-                onClick={handleSendOTP}
+              <Button
+                type="submit"
                 className="w-full"
+                disabled={loginMutation.isPending}
               >
-                Send Code
-              </Button>
-            )}
-            {isOtpSent && (
-              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-                Verify & Continue
+                Login
               </Button>
             )}
           </form>
