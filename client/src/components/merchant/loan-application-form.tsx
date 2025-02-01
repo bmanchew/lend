@@ -34,7 +34,7 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
           customerDetails: formData,
           amount: parseFloat(formData.fundingAmount),
           term: 12, // Default term
-          interestRate: 8.99, // Default interest rate
+          interestRate: 24.99, // Fixed interest rate
         }),
       });
       
