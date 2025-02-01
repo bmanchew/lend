@@ -30,7 +30,7 @@ interface VerificationModalProps {
   onVerificationComplete?: () => void;
 }
 
-export function KycVerificationModal({ 
+export function VerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
@@ -39,7 +39,17 @@ export function KycVerificationModal({
 
   const { user } = useAuth();
   const tempUserId = localStorage.getItem('temp_user_id');
-  const effectiveUserId = user?.id || tempUserId;
+  const effectiveUserId = user?.id || parseInt(tempUserId || '0');
+
+  console.log('[KYC Modal] User context:', {
+    userId: user?.id,
+    tempUserId,
+    effectiveUserId
+  });
+
+  if (!effectiveUserId) {
+    console.error('[KYC Modal] No effective user ID available');
+  }
 
   console.log('[KYC Modal] User context:', {
     authUserId: user?.id,
