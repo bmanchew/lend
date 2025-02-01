@@ -457,7 +457,7 @@ export function registerRoutes(app: Express): Server {
         .update(users)
         .set({ 
           lastOtpCode: otp,
-          otpExpiry: otpExpiry
+          otpExpiry: otpExpiry.toISOString()
         })
         .where(eq(users.phoneNumber, phoneNumber));
 

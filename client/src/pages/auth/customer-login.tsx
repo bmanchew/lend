@@ -32,16 +32,14 @@ export default function CustomerLogin() {
 
     try {
       const response = await axios.post("/api/sendOTP", { phoneNumber });
-      if (response.data.success) {
-        setIsOtpSent(true);
-        toast({
-          title: "Code Sent",
-          description: "Enter the code to sign in to your account"
-        });
-      } else {
-        throw new Error(response.data.error || 'Failed to send code');
-      }
+      console.log('OTP Response:', response.data);
+      setIsOtpSent(true);
+      toast({
+        title: "Code Sent",
+        description: "Enter the code to sign in to your account"
+      });
     } catch (error: any) {
+      console.error('OTP send error:', error);
       setIsOtpSent(false);
       toast({
         title: "Error",
