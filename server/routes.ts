@@ -484,7 +484,7 @@ export function registerRoutes(app: Express): Server {
   
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { borrowerPhone, borrowerName } = req.body;
+      const { phone: borrowerPhone, firstName, lastName } = req.body;
       const merchantId = parseInt(req.params.id);
 
       if (!borrowerPhone || !merchantId) {
