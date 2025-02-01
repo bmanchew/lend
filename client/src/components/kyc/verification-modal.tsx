@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 interface VerificationModalProps {
@@ -19,6 +19,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
     queryKey: ['kyc-status', userId],
@@ -32,54 +33,31 @@ export function KycVerificationModal({
   });
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  
+
   const startVerification = useMutation({
     mutationFn: async () => {
       if (!userId) {
         throw new Error('User ID is required');
       }
 
-      // First check if there's an existing active session
       try {
-        const statusResponse = await fetch(`/api/kyc/status?userId=${userId}`);
-        const statusData = await statusResponse.json();
-        
-        if (statusData.sessionId && statusData.status !== 'Declined') {
-          return { redirectUrl: `https://verify.didit.me/session/${statusData.sessionId}` };
-        }
-      } catch (error) {
-        console.log('No existing session found, creating new one');
-      }
-      
-      try {
+        console.log("Starting verification for user:", userId);
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId })
         });
-        
+
         const data = await response.json();
-        
+        console.log("Verification response:", data);
+
         if (!data.redirectUrl) {
           throw new Error('No redirect URL provided');
         }
 
-        if (isMobile) {
-          // Create hidden iframe to try native app first
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          iframe.src = `didit://verify?session=${data.sessionId}`;
-          document.body.appendChild(iframe);
-          
-          // Set up reliable fallback for web version
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-            // Force open in current tab for better mobile compatibility
-            window.location.replace(data.redirectUrl);
-          }, 2000);
-        } else {
-          window.location.href = data.redirectUrl;
-        }
+        // Set the verification URL to load in iframe
+        setVerificationUrl(data.redirectUrl);
+        return data;
       } catch (error) {
         console.error('Verification error:', error);
         toast({
@@ -124,6 +102,13 @@ export function KycVerificationModal({
               'Start Verification'
             )}
           </Button>
+          {verificationUrl && (
+            <iframe
+              title="Verification Iframe"
+              src={verificationUrl}
+              style={{ width: '100%', height: '600px', border: 'none' }}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>
