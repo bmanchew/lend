@@ -1,6 +1,9 @@
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
@@ -8,6 +11,8 @@ import { KycVerificationModal } from "@/components/kyc/verification-modal";
 import { useState, useEffect } from "react";
 
 export default function CustomerDashboard() {
+  const [showBankLink, setShowBankLink] = useState(false);
+  const { toast } = useToast();
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
 
@@ -153,9 +158,30 @@ export default function CustomerDashboard() {
                         <p className="text-2xl font-bold">5%</p>
                       </div>
                     </div>
-                    <Button className="w-full mt-6">Accept Offer</Button>
+                    <Button 
+                      className="w-full mt-6" 
+                      onClick={() => {
+                        if (contracts?.[0]?.id) {
+                          setShowBankLink(true);
+                        }
+                      }}
+                    >
+                      Accept Offer
+                    </Button>
                   </CardContent>
                 </Card>
+                <BankLinkDialog
+                  contractId={contracts?.[0]?.id ?? 0}
+                  isOpen={showBankLink}
+                  onOpenChange={setShowBankLink}
+                  onSuccess={() => {
+                    // Handle success - e.g. redirect to confirmation page
+                    toast({
+                      title: "Success",
+                      description: "Bank account linked successfully"
+                    });
+                  }}
+                />
               </div>
             </CardContent>
           </Card>
