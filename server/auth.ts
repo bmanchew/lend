@@ -278,7 +278,11 @@ export function setupAuth(app: Express) {
 
   // Added OTP related endpoints
   app.post('/api/sendOTP', async (req, res) => {
-    console.log('[AUTH] Received OTP request:', { body: req.body });
+    console.log('[AUTH] Received OTP request:', { 
+      body: req.body,
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
     const { phoneNumber } = req.body;
     
     if (!phoneNumber) {
