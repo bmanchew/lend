@@ -308,16 +308,13 @@ export function registerRoutes(app: Express): Server {
         rawBody: req.rawBody
       });
 
-      // Send immediate success response to avoid timeout
-      res.status(200).json({ status: 'success' });
-
       const signature = req.headers['x-signature'];
       const timestamp = req.headers['x-timestamp'];
       const rawBody = JSON.stringify(req.body);
 
       if (!signature || !timestamp) {
         console.error('[KYC Webhook] Missing signature or timestamp headers');
-        return;
+        return res.status(400).json({ error: 'Missing required headers' });
       }
 
       if (!diditService.verifyWebhookSignature(rawBody, signature as string, timestamp as string)) {
