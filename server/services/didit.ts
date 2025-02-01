@@ -118,7 +118,7 @@ class DiditService {
 
       const replitDomain = process.env.DEPLOYMENT_URL || 'https://shi-fi-lend-brandon263.replit.app';
 
-      const callbackUrl = `${replitDomain}/api/kyc/webhook`;
+      const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
       console.log("[DiditService] Using webhook URL:", callbackUrl.toString());
       // Ensure return URL is absolute and includes domain
       const completeReturnUrl = returnUrl?.startsWith('http') 

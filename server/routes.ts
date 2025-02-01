@@ -248,7 +248,6 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.query.userId;
-      console.log("[KYC Status] Checking status for user:", userId);
 
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
@@ -286,12 +285,6 @@ export function registerRoutes(app: Express): Server {
           .from(users)
           .where(eq(users.id, parsedUserId))
           .limit(1);
-
-        console.log("[KYC Status] User status from DB:", {
-          userId: parsedUserId,
-          username: user?.username,
-          kycStatus: user?.kycStatus
-        });
 
         status = user?.kycStatus || 'not_started';
       }
@@ -336,13 +329,7 @@ export function registerRoutes(app: Express): Server {
 
       console.log('[KYC Webhook] Processing webhook:', {
         sessionId: payload.session_id,
-        status: payload.status,
-        vendorData: payload.vendor_data,
-        timestamp: new Date().toISOString(),
-        documentData: payload.decision?.kyc?.document_data,
-        headers: req.headers,
-        signature: req.headers['x-signature'],
-        webhookTimestamp: req.headers['x-timestamp']
+        status: payload.status
       });
 
       await diditService.processWebhook(payload);
@@ -362,7 +349,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-
+  
   apiRouter.get("/kyc/sessions", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessions = await db
@@ -384,7 +371,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-
+  
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { borrowerPhone, borrowerName } = req.body;
