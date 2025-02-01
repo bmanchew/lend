@@ -77,7 +77,8 @@ export function KycVerificationModal({
 
   // Effect to handle verification completion
   useEffect(() => {
-    if (kycData?.status?.toLowerCase() === 'approved') {
+    const status = kycData?.status?.toLowerCase();
+    if (status === 'approved') {
       console.log('[KYC Modal] Verification completed successfully');
       if (onVerificationComplete) {
         onVerificationComplete();
@@ -85,6 +86,8 @@ export function KycVerificationModal({
       onClose();
       // Force reload to update UI state
       window.location.reload();
+    } else if (status === 'pending' || status === 'initialized' || status === 'in_progress') {
+      console.log('[KYC Modal] Verification in progress:', status);
     }
   }, [kycData?.status, onVerificationComplete, onClose]);
 
