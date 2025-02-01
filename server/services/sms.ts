@@ -17,6 +17,14 @@ class SMSService {
     if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
       throw new Error("Missing required Twilio credentials");
     }
+
+    this.config = {
+      accountSid: TWILIO_ACCOUNT_SID,
+      authToken: TWILIO_AUTH_TOKEN,
+      fromNumber: TWILIO_PHONE_NUMBER
+    };
+
+    this.client = twilio(this.config.accountSid, this.config.authToken);
     
     // Test API connectivity
     this.testConnection().catch(err => {
@@ -26,12 +34,7 @@ class SMSService {
         timestamp: new Date().toISOString()
       });
     });
-
-    this.config = {
-      accountSid: TWILIO_ACCOUNT_SID,
-      authToken: TWILIO_AUTH_TOKEN,
-      fromNumber: TWILIO_PHONE_NUMBER
-    };
+  }
 
   private async testConnection(): Promise<void> {
     try {
@@ -45,9 +48,6 @@ class SMSService {
       throw error;
     }
   }
-
-
-    this.client = twilio(this.config.accountSid, this.config.authToken);
 
     console.log("[SMSService] Initialized with configuration", {
       fromNumber: this.config.fromNumber,
