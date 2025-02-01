@@ -17,8 +17,14 @@ export default function MerchantDashboard() {
   const { user } = useAuth();
 
   const { data: merchant } = useQuery<SelectMerchant>({
-    queryKey: [`/api/merchants/by-user/${user?.id}`],
+    queryKey: ['merchant', user?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/merchants/by-user/${user?.id}`);
+      if (!response.ok) throw new Error('Failed to fetch merchant');
+      return response.json();
+    },
     enabled: !!user?.id,
+    retry: 1,
   });
 
   const { data: contracts } = useQuery<SelectContract[]>({
@@ -41,8 +47,11 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
-          {console.log("Merchant data:", merchant)}
-          {merchant && (
+          {merchant === undefined ? (
+            <div>Loading...</div>
+          ) : merchant === null ? (
+            <div className="text-red-500">Error loading merchant data</div>
+          ) : (
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
