@@ -117,8 +117,8 @@ export default function AuthPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="customer">Customer</SelectItem>
-                            <SelectItem value="merchant">Merchant</SelectItem>
+                            <SelectItem value="customer">Customer (Phone)</SelectItem>
+                            <SelectItem value="merchant">Business</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
