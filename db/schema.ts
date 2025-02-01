@@ -1,4 +1,14 @@
 import { pgTable, serial, varchar, timestamp, text, boolean, integer, decimal, real } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
+
+export const insertUserSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(6),
+  email: z.string().email(),
+  role: z.enum(['admin', 'customer', 'merchant']),
+  name: z.string().optional(),
+  phoneNumber: z.string().optional(),
+});
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
