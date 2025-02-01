@@ -42,10 +42,14 @@ export function KycVerificationModal({
 
       try {
         console.log("Starting verification for user:", userId);
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
+          body: JSON.stringify({ 
+            userId,
+            platform: isMobile ? 'mobile' : 'web'
+          })
         });
 
         const data = await response.json();
