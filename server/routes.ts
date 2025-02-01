@@ -207,17 +207,64 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.get("/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
-      console.log("[Routes] Fetching all contracts");
-      const allContracts = await db.query.contracts.findMany({
-        with: {
-          merchant: true,
-          customer: true,
-        },
-      });
+      const { status, merchantId } = req.query;
+      
+      let query = db.select().from(contracts)
+        .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
+        .leftJoin(users, eq(contracts.customerId, users.id));
+        
+      if (status) {
+        query = query.where(eq(contracts.status, status as string));
+      }
+      
+      if (merchantId) {
+        query = query.where(eq(contracts.merchantId, parseInt(merchantId as string)));
+      }
+      
+      const allContracts = await query.orderBy(desc(contracts.createdAt));
+      
       console.log("[Routes] Successfully fetched contracts:", { count: allContracts.length });
       res.json(allContracts);
     } catch (err:any) {
-      console.error("[Routes] Error fetching all contracts:", err); 
+      console.error("[Routes] Error fetching contracts:", err); 
+      next(err);
+    }
+  });
+
+  apiRouter.post("/contracts", async (req:Request, res:Response, next:NextFunction) => {
+    try {
+      const {
+        merchantId,
+        customerId,
+        amount,
+        term,
+        interestRate,
+        downPayment,
+        notes
+      } = req.body;
+
+      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
+      const totalInterest = (monthlyPayment * term) - amount;
+      const contractNumber = generateContractNumber();
+
+      const newContract = await db.insert(contracts).values({
+        merchantId,
+        customerId,
+        contractNumber,
+        amount,
+        term,
+        interestRate,
+        downPayment,
+        monthlyPayment,
+        totalInterest,
+        status: 'draft',
+        notes,
+        underwritingStatus: 'pending'
+      }).returning();
+
+      res.json(newContract[0]);
+    } catch (err:any) {
+      console.error("[Routes] Error creating contract:", err);
       next(err);
     }
   });

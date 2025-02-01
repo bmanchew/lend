@@ -59,18 +59,29 @@ export const contracts = pgTable("contracts", {
   id: serial("id").primaryKey(),
   merchantId: integer("merchant_id").references(() => merchants.id).notNull(),
   customerId: integer("customer_id").references(() => users.id).notNull(),
+  contractNumber: text("contract_number").unique().notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   term: integer("term").notNull(), // in months
   interestRate: decimal("interest_rate", { precision: 5, scale: 2 }).notNull(),
+  downPayment: decimal("down_payment", { precision: 10, scale: 2 }).notNull(),
+  monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }).notNull(),
+  totalInterest: decimal("total_interest", { precision: 10, scale: 2 }).notNull(),
   status: text("status", {
-    enum: ["pending", "active", "completed", "defaulted", "cancelled"]
-  }).notNull(),
+    enum: ["draft", "sent", "accepted", "rejected", "active", "defaulted", "completed", "cancelled"]
+  }).notNull().default("draft"),
   creditScore: integer("credit_score"),
   plaidPaymentToken: text("plaid_payment_token"),
   signedDocumentUrl: text("signed_document_url"),
   createdAt: timestamp("created_at").defaultNow(),
+  sentAt: timestamp("sent_at"),
+  acceptedAt: timestamp("accepted_at"),
   activatedAt: timestamp("activated_at"),
   completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  underwritingStatus: text("underwriting_status", {
+    enum: ["pending", "approved", "rejected"]
+  }),
+  underwritingNotes: text("underwriting_notes")
 });
 
 export const payments = pgTable("payments", {
