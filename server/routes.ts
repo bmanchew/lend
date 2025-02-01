@@ -177,7 +177,6 @@ export function registerRoutes(app: Express): Server {
           website: merchants.website,
           status: merchants.status,
           reserveBalance: merchants.reserveBalance,
-          active: merchants.active,
           createdAt: merchants.createdAt
         })
         .from(merchants)
