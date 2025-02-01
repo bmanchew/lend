@@ -38,11 +38,25 @@ export function VerificationModal({
   console.log('[KYC Modal] Rendering with props:', { isOpen });
 
   const { user } = useAuth();
+  const tempUserId = localStorage.getItem('temp_user_id');
+  const effectiveUserId = user?.id || tempUserId;
+
+  console.log('[KYC Modal] User context:', {
+    authUserId: user?.id,
+    tempUserId,
+    effectiveUserId
+  });
   const { toast } = useToast();
 
+  console.log('[KYC Modal] Current user context:', { 
+    userId: user?.id,
+    isOpen,
+    hasAuth: !!user
+  });
+
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
-    queryKey: ['/api/kyc/status', user?.id],
-    enabled: !!user?.id && isOpen,
+    queryKey: ['/api/kyc/status', effectiveUserId],
+    enabled: !!effectiveUserId && isOpen,
     staleTime: 0,
     queryFn: async () => {
       console.log('[KYC Modal] Checking status for user:', user?.id);

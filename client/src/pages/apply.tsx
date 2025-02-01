@@ -10,6 +10,7 @@ export default function ApplyPage() {
 
   const handleStart = async () => {
     try {
+      console.log('[Apply Page] Starting application with token:', params.token);
       const response = await fetch(`/api/apply/${params.token}`, {
         method: 'POST',
         headers: {
@@ -28,12 +29,19 @@ export default function ApplyPage() {
       }
 
       const data = await response.json();
-      if (data.userId && data.redirectUrl) {
-        window.location.href = data.redirectUrl;
-      } else {
-        throw new Error('Invalid response from server');
+      console.log('[Apply Page] Server response:', data);
+      
+      if (!data.userId) {
+        throw new Error('No user ID returned from server');
       }
+      
       setStarted(true);
+      
+      if (data.redirectUrl) {
+        // Store user ID before redirect
+        localStorage.setItem('temp_user_id', data.userId.toString());
+        window.location.href = data.redirectUrl;
+      }
     } catch (error) {
       console.error('Error starting application:', error);
     }
