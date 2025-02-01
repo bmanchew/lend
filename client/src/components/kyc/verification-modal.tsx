@@ -4,113 +4,53 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-// Debug log on module load
-console.log('[KYC Modal] Module loaded');
-
-interface KycStatus {
-  status: string;
-  sessionId?: string;
-  lastUpdated?: string | null;
-}
-
-interface KycStartResponse {
-  redirectUrl: string;
-}
-
-interface KycStartError {
-  error: string;
-  details?: string;
-}
-
-interface VerificationModalProps {
+interface KycVerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVerificationComplete?: () => void;
 }
 
-export function VerificationModal({ 
+export function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
-}: VerificationModalProps) {
-  console.log('[KYC Modal] Rendering with props:', { isOpen });
-
+}: KycVerificationModalProps) {
   const { user } = useAuth();
-  const tempUserId = localStorage.getItem('temp_user_id');
-  const effectiveUserId = user?.id || parseInt(tempUserId || '0');
-
-  console.log('[KYC Modal] User context:', {
-    userId: user?.id,
-    tempUserId,
-    effectiveUserId
+  const { toast } = useToast();
+  const [tempUserId] = useState(() => {
+    const stored = localStorage.getItem('temp_user_id');
+    return stored ? parseInt(stored) : null;
   });
 
-  if (!effectiveUserId) {
-    console.error('[KYC Modal] No effective user ID available');
-  }
+  const effectiveUserId = user?.id || tempUserId;
 
-  console.log('[KYC Modal] User context:', {
+  console.log('[KYC Modal] Rendering with context:', {
     authUserId: user?.id,
     tempUserId,
-    effectiveUserId
-  });
-  const { toast } = useToast();
-
-  console.log('[KYC Modal] Current user context:', { 
-    userId: user?.id,
-    isOpen,
-    hasAuth: !!user
+    effectiveUserId,
+    isOpen
   });
 
-  const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
+  const { data: kycData, isLoading: isCheckingStatus } = useQuery({
     queryKey: ['/api/kyc/status', effectiveUserId],
     enabled: !!effectiveUserId && isOpen,
-    staleTime: 0,
     queryFn: async () => {
-      console.log('[KYC Modal] Checking status for user:', user?.id);
-
-      const effectiveUserId = user?.id || tempUserId;
       if (!effectiveUserId) {
-        console.error('[KYC Modal] No user ID available');
         throw new Error('User ID is required');
       }
 
-      try {
-        const response = await fetch(`/api/kyc/status?userId=${effectiveUserId}`);
-        console.log('[KYC Modal] Status response:', response.status);
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            console.log('[KYC Modal] No existing session found');
-            return { status: 'initial' };
-          }
-          throw new Error('Failed to fetch KYC status');
-        }
-
-        const data = await response.json();
-        console.log('[KYC Modal] Status data:', data);
-        return data;
-      } catch (error) {
-        console.error('[KYC Modal] Status check error:', error);
-        throw error;
+      const response = await fetch(`/api/kyc/status?userId=${effectiveUserId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch KYC status');
       }
-    },
-    refetchInterval: (data) => {
-      const pollableStatus = data?.status === 'pending' || 
-                           data?.status === 'initialized' || 
-                           data?.status === 'in_progress';
-      console.log('[KYC Modal] Poll status:', { status: data?.status, shouldPoll: pollableStatus });
-      return pollableStatus ? 2000 : false;
+      return response.json();
     },
   });
 
-  const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error>({
+  const { mutate: startKyc, isPending: isStarting } = useMutation({
     mutationFn: async () => {
-      console.log('[KYC Modal] Starting verification for user:', user?.id);
-
-      const effectiveUserId = user?.id || tempUserId;
       if (!effectiveUserId) {
         throw new Error('User ID is required');
       }
@@ -125,50 +65,32 @@ export function VerificationModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json() as KycStartError;
-        console.error('[KYC Modal] Start error:', errorData);
-        throw new Error(errorData.details || errorData.error);
+        const error = await response.json();
+        throw new Error(error.details || error.error);
       }
 
-      const data = await response.json();
-      console.log('[KYC Modal] Start successful:', data);
-      return data;
+      return response.json();
     },
     onSuccess: (data) => {
-      console.log('[KYC Modal] Opening verification window');
       window.open(data.redirectUrl, 'verification', 'width=800,height=800');
     },
     onError: (error) => {
-      console.error('[KYC Modal] Start error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to start verification",
+        description: error.message,
         variant: "destructive",
       });
     },
   });
 
   useEffect(() => {
-    try {
-      console.log('[KYC Modal] Effect triggered:', {
-        isOpen,
-        userId: user?.id,
-        status: kycData?.status
-      });
-
-      if (kycData?.status === 'approved') {
-        console.log('[KYC Modal] Verification completed');
-        onVerificationComplete?.();
-        onClose();
-      }
-    } catch (error) {
-      console.error('[KYC Modal] Effect error:', error);
+    if (kycData?.status === 'approved') {
+      onVerificationComplete?.();
+      onClose();
     }
-  }, [kycData?.status, onVerificationComplete, onClose, isOpen, user?.id]);
+  }, [kycData?.status, onVerificationComplete, onClose]);
 
   const renderContent = () => {
-    console.log('[KYC Modal] Rendering content for status:', kycData?.status);
-
     if (isCheckingStatus) {
       return (
         <div className="flex justify-center p-4">
