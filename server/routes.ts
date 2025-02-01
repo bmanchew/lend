@@ -329,7 +329,13 @@ export function registerRoutes(app: Express): Server {
 
       console.log('[KYC Webhook] Processing webhook:', {
         sessionId: payload.session_id,
-        status: payload.status
+        status: payload.status,
+        vendorData: payload.vendor_data,
+        timestamp: new Date().toISOString(),
+        documentData: payload.decision?.kyc?.document_data,
+        headers: req.headers,
+        signature: req.headers['x-signature'],
+        webhookTimestamp: req.headers['x-timestamp']
       });
 
       await diditService.processWebhook(payload);
@@ -349,7 +355,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-  
+
   apiRouter.get("/kyc/sessions", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessions = await db
@@ -371,7 +377,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-  
+
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { borrowerPhone, borrowerName } = req.body;
