@@ -34,7 +34,11 @@ export default function CustomerLogin() {
   }, [location]);
 
   const handleSendOTP = async () => {
-    const phoneNumber = form.getValues("phoneNumber");
+    let phoneNumber = form.getValues("phoneNumber");
+    // Format phone number to E.164 format if not already
+    if (!phoneNumber.startsWith('+1')) {
+      phoneNumber = '+1' + phoneNumber.replace(/\D/g, '');
+    }
     if (!phoneNumber) {
       toast({
         title: "Error",
@@ -45,7 +49,7 @@ export default function CustomerLogin() {
     }
 
     try {
-      await axios.post("/api/auth/send-otp", { phoneNumber });
+      await axios.post("/api/sendOTP", { phoneNumber });
       setIsOtpSent(true);
       toast({
         title: "Code Sent",
