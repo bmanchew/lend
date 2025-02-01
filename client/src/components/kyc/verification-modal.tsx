@@ -21,7 +21,7 @@ interface KycStartError {
   details?: string;
 }
 
-export function VerificationModal({ 
+export function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
