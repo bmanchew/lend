@@ -1,13 +1,25 @@
 
 import { db } from "@db";
-import { merchants } from "@db/schema";
+import { merchants, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 async function createMerchant() {
   try {
+    // First find admin user
+    const [adminUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.role, 'admin'))
+      .limit(1);
+
+    if (!adminUser) {
+      console.error("No admin user found");
+      process.exit(1);
+    }
+
     console.log("Checking for existing merchant...");
     const existingMerchant = await db.query.merchants.findMany({
-      where: eq(merchants.userId, 10),
+      where: eq(merchants.userId, adminUser.id),
     });
 
     if (existingMerchant.length > 0) {
@@ -29,7 +41,7 @@ async function createMerchant() {
       const [merchant] = await db
         .insert(merchants)
         .values({
-          userId: 10,
+          userId: adminUser.id,
           companyName: "Pagel Enterprises",
           status: "active",
           reserveBalance: 0,
