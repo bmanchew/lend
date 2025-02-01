@@ -4,6 +4,7 @@ import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
+import { hashPassword } from "./auth";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
