@@ -16,6 +16,8 @@ type AuthContextType = {
   loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+  sendOtpMutation: UseMutationResult<any, Error, {phoneNumber: string}>; // Added OTP mutation
+  verifyOtpMutation: UseMutationResult<any, Error, {phoneNumber: string; code: string}>; // Added OTP mutation
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
@@ -88,6 +90,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const sendOtpMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const res = await apiRequest("POST", "/api/auth/send-otp", { phoneNumber });
+      if (!res.ok) throw new Error("Failed to send OTP");
+      return res.json();
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async ({ phoneNumber, code }: { phoneNumber: string; code: string }) => {
+      const res = await apiRequest("POST", "/api/auth/verify-otp", { phoneNumber, code });
+      if (!res.ok) throw new Error("Invalid OTP");
+      const data = await res.json();
+      // Assuming the API returns user data upon successful verification
+      queryClient.setQueryData(["/api/user"], data.user);
+      setLocation(`/${data.user.role}`); //Update location based on user role
+      return data;
+    },
+  });
+
+
   return (
     <AuthContext.Provider
       value={{
@@ -97,6 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
+        sendOtpMutation,
+        verifyOtpMutation,
       }}
     >
       {children}

@@ -9,6 +9,7 @@ import { users, insertUserSchema } from "@db/schema";
 import { db, pool } from "@db";
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
+import { smsService } from "./services/sms"; // Added import for sms service
 
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
@@ -68,6 +69,9 @@ type User = {
   email: string;
   name: string;
   role: UserRole;
+  phoneNumber: string; // Added phoneNumber
+  lastOtpCode: string | null; // Added OTP fields
+  otpExpiry: string | null;
 };
 
 export function setupAuth(app: Express) {
@@ -271,4 +275,24 @@ export function setupAuth(app: Express) {
     }
     res.json(req.user);
   });
+
+  // Added OTP related endpoints
+  app.post('/api/sendOTP', async (req, res) => {
+    const { phoneNumber } = req.body;
+    try {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date();
+      expiry.setMinutes(expiry.getMinutes() + 5); // OTP expires in 5 minutes
+
+      await smsService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
+
+      await db.update(users).set({ lastOtpCode: otp, otpExpiry: expiry.toISOString() }).where(eq(users.phoneNumber, phoneNumber));
+      res.json({ message: 'OTP sent successfully' });
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      res.status(500).json({ message: 'Failed to send OTP' });
+    }
+  });
+
+
 }
