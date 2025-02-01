@@ -505,16 +505,32 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId } = req.body;
+      const { userId, platform } = req.body;
+      const isMobileClient = req.headers['x-mobile-client'] === 'true';
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
       }
 
-      console.log('Starting KYC process for user:', userId);
+      console.log('Starting KYC process:', {
+        userId,
+        platform,
+        isMobileClient,
+        userAgent: req.headers['user-agent']
+      });
+
+      // Update user platform
+      await db
+        .update(users)
+        .set({ platform })
+        .where(eq(users.id, userId));
 
       const sessionUrl = await diditService.initializeKycSession(userId);
-      console.log('Generated KYC session URL:', sessionUrl);
+      console.log('KYC session initialized:', {
+        userId,
+        sessionUrl,
+        platform
+      });
 
       res.json({ redirectUrl: sessionUrl });
     } catch (err: any) {

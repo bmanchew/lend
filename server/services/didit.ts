@@ -132,6 +132,12 @@ class DiditService {
         returnUrl: completeReturnUrl
       });
 
+      const isMobile = Boolean(user.platform === 'mobile');
+      console.log("[DiditService] Initializing session with platform:", { 
+        platform: user.platform, 
+        isMobile 
+      });
+
       const sessionData = {
         callback: callbackUrl.toString(),
         features: 'OCR + FACE',
@@ -142,15 +148,22 @@ class DiditService {
         }),
         redirect_url: completeReturnUrl,
         app_scheme: 'didit',
-        mobile_flow: true,
+        mobile_flow: isMobile,
         mobile_settings: {
-          allow_app: true,
+          allow_app: isMobile,
           fallback_to_web: true,
-          app_timeout: 2000,
-          force_mobile_flow: true,
+          app_timeout: 5000,
+          force_mobile_flow: isMobile,
           universal_link_enabled: true
         }
       };
+
+      console.log("[DiditService] Session configuration:", {
+        userId: user.id,
+        isMobile,
+        mobileFlow: sessionData.mobile_flow,
+        redirectUrl: sessionData.redirect_url
+      });
 
       const response = await axios.post(
         'https://verification.didit.me/v1/session/', 

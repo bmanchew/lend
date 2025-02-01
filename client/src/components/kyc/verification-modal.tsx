@@ -41,18 +41,33 @@ export function KycVerificationModal({
       }
 
       try {
-        console.log("Starting verification for user:", userId);
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        console.log("Starting verification:", {
+          userId,
+          isMobile,
+          userAgent: navigator.userAgent
+        });
+
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Mobile-Client': isMobile ? 'true' : 'false'
+          },
           body: JSON.stringify({ 
             userId,
             platform: isMobile ? 'mobile' : 'web'
           })
         });
 
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Verification error:", errorData);
+          throw new Error(errorData.message || 'Failed to start verification');
+        }
+
         const data = await response.json();
+        console.log("Verification response:", data);
         console.log("Verification response:", data);
 
         if (!data.redirectUrl) {
