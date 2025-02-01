@@ -129,20 +129,24 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        // Normalize phone number format by removing +1 or 1 prefix
-        let normalizedPhone = username.replace(/^\+?1/, '');
-        // Remove any non-digit characters
-        normalizedPhone = normalizedPhone.replace(/\D/g, '');
-        
-        // Add +1 back for consistent format
-        const fullPhone = '+1' + normalizedPhone;
+        // Normalize phone number format
+        const fullPhone = username; // Username is already the full phone number
+        console.log('[AUTH] Looking up user by phone:', fullPhone);
 
         let user = await db
           .select()
           .from(users)
           .where(eq(users.phoneNumber, fullPhone))
           .limit(1)
-          .then(rows => rows[0]);
+          .then(rows => {
+            console.log('[AUTH] Found user:', rows[0]);
+            return rows[0];
+          });
+
+        if (!user) {
+          console.log('[AUTH] No user found for phone:', fullPhone);
+          return done(null, false, { message: "User not found" });
+        }
 
         if (!user) {
           // Create new user if doesn't exist
@@ -161,10 +165,11 @@ export function setupAuth(app: Express) {
           user = newUser;
         }
 
-        console.log('Validating OTP for user:', {
-          lastOtpCode: user.lastOtpCode,
-          inputCode: password,
+        console.log('[AUTH] Validating OTP:', {
+          storedOtp: user.lastOtpCode,
+          providedOtp: password,
           otpExpiry: user.otpExpiry,
+          expiryValid: user.otpExpiry ? new Date(user.otpExpiry) > new Date() : false,
           phoneNumber: fullPhone
         });
 
