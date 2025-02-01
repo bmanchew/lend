@@ -238,8 +238,15 @@ class DiditService {
     console.log("[DiditService] Processing webhook", {
       sessionId: session_id,
       status,
-      vendorData: vendor_data
+      vendorData: vendor_data,
+      hasDecision: !!decision
     });
+
+    // Validate status is one of the expected final states
+    const isFinalStatus = ['Approved', 'Declined', 'In Review', 'Abandoned'].includes(status);
+    if (isFinalStatus && !decision) {
+      console.warn("[DiditService] Final status received without decision field", { status });
+    }
 
     try {
       console.log("[DiditService] Logging webhook event");
