@@ -248,6 +248,7 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.query.userId;
+      console.log("[KYC Status] Checking status for user:", userId);
 
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
@@ -285,6 +286,12 @@ export function registerRoutes(app: Express): Server {
           .from(users)
           .where(eq(users.id, parsedUserId))
           .limit(1);
+
+        console.log("[KYC Status] User status from DB:", {
+          userId: parsedUserId,
+          username: user?.username,
+          kycStatus: user?.kycStatus
+        });
 
         status = user?.kycStatus || 'not_started';
       }
