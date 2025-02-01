@@ -38,26 +38,43 @@ export function KycVerificationModal({
       if (!userId) {
         throw new Error('User ID is required');
       }
-      const response = await fetch('/api/kyc/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId,
-          isMobile 
-        })
-      });
-      const data = await response.json();
-      if (data.redirectUrl) {
-        // For mobile devices, try to open DiDit app first
+      
+      try {
+        const response = await fetch('/api/kyc/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
+        
+        const data = await response.json();
+        
+        if (!data.redirectUrl) {
+          throw new Error('No redirect URL provided');
+        }
+
         if (isMobile) {
-          window.location.href = `didit://verify?session=${data.sessionId}`;
-          // Fallback to web after delay if app not installed
+          // Try to open in Didit app first
+          const appUrl = `didit://verify?session=${data.sessionId}`;
+          window.location.href = appUrl;
+          
+          // Set up fallback to web version after delay
           setTimeout(() => {
+            // Check if we're still on same page (app wasn't opened)
+            if (document.hidden) {
+              return; // App was opened, don't redirect
+            }
             window.location.href = data.redirectUrl;
-          }, 1000);
+          }, 1500); // Increased delay for slower devices
         } else {
           window.location.href = data.redirectUrl;
         }
+      } catch (error) {
+        console.error('Verification error:', error);
+        toast({
+          title: "Verification Error",
+          description: "Failed to start verification. Please try again.",
+          variant: "destructive"
+        });
       }
     }
   });

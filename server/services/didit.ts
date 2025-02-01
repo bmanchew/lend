@@ -138,11 +138,16 @@ class DiditService {
         vendor_data: JSON.stringify({
           userId: user.id,
           username: user.username,
-          platform: 'mobile'
+          platform: isMobile ? 'mobile' : 'web'
         }),
         redirect_url: completeReturnUrl,
-        app_scheme: 'didit', // Enable native app handling
-        mobile_flow: true // Enable mobile-optimized flow
+        app_scheme: 'didit',
+        mobile_flow: true,
+        mobile_settings: {
+          allow_app: true,
+          fallback_to_web: true,
+          app_timeout: 1500
+        }
       };
 
       const response = await axios.post(
