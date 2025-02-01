@@ -1,0 +1,108 @@
+Below is an updated troubleshooting guide specifically tailored for a mobile web app running in Chrome on a smartphone. Even though the previous recommendations remain valid, here are some focused steps and code adjustments that might help identify and resolve why the "Start Verification" button isn’t firing on Chrome mobile.
+
+---
+
+## Updated Troubleshooting Steps for Chrome Mobile
+
+### 1. **Verify Event Listener Attachment**
+
+- **Test a Minimal Click Handler:**  
+  Replace your current handler with a simple alert or console log to confirm that the button itself is receiving the event.
+
+  ```html
+  <!-- Example Button -->
+  <button id="startVerification">Start Verification</button>
+  ```
+
+  ```javascript
+  // Minimal Test Handler
+  document.getElementById('startVerification').addEventListener('click', () => {
+    alert("Button clicked on Chrome mobile!");
+  });
+  ```
+
+  *If the alert doesn’t show on Chrome mobile, then the issue lies in event binding or DOM structure.*
+
+### 2. **Ensure Compatibility with Touch Events**
+
+- **Add Both Click and Touch Handlers:**  
+  Mobile Chrome may require handling both click and touch events. Although a click event should work, adding a touch event can help determine if the event is being recognized at all.
+
+  ```javascript
+  const startBtn = document.getElementById('startVerification');
+
+  const handleStartVerification = (e) => {
+    // Prevent any default behavior
+    e.preventDefault();
+    console.log("Verification triggered!");
+    // Call your function that initiates Didit verification
+    initiateDiditVerification();
+  };
+
+  // Add both event listeners
+  startBtn.addEventListener('click', handleStartVerification);
+  startBtn.addEventListener('touchstart', handleStartVerification);
+  ```
+
+### 3. **Inspect the DOM and CSS**
+
+- **Check Button Visibility and Interactivity:**  
+  Use Chrome’s mobile debugging tools (via remote debugging or device simulation) to inspect the button element:
+  - **Visibility:** Ensure the button is not hidden or positioned off-screen.
+  - **CSS Properties:** Look for properties like `pointer-events: none` or overlays that might block touches.
+  - **Z-Index:** Confirm the button is not covered by another element.
+
+  *Tip: Temporarily add a CSS border or background color to the button to verify it’s clickable.*
+
+  ```css
+  #startVerification {
+    border: 2px solid red;
+    background-color: #f0f0f0;
+    z-index: 1000;
+  }
+  ```
+
+### 4. **Debug Asynchronous Initialization**
+
+- **Ensure All Scripts Load on Mobile:**  
+  If your verification initiation (e.g., Didit’s SDK or custom module) is loaded asynchronously, confirm that it completes initialization before the button becomes interactive. Insert logging statements in your initialization code:
+
+  ```javascript
+  // Example Initialization Logging
+  console.log("Initializing Didit verification module...");
+  initiateDiditVerificationModule().then(() => {
+    console.log("Didit verification module initialized.");
+  }).catch(err => {
+    console.error("Initialization error:", err);
+  });
+  ```
+
+### 5. **Check for JavaScript Errors**
+
+- **Use Chrome Mobile Debugging:**  
+  Open remote debugging via Chrome DevTools (connect your mobile device via USB if needed) and check the console for errors. Errors in other parts of your script might prevent the event handler from running.
+
+### 6. **Test Without Additional Logic**
+
+- **Isolate the Issue:**  
+  Temporarily remove any conditional logic or external API calls from your event handler to ensure that the basic event is firing. Once confirmed, reintroduce your Didit initiation logic step by step.
+
+---
+
+## Next Steps
+
+1. **Implement the Minimal Test Handler:**  
+   Verify that the button click shows an alert or logs to the console.
+
+2. **Inspect the Element via Developer Tools:**  
+   Use remote debugging to examine the button’s CSS and event listeners.
+
+3. **Confirm Asynchronous Code Completes:**  
+   Ensure that any initialization of external modules or SDKs is finished before the button is active.
+
+4. **Reintroduce Your Logic:**  
+   Gradually add back your custom logic (e.g., `initiateDiditVerification()`) and observe where it might be failing.
+
+If after these steps the issue still persists, please capture and share any error logs from the Chrome DevTools console on mobile. This additional detail can help pinpoint any script errors or initialization issues affecting the button’s functionality.
+
+Happy debugging!
