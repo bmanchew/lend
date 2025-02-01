@@ -36,6 +36,8 @@ export function KycVerificationModal({
   // Query to check KYC status with polling
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
     queryKey: ['/api/kyc/status', user?.id],
+    enabled: isOpen && !!user?.id,
+    staleTime: 2000,
     queryFn: async () => {
       if (!user?.id) throw new Error('User ID is required');
       console.log('[KYC Modal] Checking KYC status for user:', user.id);
