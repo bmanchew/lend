@@ -42,24 +42,10 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const customerContracts = await db
-        .select({
-          id: contracts.id,
-          merchantId: contracts.merchantId,
-          customerId: contracts.customerId,
-          amount: contracts.amount,
-          term: contracts.term,
-          interestRate: contracts.interestRate,
-          status: contracts.status,
-          downPayment: contracts.downpayment,
-          monthlyPayment: contracts.monthlyPayment,
-          creditScore: contracts.creditScore,
-          signedDocumentUrl: contracts.signedDocumentUrl,
-          createdAt: contracts.createdAt
-        })
-        .from(contracts)
-        .orderBy(desc(contracts.createdAt))
-        .where(eq(contracts.customerId, parseInt(req.params.id)));
+      const customerContracts = await db.query.contracts.findMany({
+        where: eq(contracts.customerId, parseInt(req.params.id)),
+        orderBy: desc(contracts.createdAt)
+      });
 
       console.log("Found contracts for customer:", customerContracts);
       res.json(customerContracts);
