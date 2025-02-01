@@ -98,10 +98,18 @@ export default function CustomerDashboard() {
                     </div>
                     <Button 
                       className="w-full mt-6" 
-                      onClick={() => {
+                      onClick={(e) => {
+                        console.log('Click event triggered on Accept Offer button', e);
                         if (contracts?.[0]?.id) {
                           setShowDownPayment(true);
                         }
+                      }}
+                      onTouchStart={(e) => {
+                        console.log('Touch start event triggered on Accept Offer button', e);
+                      }}
+                      onTouchEnd={(e) => {
+                        console.log('Touch end event triggered on Accept Offer button', e);
+                        e.preventDefault();
                       }}
                     >
                       Accept Offer
