@@ -17,6 +17,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -78,7 +79,10 @@ export function KycVerificationModal({
 
   useEffect(() => {
     if (isOpen && (!kycData?.status || kycData?.status === 'not_started')) {
-      startVerification.mutate();
+      if (isMobile) {
+        // Automatically start verification on mobile
+        startVerification.mutate();
+      }
     } else if (kycData?.status === 'Approved') {
       toast({
         title: "Verification Complete",
@@ -86,7 +90,7 @@ export function KycVerificationModal({
       });
       onVerificationComplete?.();
     }
-  }, [isOpen, kycData?.status]);
+  }, [isOpen, kycData?.status, isMobile]);
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 p-4">
