@@ -31,6 +31,7 @@ type ApplicationFormData = z.infer<typeof applicationSchema>;
 
 interface Props {
   merchantId: number;
+  merchantName: string;
 }
 
 export function LoanApplicationDialog({ merchantId, merchantName }: Props) {

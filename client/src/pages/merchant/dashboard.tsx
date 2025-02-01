@@ -42,7 +42,7 @@ export default function MerchantDashboard() {
           </h1>
           {merchant && (
             <div className="flex items-center gap-4">
-              <LoanApplicationDialog merchantId={merchant.id} />
+              <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
           )}
         </div>
