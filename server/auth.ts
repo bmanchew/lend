@@ -96,24 +96,55 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
+    new LocalStrategy({
+      usernameField: 'phoneNumber',
+      passwordField: 'code'
+    }, async (phoneNumber, code, done) => {
       try {
+        // For admin/merchant, use regular username/password
+        if (code.length > 6) {
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, phoneNumber))
+            .limit(1);
+
+          if (!user || user.role === 'customer') {
+            return done(null, false, { message: "Invalid credentials" });
+          }
+
+          const isValid = await comparePasswords(code, user.password);
+          if (!isValid) {
+            return done(null, false, { message: "Invalid credentials" });
+          }
+
+          return done(null, user);
+        }
+
+        // For customers, use phone & OTP
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.username, username))
+          .where(eq(users.phoneNumber, phoneNumber))
           .limit(1);
 
-        if (!user) {
-          console.log('User not found:', username);
-          return done(null, false, { message: "Invalid credentials" });
+        if (!user || user.role !== 'customer') {
+          return done(null, false, { message: "Invalid phone number" });
         }
 
-        const isValid = await comparePasswords(password, user.password);
-        if (!isValid) {
-          console.log('Invalid password for user:', username);
-          return done(null, false, { message: "Invalid credentials" });
+        const isOtpValid = user.lastOtpCode === code && 
+                          user.otpExpiry && 
+                          new Date(user.otpExpiry) > new Date();
+
+        if (!isOtpValid) {
+          return done(null, false, { message: "Invalid or expired code" });
         }
+
+        // Clear used OTP
+        await db
+          .update(users)
+          .set({ lastOtpCode: null, otpExpiry: null })
+          .where(eq(users.id, user.id));
 
         return done(null, user);
       } catch (err) {

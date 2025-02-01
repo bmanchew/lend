@@ -81,6 +81,36 @@ class SMSService {
   generateApplicationToken(): string {
     return crypto.randomBytes(32).toString('hex');
   }
+
+  generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
+    try {
+      console.log("[SMSService] Sending OTP to:", phoneNumber);
+
+      const message = await this.client.messages.create({
+        body: `Your ShiFi login code is: ${code}. Valid for 5 minutes.`,
+        from: this.config.fromNumber,
+        to: phoneNumber
+      });
+
+      console.log("[SMSService] Successfully sent OTP:", {
+        phoneNumber,
+        messageId: message.sid,
+        status: message.status
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error("[SMSService] Error sending OTP:", {
+        phoneNumber,
+        error: error.message
+      });
+      return false;
+    }
+  }
 }
 
 export const smsService = new SMSService();

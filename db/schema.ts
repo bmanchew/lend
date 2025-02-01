@@ -7,12 +7,15 @@ export const users = pgTable("users", {
   username: text("username").unique().notNull(),
   password: text("password").notNull(),
   role: text("role", { enum: ["admin", "merchant", "customer"] }).notNull(),
-  email: text("email").unique().notNull(),
+  email: text("email").unique(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   plaidAccessToken: text("plaid_access_token"),
   kycStatus: text("kyc_status", { enum: ["pending", "verified", "failed"] }),
-  phoneNumber: text("phone_number"),
+  phoneNumber: text("phone_number").unique(),
+  lastOtpCode: text("last_otp_code"),
+  otpExpiry: timestamp("otp_expiry"),
+  faceIdHash: text("face_id_hash"),
 });
 
 export const verificationSessions = pgTable("verification_sessions", {
