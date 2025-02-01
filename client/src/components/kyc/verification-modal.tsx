@@ -100,8 +100,21 @@ export function KycVerificationModal({
             </div>
           </div>
           <Button
-            onClick={() => startVerification.mutate()}
+            onClick={(e) => {
+              e.preventDefault();
+              console.log("Verification button clicked", e);
+              startVerification.mutate();
+            }}
+            onTouchStart={(e) => {
+              console.log("Touch start on verification button", e);
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              console.log("Touch end on verification button", e);
+              startVerification.mutate();
+            }}
             disabled={startVerification.isPending}
+            style={{ touchAction: 'manipulation' }}
           >
             {startVerification.isPending ? (
               <>
