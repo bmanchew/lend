@@ -52,7 +52,12 @@ export default function MerchantDashboard() {
           {isLoading ? (
             <div>Loading...</div>
           ) : error ? (
-            <div className="text-red-500">Error loading merchant data</div>
+            <div className="text-red-500">
+              {error instanceof Error ? error.message : "Error loading merchant data"}
+              {process.env.NODE_ENV === 'development' && (
+                <pre className="mt-2 text-xs">{JSON.stringify(error, null, 2)}</pre>
+              )}
+            </div>
           ) : merchant ? (
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />

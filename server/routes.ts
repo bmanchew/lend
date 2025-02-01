@@ -172,13 +172,20 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const userId = parseInt(req.params.userId);
+      console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
+      
       if (isNaN(userId)) {
+        console.log("[Merchant Lookup] Invalid user ID provided");
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      const [merchant] = await db.query.merchants.findMany({
+      const merchantResults = await db.query.merchants.findMany({
         where: eq(merchants.userId, userId),
       });
+      
+      console.log("[Merchant Lookup] Query results:", merchantResults);
+      
+      const [merchant] = merchantResults;
 
       if (!merchant) {
         return res.status(404).json({ error: 'Merchant not found' });
