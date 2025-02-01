@@ -61,13 +61,14 @@ export function KycVerificationModal({
     queryFn: async () => {
       console.log('[KYC Modal] Checking status for user:', user?.id);
 
-      if (!user?.id) {
+      const effectiveUserId = user?.id || tempUserId;
+      if (!effectiveUserId) {
         console.error('[KYC Modal] No user ID available');
         throw new Error('User ID is required');
       }
 
       try {
-        const response = await fetch(`/api/kyc/status?userId=${user.id}`);
+        const response = await fetch(`/api/kyc/status?userId=${effectiveUserId}`);
         console.log('[KYC Modal] Status response:', response.status);
 
         if (!response.ok) {
@@ -99,7 +100,8 @@ export function KycVerificationModal({
     mutationFn: async () => {
       console.log('[KYC Modal] Starting verification for user:', user?.id);
 
-      if (!user?.id) {
+      const effectiveUserId = user?.id || tempUserId;
+      if (!effectiveUserId) {
         throw new Error('User ID is required');
       }
 
@@ -107,7 +109,7 @@ export function KycVerificationModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          userId: user.id,
+          userId: effectiveUserId,
           returnUrl: '/dashboard'
         }),
       });
