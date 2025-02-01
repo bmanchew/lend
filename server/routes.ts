@@ -609,6 +609,30 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.get("/kyc/auto-start", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.query.userId;
+      if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, parseInt(userId as string)))
+        .limit(1);
+
+      if (!user || user.kycStatus === 'verified') {
+        return res.json({ status: user?.kycStatus || 'not_started' });
+      }
+
+      const sessionUrl = await diditService.initializeKycSession(parseInt(userId as string));
+      res.json({ redirectUrl: sessionUrl });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.query.userId;

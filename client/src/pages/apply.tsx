@@ -25,11 +25,25 @@ export default function Apply() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (userId && verification) {
-      // Placeholder for starting verification.  Replace with actual verification logic.
-      setStarted(true); 
-    }
-  }, [userId, verification]);
+    const checkKycStatus = async () => {
+      if (!userId) return;
+      
+      try {
+        const response = await fetch(`/api/kyc/status?userId=${userId}`);
+        const data = await response.json();
+        
+        if (!data.status || data.status === 'not_started' || data.status === 'pending') {
+          setStarted(true);
+        } else if (data.status === 'Approved') {
+          setKycCompleted(true);
+        }
+      } catch (error) {
+        console.error('Error checking KYC status:', error);
+      }
+    };
+
+    checkKycStatus();
+  }, [userId]);
 
 
   const handleStart = () => {
