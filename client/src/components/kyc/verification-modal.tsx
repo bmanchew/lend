@@ -40,24 +40,34 @@ export function KycVerificationModal({
       if (!user?.id) throw new Error('User ID is required');
       console.log('[KYC Modal] Checking KYC status for user:', user.id);
 
-      const response = await fetch(`/api/kyc/status?userId=${user.id}`);
-      if (!response.ok) {
-        console.error('[KYC Modal] Failed to fetch KYC status:', {
-          status: response.status,
-          statusText: response.statusText
-        });
-        throw new Error('Failed to fetch KYC status');
-      }
+      try {
+        const response = await fetch(`/api/kyc/status?userId=${user.id}`);
+        if (!response.ok) {
+          // If 404, return initial status instead of throwing
+          if (response.status === 404) {
+            console.log('[KYC Modal] No existing KYC session, using initial status');
+            return { status: 'initial' };
+          }
+          console.error('[KYC Modal] Failed to fetch KYC status:', {
+            status: response.status,
+            statusText: response.statusText
+          });
+          throw new Error('Failed to fetch KYC status');
+        }
 
-      const data = await response.json();
-      console.log('[KYC Modal] Received KYC status:', data);
-      return data;
+        const data = await response.json();
+        console.log('[KYC Modal] Received KYC status:', data);
+        return data;
+      } catch (error) {
+        console.error('[KYC Modal] Error in status check:', error);
+        throw error;
+      }
     },
     enabled: isOpen && !!user?.id,
     refetchInterval: (data) => {
       // Poll every 2 seconds if verification is ongoing
-      if (!data?.status || data.status === 'pending' || data.status === 'initialized' || data.status === 'in_progress') {
-        console.log('[KYC Modal] Polling status:', data?.status);
+      if (data?.status === 'pending' || data?.status === 'initialized' || data?.status === 'in_progress') {
+        console.log('[KYC Modal] Polling status:', data.status);
         return 2000;
       }
       console.log('[KYC Modal] Stopping poll, final status:', data?.status);
@@ -79,24 +89,29 @@ export function KycVerificationModal({
       if (!user?.id) throw new Error('User ID is required');
 
       console.log('[KYC Modal] Starting KYC process for user:', user.id);
-      const response = await fetch('/api/kyc/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
-      });
+      try {
+        const response = await fetch('/api/kyc/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json() as KycStartError;
-        console.error('[KYC Modal] Failed to start KYC:', errorData);
-        throw new Error(errorData.details || errorData.error || 'Failed to start KYC process');
+        if (!response.ok) {
+          const errorData = await response.json() as KycStartError;
+          console.error('[KYC Modal] Failed to start KYC:', errorData);
+          throw new Error(errorData.details || errorData.error || 'Failed to start KYC process');
+        }
+
+        const data = await response.json();
+        console.log('[KYC Modal] KYC process started successfully:', {
+          userId: user.id,
+          redirectUrl: data.redirectUrl
+        });
+        return data;
+      } catch (error) {
+        console.error('[KYC Modal] Error starting KYC process:', error);
+        throw error;
       }
-
-      const data = await response.json();
-      console.log('[KYC Modal] KYC process started successfully:', {
-        userId: user.id,
-        redirectUrl: data.redirectUrl
-      });
-      return data;
     },
     onSuccess: (data) => {
       console.log('[KYC Modal] Opening verification window');
@@ -136,7 +151,7 @@ export function KycVerificationModal({
       );
     }
 
-    if (kycData?.status === 'pending' || kycData?.status === 'in_progress') {
+    if (kycData?.status === 'pending' || kycData?.status === 'in_progress' || kycData?.status === 'initialized') {
       console.log('[KYC Modal] Rendering pending state');
       return (
         <div className="space-y-4">
