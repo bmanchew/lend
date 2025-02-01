@@ -75,6 +75,8 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
+      const fundingAmount = parseFloat(data.fundingAmount);
+      console.log('Sending loan application with amount:', fundingAmount);
       const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
         method: "POST",
         headers: {
@@ -82,7 +84,8 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         },
         body: JSON.stringify({
           ...data,
-          merchantName
+          merchantName,
+          amount: fundingAmount
         }),
       });
       if (!response.ok) {
