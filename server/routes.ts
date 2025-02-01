@@ -237,6 +237,7 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
     try {
+      console.log("[Programs] Creating new program:", req.body);
       const { name, term, interestRate } = req.body;
       const merchantId = parseInt(req.params.id);
 
