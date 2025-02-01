@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Props {
   merchantId: number;
@@ -16,11 +17,19 @@ export function LoanApplicationDialog({ merchantId }: Props) {
   const [open, setOpen] = useState(false);
 
   const sendInviteMutation = useMutation({
-    mutationFn: (data: { borrowerName: string; borrowerPhone: string; borrowerEmail?: string }) =>
-      apiRequest(`/api/merchants/${merchantId}/send-loan-application`, {
+    mutationFn: async (data: { borrowerName: string; borrowerPhone: string; borrowerEmail?: string; amount?: string; notes?: string }) => {
+      const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(data),
-      }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to send invitation");
+      }
+      return response.json();
+    },
     onSuccess: () => {
       toast({
         title: "Success",
@@ -44,13 +53,17 @@ export function LoanApplicationDialog({ merchantId }: Props) {
       borrowerName: formData.get("borrowerName") as string,
       borrowerPhone: formData.get("borrowerPhone") as string,
       borrowerEmail: formData.get("borrowerEmail") as string,
+      amount: formData.get("amount") as string,
+      notes: formData.get("notes") as string,
     });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Send Loan Application</Button>
+        <Button size="lg" className="gap-2">
+          <span>Send Loan Application</span>
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
@@ -83,6 +96,26 @@ export function LoanApplicationDialog({ merchantId }: Props) {
               name="borrowerEmail"
               type="email"
               placeholder="borrower@example.com"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="amount">Loan Amount (Optional)</Label>
+            <Input
+              id="amount"
+              name="amount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Enter loan amount"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="notes">Notes (Optional)</Label>
+            <Textarea
+              id="notes"
+              name="notes"
+              placeholder="Add any additional notes or message for the borrower"
+              rows={3}
             />
           </div>
           <div className="flex justify-end gap-2">

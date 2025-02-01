@@ -40,7 +40,11 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
-          {merchant && <LoanApplicationDialog merchantId={merchant.id} />}
+          {merchant && (
+            <div className="flex items-center gap-4">
+              <LoanApplicationDialog merchantId={merchant.id} />
+            </div>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
