@@ -21,6 +21,8 @@ async function createMerchant() {
       ein: "",
       status: "active",
       reserveBalance: 0,
+      website: "",
+      address: ""
     }).returning();
     
     console.log("Created merchant:", merchant);
