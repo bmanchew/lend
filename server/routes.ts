@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { diditService } from "./services/didit";
 import axios from 'axios';
+import { smsService } from "./services/sms";
 
 export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
 
@@ -379,6 +380,58 @@ export function registerRoutes(app: Express): Server {
       res.json(sessions);
     } catch (err) {
       console.error('Error fetching verification sessions:', err);
+      next(err);
+    }
+  });
+  
+    apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { borrowerPhone, borrowerName } = req.body;
+      const merchantId = parseInt(req.params.id);
+
+      if (!borrowerPhone || !merchantId) {
+        return res.status(400).json({ 
+          error: 'Missing required fields: borrower phone number or merchant ID' 
+        });
+      }
+
+      // Fetch merchant details to include in the SMS
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId))
+        .limit(1);
+
+      if (!merchant) {
+        return res.status(404).json({ error: 'Merchant not found' });
+      }
+
+      // Generate a unique application token
+      const applicationToken = smsService.generateApplicationToken();
+
+      // Construct the application URL
+      const applicationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/apply/${applicationToken}`;
+
+      // Send the SMS invitation
+      const sent = await smsService.sendLoanApplicationLink(
+        borrowerPhone,
+        merchant.companyName,
+        applicationUrl
+      );
+
+      if (sent) {
+        res.json({ 
+          status: 'success',
+          message: 'Loan application invitation sent successfully',
+          applicationUrl
+        });
+      } else {
+        res.status(500).json({ 
+          error: 'Failed to send loan application invitation' 
+        });
+      }
+    } catch (err) {
+      console.error('Error sending loan application invitation:', err);
       next(err);
     }
   });
