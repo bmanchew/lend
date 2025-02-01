@@ -86,9 +86,19 @@ export function KycVerificationModal({
           <DialogTitle>Identity Verification Required</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 p-4">
-          <p className="text-center text-sm text-gray-500">
-            We need to verify your identity before proceeding with your application.
-          </p>
+          <div className="text-center space-y-3">
+            <p className="text-sm text-gray-500">
+              We need to verify your identity before proceeding with your application.
+            </p>
+            <div className="text-xs text-gray-600">
+              <p>Accepted documents:</p>
+              <ul className="list-disc list-inside">
+                <li>Driver's License</li>
+                <li>Passport</li>
+                <li>Government-issued ID</li>
+              </ul>
+            </div>
+          </div>
           <Button
             onClick={() => startVerification.mutate()}
             disabled={startVerification.isPending}
