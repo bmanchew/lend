@@ -30,9 +30,11 @@ export default function Apply() {
         console.error('No user ID found');
         return;
       }
+
+      const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
       try {
-        const response = await fetch(`/api/kyc/status?userId=${userId}`);
+        const response = await fetch(`/api/kyc/status?userId=${userId}&platform=${isMobile ? 'mobile' : 'web'}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

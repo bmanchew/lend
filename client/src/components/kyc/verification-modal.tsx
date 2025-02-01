@@ -105,8 +105,10 @@ export function KycVerificationModal({
         description: "Your identity has been verified successfully."
       });
       onVerificationComplete?.();
+    } else if (isMobile && (!kycData?.status || kycData?.status === 'not_started')) {
+      startVerification.mutate();
     }
-  }, [kycData?.status, onVerificationComplete]);
+  }, [kycData?.status, onVerificationComplete, isMobile]);
 
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()} className="z-[9999] fixed">
