@@ -17,22 +17,22 @@ export default function CustomerLogin() {
   const [location] = useLocation();
   const form = useForm({
     defaultValues: {
-      phoneNumber: "",
-      code: "",
+      username: "",
+      password: "",
       loginType: "customer"
     },
     mode: "onChange"
   });
 
   const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
+    let phoneNumber = form.getValues("username").replace(/\D/g, '');
     // Remove leading 1 if present
     phoneNumber = phoneNumber.replace(/^1/, '');
     // Add +1 prefix
     phoneNumber = '+1' + phoneNumber;
     console.log('Formatted phone:', phoneNumber);
     // Update form value with formatted number
-    form.setValue("phoneNumber", phoneNumber);
+    form.setValue("username", phoneNumber);
 
     try {
       const response = await axios.post("/api/sendOTP", { phoneNumber });

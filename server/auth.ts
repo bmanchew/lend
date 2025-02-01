@@ -107,6 +107,11 @@ export function setupAuth(app: Express) {
     }, async (req, username, password, done) => {
       try {
         const loginType = req.body.loginType || 'customer';
+        
+        // Ensure we have required credentials
+        if (!username || !password) {
+          return done(null, false, { message: "Missing credentials" });
+        }
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
