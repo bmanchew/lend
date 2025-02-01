@@ -18,6 +18,7 @@ export default function MerchantDashboard() {
 
   const { data: merchant } = useQuery<SelectMerchant>({
     queryKey: [`/api/merchants/by-user/${user?.id}`],
+    enabled: !!user?.id,
   });
 
   const { data: contracts } = useQuery<SelectContract[]>({
