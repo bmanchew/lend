@@ -34,11 +34,15 @@ export function KycVerificationModal({
 
   const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const platform = isMobile ? 'mobile' : 'web';
-  console.log("Device detection:", {
-    isMobile,
-    platform,
-    userAgent: navigator.userAgent
-  });
+  
+  useEffect(() => {
+    console.log("Device detection:", {
+      isMobile,
+      platform,
+      userAgent: navigator.userAgent,
+      width: window.innerWidth
+    });
+  }, [isMobile, platform]);
 
   const startVerification = useMutation({
     mutationFn: async () => {

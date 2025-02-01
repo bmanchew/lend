@@ -34,16 +34,25 @@ export default function Apply() {
         
         if (!data.status || data.status === 'not_started' || data.status === 'pending') {
           setStarted(true);
+          // Auto-start verification if needed
+          const autoStartResponse = await fetch(`/api/kyc/auto-start?userId=${userId}`);
+          const autoStartData = await autoStartResponse.json();
+          
+          if (autoStartData.redirectUrl) {
+            window.location.href = autoStartData.redirectUrl;
+          }
         } else if (data.status === 'Approved') {
           setKycCompleted(true);
         }
       } catch (error) {
-        console.error('Error checking KYC status:', error);
+        console.error('Error checking/starting KYC:', error);
       }
     };
 
-    checkKycStatus();
-  }, [userId]);
+    if (verification) {
+      checkKycStatus();
+    }
+  }, [userId, verification]);
 
 
   const handleStart = () => {
