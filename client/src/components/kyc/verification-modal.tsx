@@ -30,8 +30,9 @@ export function KycVerificationModal({
   onClose: () => void;
   onVerificationComplete?: () => void;
 }) {
-  const { user } = useAuth();
+  const auth = useAuth();
   const { toast } = useToast();
+  const user = auth?.user;
 
   // Query to check KYC status with polling
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
