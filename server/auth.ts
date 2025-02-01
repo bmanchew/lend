@@ -129,15 +129,16 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        const [user] = await db
+        let user = await db
           .select()
           .from(users)
           .where(eq(users.phoneNumber, username))
-          .limit(1);
+          .limit(1)
+          .then(rows => rows[0]);
 
         if (!user) {
           // Create new user if doesn't exist
-          const [newUser] = await db
+          user = await db
             .insert(users)
             .values({
               username: username,
@@ -147,9 +148,15 @@ export function setupAuth(app: Express) {
               role: 'customer',
               phoneNumber: username,
             })
-            .returning();
-          user = newUser;
+            .returning()
+            .then(rows => rows[0]);
         }
+
+        console.log('Validating OTP for user:', {
+          lastOtpCode: user.lastOtpCode,
+          inputCode: password,
+          otpExpiry: user.otpExpiry
+        });
 
         const isOtpValid = user.lastOtpCode === password && 
                         user.otpExpiry && 
