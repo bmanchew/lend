@@ -21,7 +21,8 @@ export default function CustomerLogin() {
       phoneNumber: "",
       code: "",
       loginType: "customer"
-    }
+    },
+    mode: "onChange"
   });
 
   const handleSendOTP = async () => {
@@ -31,18 +32,21 @@ export default function CustomerLogin() {
     }
     
     try {
-      await axios.post("/api/sendOTP", { phoneNumber });
-      setIsOtpSent(true);
-      toast({
-        title: "Code Sent",
-        description: "Enter the code to sign in to your account"
-      });
-    } catch (error) {
+      const response = await axios.post("/api/sendOTP", { phoneNumber });
+      if (response.data.message === 'OTP sent successfully') {
+        setIsOtpSent(true);
+        toast({
+          title: "Code Sent",
+          description: "Enter the code to sign in to your account"
+        });
+      }
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to send code",
+        description: error.response?.data?.message || "Failed to send code",
         variant: "destructive"
       });
+      console.error("OTP send error:", error);
     }
   };
 
