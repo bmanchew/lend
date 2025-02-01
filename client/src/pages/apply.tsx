@@ -26,10 +26,16 @@ export default function Apply() {
 
   useEffect(() => {
     const checkKycStatus = async () => {
-      if (!userId) return;
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
       
       try {
         const response = await fetch(`/api/kyc/status?userId=${userId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         
         if (!data.status || data.status === 'not_started' || data.status === 'pending') {
