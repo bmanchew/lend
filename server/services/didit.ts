@@ -137,9 +137,12 @@ class DiditService {
         features: 'OCR + FACE',
         vendor_data: JSON.stringify({
           userId: user.id,
-          username: user.username
+          username: user.username,
+          platform: 'mobile'
         }),
-        redirect_url: completeReturnUrl
+        redirect_url: completeReturnUrl,
+        app_scheme: 'didit', // Enable native app handling
+        mobile_flow: true // Enable mobile-optimized flow
       };
 
       const response = await axios.post(

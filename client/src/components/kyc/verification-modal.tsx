@@ -31,6 +31,8 @@ export function KycVerificationModal({
     refetchInterval: 5000
   });
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
   const startVerification = useMutation({
     mutationFn: async () => {
       if (!userId) {
@@ -39,11 +41,23 @@ export function KycVerificationModal({
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ 
+          userId,
+          isMobile 
+        })
       });
       const data = await response.json();
       if (data.redirectUrl) {
-        window.location.href = data.redirectUrl;
+        // For mobile devices, try to open DiDit app first
+        if (isMobile) {
+          window.location.href = `didit://verify?session=${data.sessionId}`;
+          // Fallback to web after delay if app not installed
+          setTimeout(() => {
+            window.location.href = data.redirectUrl;
+          }, 1000);
+        } else {
+          window.location.href = data.redirectUrl;
+        }
       }
     }
   });
