@@ -18,13 +18,13 @@ export default function CustomerDashboard() {
       role: user?.role,
       kycStatus: user?.kycStatus
     });
-    
+
     if (user && user.role === 'customer') {
       const needsKyc = !user.kycStatus || 
                       user.kycStatus === 'initial' || 
                       user.kycStatus === 'failed' ||
                       user.kycStatus === 'pending';
-      
+
       if (needsKyc) {
         console.log('[Dashboard] Opening KYC modal:', { userId: user.id, status: user.kycStatus });
         setShowKycModal(true);
@@ -123,6 +123,43 @@ export default function CustomerDashboard() {
             </div>
           </CardContent>
         </Card>
+        {user?.kycStatus === 'verified' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Loan Offer</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-xl mx-auto">
+                <Card className="border-2 hover:border-primary">
+                  <CardHeader>
+                    <CardTitle>Personal Loan Terms</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Loan Amount</p>
+                        <p className="text-2xl font-bold">${contracts?.[0]?.amount || "25,000"}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Term Length</p>
+                        <p className="text-2xl font-bold">36 Months</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Interest Rate</p>
+                        <p className="text-2xl font-bold">24.99% APR</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Down Payment</p>
+                        <p className="text-2xl font-bold">5%</p>
+                      </div>
+                    </div>
+                    <Button className="w-full mt-6">Accept Offer</Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </PortalLayout>
   );
