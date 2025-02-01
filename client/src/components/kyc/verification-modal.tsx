@@ -100,9 +100,16 @@ export function KycVerificationModal({
             </div>
           </div>
           <Button
-            onClick={() => {
-              console.log("Starting verification...");
-              startVerification.mutate();
+            onClick={async () => {
+              try {
+                console.log("Starting verification...");
+                const result = await startVerification.mutateAsync();
+                if (result?.redirectUrl) {
+                  window.location.href = result.redirectUrl;
+                }
+              } catch (error) {
+                console.error("Verification error:", error);
+              }
             }}
             disabled={startVerification.isPending}
             className="w-full"
@@ -116,13 +123,6 @@ export function KycVerificationModal({
               'Start Verification'
             )}
           </Button>
-          {verificationUrl && (
-            <iframe
-              title="Verification Iframe"
-              src={verificationUrl}
-              style={{ width: '100%', height: '600px', border: 'none' }}
-            />
-          )}
         </div>
       </DialogContent>
     </Dialog>
