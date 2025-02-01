@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
-import { VerificationModal } from '@/components/kyc/verification-modal';
+import { KycVerificationModal } from '@/components/kyc/verification-modal';
 import { Button } from '@/components/ui/button';
 
 export default function ApplyPage() {
