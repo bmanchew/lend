@@ -1,54 +1,23 @@
-import { useState, useEffect } from 'react';
-import { useRoute } from 'wouter';
-import { KycVerificationModal } from '../components/kyc/verification-modal';
-console.log("[Apply Page] Importing KycVerificationModal");
-import { Button } from '@/components/ui/button';
-console.log("[Apply Page] Loading with URL params:", window.location.search);
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { KycVerificationModal } from "../components/kyc/verification-modal";
+import { Button } from "@/components/ui/button";
 
-export default function ApplyPage() {
-  const [_, params] = useRoute('/apply/:token');
+export default function Apply() {
+  const [searchParams] = useSearchParams();
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
-  const [userId, setUserId] = useState(null); // Added userId state
+  const userId = localStorage.getItem('temp_user_id');
 
-  const handleStart = async () => {
-    try {
-      console.log('[Apply Page] Starting application with token:', params.token);
-      const response = await fetch(`/api/apply/${params.token}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          firstName: '',  // These will be collected during KYC
-          lastName: '',
-          email: '',
-          phone: ''
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create account');
-      }
-
-      const data = await response.json();
-      console.log('[Apply Page] Server response:', data);
-
-      if (!data.userId) {
-        throw new Error('No user ID returned from server');
-      }
-
-      setUserId(data.userId); // Set userId
+  useEffect(() => {
+    const isVerification = searchParams.get('verification') === 'true';
+    if (isVerification) {
       setStarted(true);
-
-      if (data.redirectUrl) {
-        // Store user ID before redirect
-        localStorage.setItem('temp_user_id', data.userId.toString());
-        window.location.href = data.redirectUrl;
-      }
-    } catch (error) {
-      console.error('Error starting application:', error);
     }
+  }, [searchParams]);
+
+  const handleStart = () => {
+    setStarted(true);
   };
 
   return (
@@ -61,7 +30,7 @@ export default function ApplyPage() {
         </div>
       ) : (
         <KycVerificationModal
-          isOpen={!kycCompleted && userId !== null}
+          isOpen={!kycCompleted && !!userId}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
         />
