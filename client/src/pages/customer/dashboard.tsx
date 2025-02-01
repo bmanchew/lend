@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,12 +18,6 @@ export default function CustomerDashboard() {
 
   // Check if KYC is needed on first load
   useEffect(() => {
-    console.log('[Dashboard] Checking KYC status:', {
-      userId: user?.id,
-      role: user?.role,
-      kycStatus: user?.kycStatus
-    });
-
     if (user && user.role === 'customer') {
       const needsKyc = !user.kycStatus || 
                       user.kycStatus === 'initial' || 
@@ -30,7 +25,6 @@ export default function CustomerDashboard() {
                       user.kycStatus === 'pending';
 
       if (needsKyc) {
-        console.log('[Dashboard] Opening KYC modal:', { userId: user.id, status: user.kycStatus });
         setShowKycModal(true);
       }
     }
@@ -40,18 +34,18 @@ export default function CustomerDashboard() {
     queryKey: [`/api/customers/${user?.id}/contracts`],
   });
 
+  const hasActiveContract = contracts?.some(c => c.status === "active");
+
   return (
     <PortalLayout>
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.name}</h1>
 
-        {/* KYC Verification Modal */}
         <KycVerificationModal 
           isOpen={showKycModal} 
           onClose={() => setShowKycModal(false)} 
         />
 
-        {/* Show verification status if pending */}
         {user?.kycStatus === 'pending' && (
           <Card className="bg-yellow-50 border-yellow-200">
             <CardHeader>
@@ -65,69 +59,7 @@ export default function CustomerDashboard() {
           </Card>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Loans</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">
-                {contracts?.filter(c => c.status === "active").length ?? 0}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Next Payment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">
-                {/* Add next payment logic */}
-                $0.00
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Credit Score</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">
-                {/* Add credit score integration */}
-                Not Available
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {contracts?.map(contract => (
-                <div key={contract.id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium">Loan #{contract.id}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Amount: ${contract.amount}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                </div>
-              ))}
-              {!contracts?.length && (
-                <p className="text-muted-foreground">No active loans</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        {user?.kycStatus === 'verified' && (
+        {!hasActiveContract && user?.kycStatus === 'verified' && (
           <Card>
             <CardHeader>
               <CardTitle>Loan Offer</CardTitle>
@@ -174,7 +106,6 @@ export default function CustomerDashboard() {
                   isOpen={showBankLink}
                   onOpenChange={setShowBankLink}
                   onSuccess={() => {
-                    // Handle success - e.g. redirect to confirmation page
                     toast({
                       title: "Success",
                       description: "Bank account linked successfully"
@@ -184,6 +115,64 @@ export default function CustomerDashboard() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {hasActiveContract && (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Loans</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {contracts?.filter(c => c.status === "active").length ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Next Payment</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">$0.00</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Credit Score</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">Not Available</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Activity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {contracts?.map(contract => (
+                    <div key={contract.id} className="flex items-center justify-between p-2 border rounded">
+                      <div>
+                        <p className="font-medium">Loan #{contract.id}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Amount: ${contract.amount}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        View Details
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
     </PortalLayout>
