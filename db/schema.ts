@@ -67,10 +67,6 @@ export const merchants = pgTable("merchants", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const merchantsRelations = relations(merchants, ({ many }) => ({
-  programs: many(programs),
-}));
-
 export const contracts = pgTable("contracts", {
   id: serial("id").primaryKey(),
   merchantId: integer("merchant_id").references(() => merchants.id).notNull(),
@@ -144,6 +140,7 @@ export const merchantsRelations = relations(merchants, ({ one, many }) => ({
     references: [users.id],
   }),
   contracts: many(contracts),
+  programs: many(programs),
 }));
 
 export const contractsRelations = relations(contracts, ({ one, many }) => ({
