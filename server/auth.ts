@@ -154,36 +154,6 @@ export function setupAuth(app: Express) {
           .where(eq(users.id, user.id));
 
         return done(null, user);
-
-          return done(null, user);
-        }
-
-        // For customers, use phone & OTP
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.phoneNumber, phoneNumber))
-          .limit(1);
-
-        if (!user || user.role !== 'customer') {
-          return done(null, false, { message: "Invalid phone number" });
-        }
-
-        const isOtpValid = user.lastOtpCode === code && 
-                          user.otpExpiry && 
-                          new Date(user.otpExpiry) > new Date();
-
-        if (!isOtpValid) {
-          return done(null, false, { message: "Invalid or expired code" });
-        }
-
-        // Clear used OTP
-        await db
-          .update(users)
-          .set({ lastOtpCode: null, otpExpiry: null })
-          .where(eq(users.id, user.id));
-
-        return done(null, user);
       } catch (err) {
         console.error('Auth error:', err);
         return done(err);
