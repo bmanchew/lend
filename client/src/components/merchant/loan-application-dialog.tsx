@@ -78,8 +78,14 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       console.log('[LoanDialog] Starting mutation with data:', {
         ...data,
         merchantId,
-        merchantName
+        merchantName,
+        timestamp: new Date().toISOString()
       });
+
+      if (!merchantId) {
+        console.error('[LoanDialog] Missing merchantId');
+        throw new Error('Missing merchant ID');
+      }
       const fundingAmount = parseFloat(data.fundingAmount);
       console.log('[LoanDialog] Parsed funding amount:', {
         raw: data.fundingAmount,
@@ -134,7 +140,21 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="lg" className="gap-2 bg-primary text-white hover:bg-primary/90">
+        <Button 
+          size="lg" 
+          className="gap-2 bg-primary text-white hover:bg-primary/90"
+          onClick={(e) => {
+            if (!merchantId) {
+              e.preventDefault();
+              console.error('[SendApplication] Button clicked without merchantId');
+              toast({
+                title: "Error",
+                description: "Missing merchant information. Please refresh the page.",
+                variant: "destructive",
+              });
+            }
+          }}
+        >
           <span>Send Loan Application</span>
         </Button>
       </DialogTrigger>

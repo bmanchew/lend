@@ -625,12 +625,26 @@ export function registerRoutes(app: Express): Server {
 
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      console.log('[LoanApplication] Received request:', {
+      const requestId = Date.now().toString(36);
+      console.log(`[LoanApplication][${requestId}] Received request:`, {
         body: req.body,
         params: req.params,
         headers: req.headers,
-        url: req.url
+        url: req.url,
+        timestamp: new Date().toISOString()
       });
+
+      // Validate required fields
+      const requiredFields = ['phone', 'firstName', 'lastName', 'amount'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
+      
+      if (missingFields.length > 0) {
+        console.error(`[LoanApplication][${requestId}] Missing required fields:`, missingFields);
+        return res.status(400).json({ 
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          requestId 
+        });
+      }
 
       if (!req.body.amount && !req.body.fundingAmount) {
         console.warn('[LoanApplication] Missing amount in request');
