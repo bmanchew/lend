@@ -10,7 +10,29 @@ export default function ApplyPage() {
   const [kycCompleted, setKycCompleted] = useState(false);
 
   const handleStart = async () => {
-    setStarted(true);
+    try {
+      const response = await fetch(`/api/apply/${params.token}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          firstName: '',  // These will be collected during KYC
+          lastName: '',
+          email: '',
+          phone: ''
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create account');
+      }
+      
+      const data = await response.json();
+      setStarted(true);
+    } catch (error) {
+      console.error('Error starting application:', error);
+    }
   };
 
   return (

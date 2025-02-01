@@ -365,6 +365,42 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.post("/apply/:token", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { firstName, lastName, email, phone } = req.body;
+      
+      // Create user account for borrower
+      const [user] = await db.insert(users).values({
+        username: email,
+        password: Math.random().toString(36).slice(-8), // Temporary password
+        email,
+        name: `${firstName} ${lastName}`,
+        role: 'customer',
+        phoneNumber: phone,
+        kycStatus: 'pending'
+      })
+      .onConflictDoUpdate({
+        target: users.email,
+        set: {
+          name: `${firstName} ${lastName}`,
+          phoneNumber: phone,
+        },
+      })
+      .returning();
+
+      // Start KYC process
+      const sessionUrl = await diditService.initializeKycSession(user.id);
+      
+      res.json({ 
+        userId: user.id,
+        redirectUrl: sessionUrl 
+      });
+    } catch (err) {
+      console.error('Error creating borrower account:', err);
+      next(err);
+    }
+  });
+
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
