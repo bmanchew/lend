@@ -601,25 +601,38 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Create or update user account
-      const [user] = await db
-        .insert(users)
-        .values({
-          username: borrowerPhone,
-          password: Math.random().toString(36).slice(-8),
-          email: '',
-          name: `${firstName} ${lastName}`,
-          role: 'customer',
-          phoneNumber: borrowerPhone,
-          kycStatus: 'pending'
-        })
-        .onConflictDoUpdate({
-          target: users.phoneNumber,
-          set: {
+      // First check if user exists
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, borrowerPhone))
+        .limit(1);
+
+      let user;
+      if (existingUser) {
+        // Update existing user
+        [user] = await db
+          .update(users)
+          .set({
             name: `${firstName} ${lastName}`,
-          },
-        })
-        .returning();
+          })
+          .where(eq(users.id, existingUser.id))
+          .returning();
+      } else {
+        // Create new user
+        [user] = await db
+          .insert(users)
+          .values({
+            username: borrowerPhone,
+            password: Math.random().toString(36).slice(-8),
+            email: '',
+            name: `${firstName} ${lastName}`,
+            role: 'customer',
+            phoneNumber: borrowerPhone,
+            kycStatus: 'pending'
+          })
+          .returning();
+      }
 
       console.log('Created/Updated user account:', user);
 
