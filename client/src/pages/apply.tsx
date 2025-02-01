@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
-import { KycVerificationModal } from '@/components/kyc/verification-modal';
+import { VerificationModal } from '@/components/kyc/verification-modal';
 import { Button } from '@/components/ui/button';
 
 export default function ApplyPage() {
@@ -30,13 +30,13 @@ export default function ApplyPage() {
 
       const data = await response.json();
       console.log('[Apply Page] Server response:', data);
-      
+
       if (!data.userId) {
         throw new Error('No user ID returned from server');
       }
-      
+
       setStarted(true);
-      
+
       if (data.redirectUrl) {
         // Store user ID before redirect
         localStorage.setItem('temp_user_id', data.userId.toString());
@@ -56,7 +56,7 @@ export default function ApplyPage() {
           <Button onClick={handleStart}>Get Started</Button>
         </div>
       ) : (
-        <KycVerificationModal
+        <VerificationModal
           isOpen={!kycCompleted}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}

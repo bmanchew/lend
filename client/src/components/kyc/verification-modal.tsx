@@ -13,7 +13,7 @@ interface KycVerificationModalProps {
   onVerificationComplete?: () => void;
 }
 
-export function KycVerificationModal({ 
+export function VerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
