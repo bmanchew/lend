@@ -278,13 +278,27 @@ export function setupAuth(app: Express) {
 
   // Added OTP related endpoints
   app.post('/api/sendOTP', async (req, res) => {
+    console.log('[AUTH] Received OTP request:', { body: req.body });
     const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      console.error('[AUTH] Missing phone number in request');
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    
     try {
+      console.log('[AUTH] Generating OTP for:', phoneNumber);
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const expiry = new Date();
       expiry.setMinutes(expiry.getMinutes() + 5); // OTP expires in 5 minutes
 
-      await smsService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
+      console.log('[AUTH] Attempting to send OTP');
+      const sent = await smsService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
+      
+      if (!sent) {
+        console.error('[AUTH] SMS service failed to send OTP');
+        return res.status(500).json({ error: 'Failed to send OTP' });
+      }
 
       await db.update(users).set({ lastOtpCode: otp, otpExpiry: expiry.toISOString() }).where(eq(users.phoneNumber, phoneNumber));
       res.json({ message: 'OTP sent successfully' });
