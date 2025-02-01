@@ -1,0 +1,320 @@
+Below is a comprehensive Markdown document—with code examples—that you can share with your developer. It explains how to integrate Didit’s API directly (without using iframes) to create a seamless, fully branded KYC experience in your mobile web app. The document uses examples inspired by Didit’s API documentation and NextAuth.js integration guides.
+
+---
+
+```markdown
+# Integrating Didit API for a Custom, Seamless KYC Experience
+
+This document provides detailed instructions and sample code for integrating Didit’s API directly into your web application to power a fully integrated KYC (Know Your Customer) flow. This approach avoids using iframes by leveraging Didit’s RESTful API endpoints. The solution is designed for a mobile-friendly experience and can be adapted for responsive web apps or even in‑app browsers within native mobile apps.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [System Architecture & Flow](#system-architecture--flow)
+4. [Didit API Endpoints Overview](#didit-api-endpoints-overview)
+5. [Code Examples](#code-examples)
+   - [A. Initiating a Verification Session](#a-initiating-a-verification-session)
+   - [B. Retrieving Verification Status](#b-retrieving-verification-status)
+   - [C. Webhook Endpoint for Realtime Updates](#c-webhook-endpoint-for-realtime-updates)
+6. [Mobile Integration Strategies](#mobile-integration-strategies)
+7. [Security Considerations](#security-considerations)
+8. [Testing & Troubleshooting](#testing--troubleshooting)
+9. [Next Steps](#next-steps)
+
+---
+
+## 1. Overview
+
+The goal is to integrate Didit’s API into your web app so that the KYC flow is completely embedded within your own UI—providing a seamless and fully branded experience for mobile users. Instead of using an iframe, your application will communicate directly with Didit’s endpoints to create and manage verification sessions, retrieve user data, and receive real‑time updates via webhooks.
+
+---
+
+## 2. Prerequisites
+
+- **Next.js Application with NextAuth.js (Optional):**  
+  Your app uses NextAuth.js for authentication, but this integration applies even if you use a custom authentication system.
+  
+- **Didit Business Console Account:**  
+  You must have an account at Didit Business Console to create an application and obtain your **Client ID** and **Client Secret**.
+  
+- **Environment Variables:**  
+  Ensure that your environment contains variables such as:
+  - `DIDIT_CLIENT_ID`
+  - `DIDIT_CLIENT_SECRET`
+  - `DIDIT_IS_STAGING` (true/false)
+  - `WEBHOOK_SECRET_KEY` (for verifying Didit webhooks)
+  
+- **HTTPS:**  
+  Your API endpoints must be served over HTTPS in production to ensure secure communication.
+
+*Reference: [Didit Docs – NextAuth.js Integration](https://docs.didit.me/auth-and-data/engines/next-auth)*
+
+---
+
+## 3. System Architecture & Flow
+
+1. **User Initiates KYC:**  
+   The user clicks a “Start Verification” button. Your app calls your backend API which in turn calls Didit’s **Create Session** endpoint.
+
+2. **Verification Flow:**  
+   Your custom UI guides the user through document upload and facial recognition. All UI elements are built by your team to match your branding.
+
+3. **Realtime Updates:**  
+   Didit sends status updates (Approved, Declined, In Review, etc.) via webhooks. Your backend processes these updates and adjusts the user’s verification status accordingly.
+
+4. **Mobile Integration:**  
+   The same API calls are used whether the user is on desktop or a mobile web browser. For native mobile apps, you can embed the flow in an in‑app browser or use deep linking to return session tokens to the app.
+
+---
+
+## 4. Didit API Endpoints Overview
+
+Key endpoints you will use include:
+- **Create Session POST:**  
+  Initiates a new KYC session.
+- **Retrieve Session GET:**  
+  Retrieves details about the current KYC session.
+- **User Info GET:**  
+  Gets verified user data.
+- **Webhooks:**  
+  Receive realtime notifications about session status updates.
+
+*For full API details, please consult the Didit API reference on the [Didit Docs website](https://docs.didit.me).*
+
+---
+
+## 5. Code Examples
+
+### A. Initiating a Verification Session
+
+Below is a Node.js (Express) example using Axios to call Didit’s API for starting a verification session. Adjust the endpoint URLs based on your staging/production flag.
+
+```javascript
+// backend/kycController.js
+const axios = require('axios');
+
+async function createKycSession(userId, userData) {
+  try {
+    const response = await axios.post(
+      process.env.DIDIT_IS_STAGING === "true"
+        ? 'https://apx.staging.didit.me/auth/v2/create-session'
+        : 'https://apx.didit.me/auth/v2/create-session',
+      {
+        user_id: userId,
+        // Additional fields can be provided based on Didit API specs
+        // For example: document type, metadata, etc.
+        metadata: userData
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          // Include any necessary authentication headers
+          'Authorization': `Bearer ${process.env.DIDIT_API_TOKEN}`
+        }
+      }
+    );
+    return response.data; // Contains session_id and initial status
+  } catch (error) {
+    console.error('Error creating KYC session:', error.response ? error.response.data : error);
+    throw error;
+  }
+}
+
+module.exports = { createKycSession };
+```
+
+*Usage Example:*
+```javascript
+// In your API route handler
+const { createKycSession } = require('./kycController');
+
+app.post('/api/start-kyc', async (req, res) => {
+  const { userId, userData } = req.body;
+  try {
+    const sessionData = await createKycSession(userId, userData);
+    res.status(200).json(sessionData);
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to start KYC session' });
+  }
+});
+```
+
+### B. Retrieving Verification Status
+
+After initiating the session, you can periodically check the session status:
+
+```javascript
+// backend/kycController.js
+async function getKycSessionStatus(sessionId) {
+  try {
+    const response = await axios.get(
+      process.env.DIDIT_IS_STAGING === "true"
+        ? `https://apx.staging.didit.me/auth/v2/session/${sessionId}`
+        : `https://apx.didit.me/auth/v2/session/${sessionId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.DIDIT_API_TOKEN}`
+        }
+      }
+    );
+    return response.data; // Contains current status and any decision data
+  } catch (error) {
+    console.error('Error retrieving KYC session status:', error.response ? error.response.data : error);
+    throw error;
+  }
+}
+
+module.exports = { createKycSession, getKycSessionStatus };
+```
+
+*Usage Example:*
+```javascript
+app.get('/api/kyc-status/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  try {
+    const status = await getKycSessionStatus(sessionId);
+    res.status(200).json(status);
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to retrieve KYC session status' });
+  }
+});
+```
+
+### C. Webhook Endpoint for Realtime Updates
+
+Set up a webhook endpoint to handle realtime updates from Didit:
+
+```javascript
+// backend/webhook.js
+const express = require('express');
+const crypto = require('crypto');
+const bodyParser = require('body-parser');
+const router = express.Router();
+
+// Middleware to capture raw body
+router.use(bodyParser.json({
+  verify: (req, res, buf, encoding) => {
+    if (buf && buf.length) {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    }
+  }
+}));
+
+router.post('/api/kyc-webhook', (req, res) => {
+  const signature = req.get('X-Signature');
+  const timestamp = req.get('X-Timestamp');
+  
+  if (!signature || !timestamp) {
+    return res.status(401).json({ message: 'Missing signature or timestamp' });
+  }
+  
+  // Validate the webhook using HMAC
+  const hmac = crypto.createHmac('sha256', process.env.WEBHOOK_SECRET_KEY);
+  const expectedSignature = hmac.update(req.rawBody).digest('hex');
+  
+  if (!crypto.timingSafeEqual(Buffer.from(signature, 'utf8'), Buffer.from(expectedSignature, 'utf8'))) {
+    return res.status(401).json({ message: 'Invalid signature' });
+  }
+  
+  // Process the webhook payload
+  const payload = req.body;
+  // Example: update the user’s KYC status in your database
+  console.log('Received webhook payload:', payload);
+  
+  res.json({ message: 'Webhook received' });
+});
+
+module.exports = router;
+```
+
+*Add the webhook route to your main Express app:*
+```javascript
+const webhookRoutes = require('./backend/webhook');
+app.use(webhookRoutes);
+```
+
+*Reference: [Didit Docs – Webhooks](https://docs.didit.me/identity-verification/webhooks)*
+
+---
+
+## 6. Mobile Integration Strategies
+
+For a seamless mobile experience:
+
+- **Responsive UI:**  
+  Design all KYC pages with responsive CSS so that they adapt to mobile screen sizes.
+
+- **In‑App Browser / Deep Linking:**  
+  If you have a native mobile app, consider launching the KYC flow inside an in‑app browser or WebView. When the KYC is complete, use deep linking to pass the session token or updated status back to your mobile app.
+  
+  **Example (React Native Deep Link):**
+  ```javascript
+  import { Linking } from 'react-native';
+
+  const redirectToApp = (sessionToken) => {
+    const deepLinkUrl = `myapp://kyc-complete?token=${encodeURIComponent(sessionToken)}`;
+    Linking.openURL(deepLinkUrl);
+  };
+  ```
+
+- **Session Bridging:**  
+  Use secure storage (like AsyncStorage in React Native) to store session tokens obtained from your backend after KYC completion.
+
+---
+
+## 7. Security Considerations
+
+- **Secure Communication:**  
+  Ensure all API calls (to Didit and your backend) are made over HTTPS.
+  
+- **Token Handling:**  
+  Use short-lived tokens and refresh strategies. Validate webhook signatures using HMAC to avoid spoofing.
+  
+- **Data Privacy:**  
+  Do not store sensitive document images or personal data unnecessarily on your servers. Follow data protection regulations.
+
+---
+
+## 8. Testing & Troubleshooting
+
+- **Local Testing:**  
+  Use tools like Postman and ngrok to test API endpoints and webhooks.
+  
+- **Mobile Browser Emulation:**  
+  Use Chrome’s mobile device emulation or actual devices to test the responsive design and in‑app browser flows.
+  
+- **Error Logging:**  
+  Implement comprehensive error logging on both client and server sides to capture and debug issues during the KYC process.
+
+---
+
+## 9. Next Steps
+
+1. **Integrate the Code:**  
+   Merge the provided code samples into your backend and frontend codebase.
+2. **Customize the UI:**  
+   Develop custom UI components that reflect your branding and provide a seamless user experience.
+3. **Test Thoroughly:**  
+   Ensure the flow works as expected on various devices and under different network conditions.
+4. **Deploy & Monitor:**  
+   Deploy your solution to a staging environment and monitor webhook events and user feedback.
+5. **Iterate:**  
+   Based on testing and feedback, adjust the integration for improved security, usability, and performance.
+
+---
+
+*References:*  
+- Didit Docs – NextAuth.js Integration: [https://docs.didit.me/auth-and-data/engines/next-auth](https://docs.didit.me/auth-and-data/engines/next-auth)  
+- Didit Docs – Webhooks: [https://docs.didit.me/identity-verification/webhooks](https://docs.didit.me/identity-verification/webhooks)
+
+This documentation should provide a robust foundation for developing a fully integrated, seamless KYC solution powered by Didit’s API.
+
+Happy coding!
+```
+
+---
+
+This detailed document—with code samples and clear instructions—should guide your developer to implement a seamless, API-driven KYC experience that works well on mobile web apps.
