@@ -33,6 +33,8 @@ export const merchants = pgTable('merchants', {
   ein: varchar('ein', { length: 255 }),
   address: varchar('address', { length: 255 }),
   website: varchar('website', { length: 255 }),
+  status: varchar('status', { length: 50 }).default('active'),
+  reserveBalance: decimal('reserve_balance', { precision: 10, scale: 2 }).default('0'),
   active: boolean('active').default(true),
   createdAt: timestamp('created_at').defaultNow()
 });

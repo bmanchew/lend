@@ -161,6 +161,7 @@ export function registerRoutes(app: Express): Server {
       console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
 
       if (isNaN(userId)) {
+        console.log("[Merchant Lookup] Invalid userId provided:", req.params.userId);
         console.log("[Merchant Lookup] Invalid user ID provided");
         return res.status(400).json({ error: 'Invalid user ID' });
       }
