@@ -16,12 +16,14 @@ import { LoanApplicationDialog } from "@/components/merchant/loan-application-di
 export default function MerchantDashboard() {
   const { user } = useAuth();
 
-  const { data: merchant } = useQuery<SelectMerchant>({
+  const { data: merchant, isLoading, error } = useQuery<SelectMerchant>({
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
       const response = await fetch(`/api/merchants/by-user/${user?.id}`);
       if (!response.ok) throw new Error('Failed to fetch merchant');
-      return response.json();
+      const data = await response.json();
+      console.log("Merchant data loaded:", data);
+      return data;
     },
     enabled: !!user?.id,
     retry: 1,
@@ -47,11 +49,11 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
-          {merchant === undefined ? (
+          {isLoading ? (
             <div>Loading...</div>
-          ) : merchant === null ? (
+          ) : error ? (
             <div className="text-red-500">Error loading merchant data</div>
-          ) : (
+          ) : merchant ? (
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
