@@ -304,8 +304,7 @@ export function registerRoutes(app: Express): Server {
     try {
       console.log('[KYC Webhook] Received webhook:', {
         headers: req.headers,
-        body: req.body,
-        rawBody: req.rawBody
+        body: req.body
       });
 
       const signature = req.headers['x-signature'];
@@ -313,10 +312,7 @@ export function registerRoutes(app: Express): Server {
       const rawBody = JSON.stringify(req.body);
 
       if (!signature || !timestamp) {
-        console.error('[KYC Webhook] Missing signature or timestamp headers', {
-          headers: req.headers,
-          body: req.body
-        });
+        console.error('[KYC Webhook] Missing signature or timestamp headers');
         return res.status(400).json({ error: 'Missing required headers' });
       }
 
@@ -325,80 +321,23 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: 'Invalid webhook signature' });
       }
 
-      // Validate payload
-      if (!req.body || !req.body.session_id) {
+      const payload = req.body as DiditWebhookPayload;
+      if (!payload || !payload.session_id) {
         console.error('[KYC Webhook] Invalid payload received');
         return res.status(400).json({ error: 'Invalid payload' });
       }
 
-      console.log('[KYC Webhook] Valid webhook signature received:', {
-        headers: {
-          signature,
-          timestamp
-        },
-        rawBody,
-        parsedBody: req.body
-      });
-
-      const payload = req.body as DiditWebhookPayload;
-      if (!payload || !payload.session_id) {
-        console.error('[KYC Webhook] Invalid payload received');
-        return res.status(400).json({ status: 'error', message: 'Invalid payload' });
-      }
-
-      console.log('[KYC Webhook] Processing status update:', {
-        sessionId: payload.session_id,
-        status: payload.status,
-        timestamp: payload.timestamp
-      });
-
-      await diditService.processWebhook(payload);
-      
-      console.log('[KYC Webhook] Successfully processed webhook:', {
+      console.log('[KYC Webhook] Processing webhook:', {
         sessionId: payload.session_id,
         status: payload.status
       });
-      
-      res.json({ status: 'success' });
 
-      if (!diditService.verifyWebhookSignature(
-        JSON.stringify(payload),
-        signature as string,
-        timestamp as string
-      )) {
-        return res.status(401).json({ error: 'Invalid webhook signature or timestamp' });
-      }
+      await diditService.processWebhook(payload);
 
-      const { session_id, status, vendor_data } = payload;
-
-      // Update verification session
-      await db.transaction(async (tx) => {
-        // Update session status
-        await tx
-          .update(verificationSessions)
-          .set({
-            status: status as VerificationStatus,
-            updatedAt: new Date(),
-          })
-          .where(eq(verificationSessions.sessionId, session_id));
-
-        // If final status received, update user's KYC status
-        if (status === 'Approved' || status === 'Declined') {
-          const userId = parseInt(vendor_data);
-          await tx
-            .update(users)
-            .set({
-              kycStatus: status === 'Approved' ? 'verified' : 'failed'
-            })
-            .where(eq(users.id, userId));
-        }
-      });
-
-      res.json({ status: 'success' });
+      return res.json({ status: 'success' });
     } catch (err) {
       console.error('Error processing Didit webhook:', err);
-      // Send 200 even on error to prevent retries, we'll handle failed webhooks separately
-      res.status(200).json({ status: 'queued_for_retry' });
+      return res.status(500).json({ error: 'Internal server error' });
     }
   });
 
