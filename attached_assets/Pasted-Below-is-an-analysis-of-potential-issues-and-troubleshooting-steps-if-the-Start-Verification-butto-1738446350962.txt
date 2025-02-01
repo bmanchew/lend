@@ -1,0 +1,92 @@
+Below is an analysis of potential issues and troubleshooting steps if the “Start Verification” button on mobile appears to be unresponsive and Didit’s verification flow isn’t being initiated.
+
+---
+
+## Troubleshooting: Mobile “Start Verification” Not Initiating Didit
+
+When a mobile user clicks the “Start Verification” button but nothing happens, consider the following possible causes and solutions:
+
+### 1. **JavaScript or Event Handling Issues on Mobile**
+
+- **Event Listener Not Firing:**  
+  Ensure that the click event attached to the button is being properly registered on mobile browsers. Mobile browsers sometimes handle touch events differently from desktop clicks.  
+  **Solution:**  
+  - Verify that your button’s event listener is attached using methods that work on touch devices (for example, using both `click` and `touchstart` events or using a library that abstracts mobile events).  
+  - Use browser developer tools or remote debugging (via Chrome DevTools for mobile) to check whether the event is firing.
+
+- **PreventDefault/StopPropagation Issues:**  
+  If you’re preventing the default behavior or stopping propagation, ensure these calls aren’t inadvertently blocking the verification flow.
+  
+### 2. **Deep Linking or In‑App Browser Configuration**
+
+- **Incorrect URL Scheme:**  
+  If your solution relies on deep linking to trigger the Didit verification page, verify that the URL scheme (e.g. `myapp://...`) is correct and that the mobile device recognizes and can open that URL.
+  
+- **WebView/Deep Link Not Handling Redirect:**  
+  If using an in‑app browser (or WebView), check that the redirection from the verification start to Didit’s endpoint is working properly. Sometimes, cross‑domain redirections can be blocked by security policies on mobile.
+  
+### 3. **Didit SDK/Integration Issues**
+
+- **SDK Initialization:**  
+  Confirm that Didit’s SDK or integration code is correctly loaded and initialized when the mobile page loads. It’s possible that a mobile‑specific bug or timing issue prevents the Didit verification module from initializing.  
+  **Solution:**  
+  - Add logging or debugging messages to the initialization code to verify that it executes.
+  - Ensure any asynchronous initialization (such as fetching configuration or CSRF tokens) completes before the user is allowed to click the button.
+  
+- **Configuration Errors:**  
+  Check that all required configuration (API endpoints, client IDs, environment variables) for Didit is properly set up in the mobile environment. Mobile devices sometimes have different network conditions or caching issues that can cause configuration to be outdated or missing.
+  
+### 4. **Network or CORS Issues**
+
+- **Network Request Failures:**  
+  If clicking the button triggers a network request to initiate verification (for example, calling a Didit endpoint), verify via browser developer tools whether the request is made and if it succeeds.  
+  **Solution:**  
+  - Inspect the network tab to see if the call is initiated when clicking the button.
+  - Check for CORS issues or failed requests.
+  
+### 5. **User Interface/UX Feedback**
+
+- **No Visual Feedback:**  
+  Sometimes the verification flow may have been initiated in the background, but the user receives no immediate feedback. Confirm that there is a visible loading state or transition.
+  
+- **Button Disabled State:**  
+  Make sure the button isn’t inadvertently disabled or overlaid by another element on mobile.
+
+---
+
+## Next Steps for Debugging
+
+1. **Remote Debugging:**  
+   Use mobile browser debugging tools (e.g., Chrome’s remote debugging for Android or Safari Web Inspector for iOS) to:
+   - Confirm the click/touch event is registered.
+   - Check the console for errors related to Didit’s SDK or network requests.
+   
+2. **Logging and Monitoring:**  
+   Add detailed logging before and after the verification initiation code. For example:
+   ```javascript
+   document.getElementById('startVerification').addEventListener('click', function (e) {
+     console.log("Start Verification clicked on mobile");
+     // Initiate Didit verification
+     initiateDiditVerification().then(() => {
+       console.log("Didit verification initiated successfully");
+     }).catch(err => {
+       console.error("Error initiating Didit verification:", err);
+     });
+   });
+   ```
+   
+3. **Review Integration Code:**  
+   Double-check the integration logic specifically for mobile scenarios. Ensure that any asynchronous code (like fetching a token or configuration data) is completed before the verification button becomes active.
+   
+4. **Test Across Devices:**  
+   Verify the functionality on multiple mobile devices and browsers to ensure the issue isn’t isolated to a particular platform or browser version.
+
+---
+
+## Conclusion
+
+The unresponsiveness of the “Start Verification” button on mobile could be due to event handling differences, configuration or initialization issues with Didit’s SDK, network/CORS problems, or UI feedback omissions. By following the steps above—especially remote debugging and detailed logging—you should be able to identify the root cause and adjust the code to ensure the Didit verification flow is properly initiated for mobile users.
+
+If you require further assistance, please provide any console logs or error messages observed during testing for more targeted help.
+
+Happy debugging!
