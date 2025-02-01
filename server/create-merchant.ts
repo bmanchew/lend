@@ -18,8 +18,8 @@ async function createMerchant() {
           companyName: "Pagel Enterprises",
           status: "active",
           reserveBalance: 0,
-          address: "123 Main St",
-          website: "https://pagel.com"
+          website: "https://pagel.com",
+          address: "123 Main St"
         })
         .where(eq(merchants.id, existingMerchant[0].id))
         .returning();
@@ -33,8 +33,8 @@ async function createMerchant() {
           companyName: "Pagel Enterprises",
           status: "active",
           reserveBalance: 0,
-          address: "123 Main St",
           website: "https://pagel.com",
+          address: "123 Main St",
           ein: "12-3456789"
         })
         .returning();
