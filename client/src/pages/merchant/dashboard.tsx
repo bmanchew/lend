@@ -42,10 +42,7 @@ export default function MerchantDashboard() {
           </h1>
           {merchant && (
             <div className="flex items-center gap-4">
-              <Card className="p-4 w-full max-w-2xl mx-auto mt-4">
-                <h2 className="text-xl font-bold mb-4">New Loan Application</h2>
-                <LoanApplicationForm merchantId={merchant.id} />
-              </Card>
+              <LoanApplicationDialog merchantId={merchant.id} />
             </div>
           )}
         </div>
@@ -90,7 +87,7 @@ export default function MerchantDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                {contracts?.filter(c => c.status === "pending").length ?? 0}
+                {contracts?.filter(c => c.status === "draft").length ?? 0}
               </p>
             </CardContent>
           </Card>
@@ -119,14 +116,14 @@ export default function MerchantDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Contracts</CardTitle>
+              <CardTitle>Recent Applications</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {contracts?.slice(0, 5).map(contract => (
                   <div key={contract.id} className="flex items-center justify-between p-2 border rounded">
                     <div>
-                      <p className="font-medium">Contract #{contract.id}</p>
+                      <p className="font-medium">Contract #{contract.contractNumber}</p>
                       <p className="text-sm text-muted-foreground">
                         Amount: ${contract.amount} - Status: {contract.status}
                       </p>

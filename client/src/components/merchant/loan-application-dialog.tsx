@@ -4,9 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { Textarea } from "@/components/ui/textarea";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const applicationSchema = z.object({
+  borrowerName: z.string().min(1, "Borrower name is required"),
+  borrowerPhone: z.string().min(10, "Valid phone number is required"),
+  borrowerEmail: z.string().email("Valid email is required").optional().or(z.literal("")),
+  amount: z.string().optional(),
+  notes: z.string().optional()
+});
+
+type ApplicationFormData = z.infer<typeof applicationSchema>;
 
 interface Props {
   merchantId: number;
@@ -15,9 +27,21 @@ interface Props {
 export function LoanApplicationDialog({ merchantId }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const form = useForm<ApplicationFormData>({
+    resolver: zodResolver(applicationSchema),
+    defaultValues: {
+      borrowerName: "",
+      borrowerPhone: "",
+      borrowerEmail: "",
+      amount: "",
+      notes: ""
+    }
+  });
 
   const sendInviteMutation = useMutation({
-    mutationFn: async (data: { borrowerName: string; borrowerPhone: string; borrowerEmail?: string; amount?: string; notes?: string }) => {
+    mutationFn: async (data: ApplicationFormData) => {
       const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
         method: "POST",
         headers: {
@@ -36,6 +60,8 @@ export function LoanApplicationDialog({ merchantId }: Props) {
         description: "Loan application invitation sent successfully",
       });
       setOpen(false);
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
     },
     onError: (error: any) => {
       toast({
@@ -46,16 +72,8 @@ export function LoanApplicationDialog({ merchantId }: Props) {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    sendInviteMutation.mutate({
-      borrowerName: formData.get("borrowerName") as string,
-      borrowerPhone: formData.get("borrowerPhone") as string,
-      borrowerEmail: formData.get("borrowerEmail") as string,
-      amount: formData.get("amount") as string,
-      notes: formData.get("notes") as string,
-    });
+  const onSubmit = (data: ApplicationFormData) => {
+    sendInviteMutation.mutate(data);
   };
 
   return (
@@ -69,71 +87,90 @@ export function LoanApplicationDialog({ merchantId }: Props) {
         <DialogHeader>
           <DialogTitle>Send Loan Application</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="borrowerName">Borrower Name</Label>
-            <Input
-              id="borrowerName"
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
               name="borrowerName"
-              required
-              placeholder="Enter borrower's full name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Borrower Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Enter borrower's full name" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="borrowerPhone">Phone Number</Label>
-            <Input
-              id="borrowerPhone"
+            <FormField
+              control={form.control}
               name="borrowerPhone"
-              type="tel"
-              required
-              placeholder="+1 (555) 000-0000"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone Number</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="borrowerEmail">Email (Optional)</Label>
-            <Input
-              id="borrowerEmail"
+            <FormField
+              control={form.control}
               name="borrowerEmail"
-              type="email"
-              placeholder="borrower@example.com"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email (Optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="email" placeholder="borrower@example.com" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="amount">Loan Amount (Optional)</Label>
-            <Input
-              id="amount"
+            <FormField
+              control={form.control}
               name="amount"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Enter loan amount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Loan Amount (Optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" min="0" step="0.01" placeholder="Enter loan amount" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="notes">Notes (Optional)</Label>
-            <Textarea
-              id="notes"
+            <FormField
+              control={form.control}
               name="notes"
-              placeholder="Add any additional notes or message for the borrower"
-              rows={3}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes (Optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Add any additional notes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={sendInviteMutation.isPending}
-            >
-              Send Invitation
-            </Button>
-          </div>
-        </form>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={sendInviteMutation.isPending}
+              >
+                Send Invitation
+              </Button>
+            </div>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
