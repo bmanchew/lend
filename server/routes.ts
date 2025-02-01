@@ -302,14 +302,24 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = req.body as DiditWebhookPayload;
-      console.log('[KYC Webhook] Received webhook payload:', {
-        sessionId: payload.session_id,
-        status: payload.status,
-        vendorData: payload.vendor_data
+      console.log('[KYC Webhook] Received webhook request:', {
+        headers: req.headers,
+        body: req.body
       });
 
+      const payload = req.body as DiditWebhookPayload;
+      if (!payload || !payload.session_id) {
+        console.error('[KYC Webhook] Invalid payload received');
+        return res.status(400).json({ status: 'error', message: 'Invalid payload' });
+      }
+
       await diditService.processWebhook(payload);
+      
+      console.log('[KYC Webhook] Successfully processed webhook:', {
+        sessionId: payload.session_id,
+        status: payload.status
+      });
+      
       res.json({ status: 'success' });
 
       const signature = req.headers['x-signature'];
