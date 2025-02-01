@@ -55,37 +55,6 @@ export default function CustomerLogin() {
     }
   }, [location]);
 
-  const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("phoneNumber");
-    // Format phone number to E.164 format if not already
-    if (!phoneNumber.startsWith('+1')) {
-      phoneNumber = '+1' + phoneNumber.replace(/\D/g, '');
-    }
-    if (!phoneNumber) {
-      toast({
-        title: "Error",
-        description: "Please enter your phone number",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      await axios.post("/api/sendOTP", { phoneNumber });
-      setIsOtpSent(true);
-      toast({
-        title: "Code Sent",
-        description: "Please check your phone for the verification code"
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send verification code",
-        variant: "destructive"
-      });
-    }
-  };
-
   return (
     <div className="container flex min-h-screen items-center justify-center">
       <div className="mx-auto w-full max-w-sm space-y-6">
