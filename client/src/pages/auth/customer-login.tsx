@@ -30,6 +30,7 @@ export default function CustomerLogin() {
     phoneNumber = phoneNumber.replace(/^1/, '');
     // Add +1 prefix
     phoneNumber = '+1' + phoneNumber;
+    console.log('Formatted phone:', phoneNumber);
     // Update form value with formatted number
     form.setValue("phoneNumber", phoneNumber);
 

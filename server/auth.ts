@@ -168,15 +168,26 @@ export function setupAuth(app: Express) {
           phoneNumber: fullPhone
         });
 
+        console.log('Verifying OTP:', {
+          storedOtp: user.lastOtpCode,
+          providedOtp: password,
+          otpExpiry: user.otpExpiry
+        });
+
         if (!user.lastOtpCode || !user.otpExpiry) {
+          console.error('Missing OTP or expiry');
           return done(null, false, { message: "No active OTP found" });
         }
 
         if (user.lastOtpCode !== password) {
+          console.error('OTP mismatch');
           return done(null, false, { message: "Invalid code" });
         }
 
-        if (new Date(user.otpExpiry) <= new Date()) {
+        const now = new Date();
+        const expiry = new Date(user.otpExpiry);
+        if (expiry <= now) {
+          console.error('OTP expired:', { now, expiry });
           return done(null, false, { message: "OTP has expired" });
         }
 
@@ -282,11 +293,19 @@ export function setupAuth(app: Express) {
 
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User | false, info: any) => {
+      console.log('Auth attempt:', {
+        body: req.body,
+        error: err,
+        user: user,
+        info: info
+      });
+      
       if (err) {
         console.error('Login error:', err);
         return res.status(500).json({ message: "Login failed" });
       }
       if (!user) {
+        console.error('Auth failed:', info);
         return res.status(401).json({ message: info?.message || "Invalid credentials" });
       }
       req.login(user, (err) => {
