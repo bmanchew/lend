@@ -38,6 +38,18 @@ export function KycVerificationModal({
       if (!userId) {
         throw new Error('User ID is required');
       }
+
+      // First check if there's an existing active session
+      try {
+        const statusResponse = await fetch(`/api/kyc/status?userId=${userId}`);
+        const statusData = await statusResponse.json();
+        
+        if (statusData.sessionId && statusData.status !== 'Declined') {
+          return { redirectUrl: `https://verify.didit.me/session/${statusData.sessionId}` };
+        }
+      } catch (error) {
+        console.log('No existing session found, creating new one');
+      }
       
       try {
         const response = await fetch('/api/kyc/start', {
