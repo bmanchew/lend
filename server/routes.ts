@@ -265,10 +265,6 @@ export function registerRoutes(app: Express): Server {
         .returning();
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
-      const totalInterest = (monthlyPayment * term) - amount;
-      const contractNumber = generateContractNumber();
-
-      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
       const contractNumber = `LN${Date.now()}`;
 
