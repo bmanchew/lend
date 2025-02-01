@@ -452,14 +452,40 @@ export function registerRoutes(app: Express): Server {
       const otpExpiry = new Date();
       otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // 5 minute expiry
 
-      // Save OTP to user record
-      await db
-        .update(users)
-        .set({ 
-          lastOtpCode: otp,
-          otpExpiry: otpExpiry
-        })
-        .where(eq(users.phoneNumber, phoneNumber));
+      // Check if user exists
+      let user = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, phoneNumber))
+        .limit(1)
+        .then(rows => rows[0]);
+
+      if (!user) {
+        // Create new user if doesn't exist
+        user = await db
+          .insert(users)
+          .values({
+            username: phoneNumber,
+            password: Math.random().toString(36).slice(-8), // temporary password
+            email: `${phoneNumber.replace(/\D/g, '')}@temp.shifi.com`,
+            name: '',
+            role: 'customer',
+            phoneNumber: phoneNumber,
+            lastOtpCode: otp,
+            otpExpiry: otpExpiry
+          })
+          .returning()
+          .then(rows => rows[0]);
+      } else {
+        // Update existing user's OTP
+        await db
+          .update(users)
+          .set({ 
+            lastOtpCode: otp,
+            otpExpiry: otpExpiry
+          })
+          .where(eq(users.id, user.id));
+      }
 
       // Send OTP via SMS
       const sent = await smsService.sendOTP(phoneNumber, otp);
