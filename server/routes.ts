@@ -505,8 +505,9 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId, platform } = req.body;
-      const isMobileClient = req.headers['x-mobile-client'] === 'true';
+      const { userId } = req.body;
+      const platform = 'mobile'; // Force mobile for new users
+      const isMobileClient = true;
 
       if (!userId) {
         return res.status(400).json({ error: 'Missing user ID' });
@@ -578,7 +579,9 @@ export function registerRoutes(app: Express): Server {
             role: 'customer',
             phoneNumber: phoneNumber,
             lastOtpCode: otp,
-            otpExpiry: otpExpiry
+            otpExpiry: otpExpiry,
+            platform: 'mobile',
+            kycStatus: 'pending'
           })
           .returning()
           .then(rows => rows[0]);
