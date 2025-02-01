@@ -56,7 +56,7 @@ export default function ApplyPage() {
           <Button onClick={handleStart}>Get Started</Button>
         </div>
       ) : (
-        <VerificationModal
+        <KycVerificationModal
           isOpen={!kycCompleted}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
