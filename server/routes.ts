@@ -346,13 +346,6 @@ export function registerRoutes(app: Express): Server {
       
       res.json({ status: 'success' });
 
-      const signature = req.headers['x-signature'];
-      const timestamp = req.headers['x-timestamp'];
-
-      if (!signature || !timestamp) {
-        return res.status(401).json({ error: 'Missing required headers' });
-      }
-
       if (!diditService.verifyWebhookSignature(
         JSON.stringify(payload),
         signature as string,
