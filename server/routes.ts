@@ -173,7 +173,7 @@ export function registerRoutes(app: Express): Server {
     try {
       const userId = parseInt(req.params.userId);
       console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
-      
+
       if (isNaN(userId)) {
         console.log("[Merchant Lookup] Invalid user ID provided");
         return res.status(400).json({ error: 'Invalid user ID' });
@@ -182,9 +182,9 @@ export function registerRoutes(app: Express): Server {
       const merchantResults = await db.query.merchants.findMany({
         where: eq(merchants.userId, userId),
       });
-      
+
       console.log("[Merchant Lookup] Query results:", merchantResults);
-      
+
       const [merchant] = merchantResults;
 
       if (!merchant) {
@@ -238,7 +238,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       const merchantsWithPrograms = Array.from(merchantsMap.values());
-      
+
       res.json(merchantsWithPrograms);
     } catch (err:any) {
       console.error("Error fetching all merchants:", err); 
@@ -282,21 +282,21 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/contracts", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const { status, merchantId } = req.query;
-      
+
       let query = db.select().from(contracts)
         .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
         .leftJoin(users, eq(contracts.customerId, users.id));
-        
+
       if (status) {
         query = query.where(eq(contracts.status, status as string));
       }
-      
+
       if (merchantId) {
         query = query.where(eq(contracts.merchantId, parseInt(merchantId as string)));
       }
-      
+
       const allContracts = await query.orderBy(desc(contracts.createdAt));
-      
+
       console.log("[Routes] Successfully fetched contracts:", { count: allContracts.length });
       res.json(allContracts);
     } catch (err:any) {
@@ -368,7 +368,7 @@ export function registerRoutes(app: Express): Server {
   apiRouter.post("/apply/:token", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { firstName, lastName, email, phone } = req.body;
-      
+
       console.log("[Apply Route] Processing application with details:", {
         firstName,
         lastName,
@@ -405,7 +405,7 @@ export function registerRoutes(app: Express): Server {
       // Start KYC process with explicit userId in URL
       const redirectUrl = `/apply/${user.id}?verification=true`;
       console.log('[Apply Route] Redirecting to:', redirectUrl);
-      
+
       res.json({
         userId: user.id,
         redirectUrl
@@ -581,7 +581,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-  
+
   apiRouter.get("/kyc/sessions", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessions = await db
@@ -603,7 +603,7 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-  
+
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phone: borrowerPhone, firstName, lastName } = req.body;
@@ -615,29 +615,42 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
+      // Normalize phone number
+      const normalizedPhone = borrowerPhone.replace(/^\+?1/, '').replace(/\D/g, '');
+      const fullPhone = '+1' + normalizedPhone;
+
       // First check if user exists
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, borrowerPhone))
+        .where(eq(users.phoneNumber, fullPhone))
         .limit(1);
 
-      // Always use existing user if found by phone number
+      // Always use existing user if found
       let user;
       if (existingUser) {
-        user = existingUser;
+        // Update existing user's name if it has changed
+        if (existingUser.name !== `${firstName} ${lastName}`) {
+          [user] = await db
+            .update(users)
+            .set({ name: `${firstName} ${lastName}` })
+            .where(eq(users.id, existingUser.id))
+            .returning();
+        } else {
+          user = existingUser;
+        }
       } else {
         // Create new user with unique email based on phone
-        const uniqueEmail = `${borrowerPhone.replace(/\D/g, '')}@temp.shifi.com`;
+        const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
         [user] = await db
           .insert(users)
           .values({
-            username: borrowerPhone,
+            username: normalizedPhone,
             password: Math.random().toString(36).slice(-8),
             email: uniqueEmail,
             name: `${firstName} ${lastName}`,
             role: 'customer',
-            phoneNumber: borrowerPhone,
+            phoneNumber: fullPhone,
             kycStatus: 'pending'
           })
           .returning();
