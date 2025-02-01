@@ -268,14 +268,18 @@ export function registerRoutes(app: Express): Server {
       const totalInterest = (monthlyPayment * term) - amount;
       const contractNumber = generateContractNumber();
 
+      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
+      const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
+      const contractNumber = `LN${Date.now()}`;
+
       const newContract = await db.insert(contracts).values({
         merchantId,
-        customerId,
+        customerId: customer.id,
         contractNumber,
         amount,
         term,
         interestRate,
-        downPayment,
+        downPayment: amount * 0.05,
         monthlyPayment,
         totalInterest,
         status: 'draft',
