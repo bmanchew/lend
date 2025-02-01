@@ -32,20 +32,20 @@ export default function Apply() {
       }
 
       const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
+
       try {
         const response = await fetch(`/api/kyc/status?userId=${userId}&platform=${isMobile ? 'mobile' : 'web'}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        
+
         if (!data.status || data.status === 'not_started' || data.status === 'pending') {
           setStarted(true);
           // Auto-start verification if needed
           const autoStartResponse = await fetch(`/api/kyc/auto-start?userId=${userId}`);
           const autoStartData = await autoStartResponse.json();
-          
+
           if (autoStartData.redirectUrl) {
             window.location.href = autoStartData.redirectUrl;
           }
@@ -63,25 +63,20 @@ export default function Apply() {
   }, [userId, verification]);
 
 
-  const handleStart = () => {
+  useEffect(() => {
     setStarted(true);
-  };
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-4">Loan Application</h1>
-
-      {!started ? (
-        <div className="text-center">
-          <Button onClick={handleStart}>Get Started</Button>
-        </div>
-      ) : (
+      {
         <KycVerificationModal
           isOpen={!kycCompleted && !!userId}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
         />
-      )}
+      }
     </div>
   );
 }

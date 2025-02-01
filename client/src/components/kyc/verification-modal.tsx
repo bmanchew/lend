@@ -89,33 +89,20 @@ export function KycVerificationModal({
   }, [isOpen, kycData?.status]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Identity Verification Required</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col items-center justify-center space-y-4 p-4">
-          <div className="text-center space-y-3">
-            <p className="text-sm text-gray-500">
-              Please prepare your driver's license for verification.
-            </p>
-            <div className="text-xs text-gray-600">
-              <p>We'll need:</p>
-              <ul className="list-disc list-inside">
-                <li>A clear photo of your driver's license</li>
-                <li>A quick selfie for verification</li>
-              </ul>
-            </div>
+    <div className="flex flex-col items-center justify-center space-y-4 p-4">
+      <div className="text-center space-y-3">
+        {startVerification.isPending ? (
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Starting verification process...</span>
           </div>
-          {startVerification.isPending && (
-            <div className="flex items-center space-x-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Starting verification process...</span>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        ) : (
+          <p className="text-sm text-gray-500">
+            Please wait while we initialize identity verification...
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
