@@ -42,7 +42,10 @@ export default function MerchantDashboard() {
           </h1>
           {merchant && (
             <div className="flex items-center gap-4">
-              <LoanApplicationDialog merchantId={merchant.id} />
+              <Card className="p-4 w-full max-w-2xl mx-auto mt-4">
+                <h2 className="text-xl font-bold mb-4">New Loan Application</h2>
+                <LoanApplicationForm merchantId={merchant.id} />
+              </Card>
             </div>
           )}
         </div>

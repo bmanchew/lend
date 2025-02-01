@@ -235,13 +235,33 @@ export function registerRoutes(app: Express): Server {
     try {
       const {
         merchantId,
-        customerId,
+        customerDetails,
         amount,
         term,
         interestRate,
-        downPayment,
-        notes
+        downPayment = 0,
+        notes = ''
       } = req.body;
+
+      // Create or find customer
+      const [customer] = await db
+        .insert(users)
+        .values({
+          username: customerDetails.email,
+          password: Math.random().toString(36).slice(-8), // Temporary password
+          email: customerDetails.email,
+          name: `${customerDetails.firstName} ${customerDetails.lastName}`,
+          role: 'customer',
+          phoneNumber: customerDetails.phone,
+        })
+        .onConflictDoUpdate({
+          target: users.email,
+          set: {
+            name: `${customerDetails.firstName} ${customerDetails.lastName}`,
+            phoneNumber: customerDetails.phone,
+          },
+        })
+        .returning();
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = (monthlyPayment * term) - amount;
