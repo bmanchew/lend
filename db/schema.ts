@@ -49,6 +49,15 @@ export const webhookEvents = pgTable("webhook_events", {
   errorMessage: text("error_message"),
 });
 
+export const programs = pgTable("programs", {
+  id: serial("id").primaryKey(),
+  merchantId: integer("merchant_id").references(() => merchants.id).notNull(),
+  name: text("name").notNull(),
+  term: integer("term").notNull(), // in months
+  interestRate: decimal("interest_rate", { precision: 5, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const merchants = pgTable("merchants", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -57,6 +66,10 @@ export const merchants = pgTable("merchants", {
   reserveBalance: decimal("reserve_balance", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const merchantsRelations = relations(merchants, ({ many }) => ({
+  programs: many(programs),
+}));
 
 export const contracts = pgTable("contracts", {
   id: serial("id").primaryKey(),

@@ -222,18 +222,56 @@ export default function AdminDashboard() {
             <CardContent>
               <div className="space-y-2">
                 {merchants?.map(merchant => (
-                  <div key={merchant.id} className="flex items-center justify-between p-2 border rounded">
-                    <div>
-                      <p className="font-medium">{merchant.companyName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Reserve Balance: ${merchant.reserveBalance}
-                      </p>
+                  <div key={merchant.id} className="space-y-2 p-4 border rounded">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{merchant.companyName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Reserve Balance: ${merchant.reserveBalance}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        merchant.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      }`}>
+                        {merchant.status}
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      merchant.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}>
-                      {merchant.status}
-                    </span>
+                    
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Programs</h4>
+                      <div className="grid gap-2">
+                        {merchant.programs?.map(program => (
+                          <div key={program.id} className="text-sm p-2 bg-gray-50 rounded">
+                            {program.name} - {program.term} months @ {program.interestRate}%
+                          </div>
+                        ))}
+                        <form 
+                          className="flex gap-2"
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const form = e.target as HTMLFormElement;
+                            const formData = new FormData(form);
+                            
+                            await fetch(`/api/merchants/${merchant.id}/programs`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                name: formData.get('name'),
+                                term: parseInt(formData.get('term') as string),
+                                interestRate: parseFloat(formData.get('interestRate') as string),
+                              }),
+                            });
+                            
+                            form.reset();
+                          }}
+                        >
+                          <Input name="name" placeholder="Program Name" required />
+                          <Input name="term" type="number" placeholder="Term (months)" required />
+                          <Input name="interestRate" type="number" step="0.01" placeholder="Rate %" required />
+                          <Button type="submit" size="sm">Add</Button>
+                        </form>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

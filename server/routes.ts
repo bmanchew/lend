@@ -219,11 +219,44 @@ export function registerRoutes(app: Express): Server {
       const allMerchants = await db.query.merchants.findMany({
         with: {
           user: true,
+          programs: true,
         },
       });
       res.json(allMerchants);
     } catch (err:any) {
       console.error("Error fetching all merchants:", err); 
+      next(err);
+    }
+  });
+
+  apiRouter.post("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
+    try {
+      const { name, term, interestRate } = req.body;
+      const merchantId = parseInt(req.params.id);
+
+      const [program] = await db.insert(programs).values({
+        merchantId,
+        name,
+        term,
+        interestRate,
+      }).returning();
+
+      res.json(program);
+    } catch (err:any) {
+      console.error("Error creating program:", err);
+      next(err);
+    }
+  });
+
+  apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
+    try {
+      const merchantId = parseInt(req.params.id);
+      const merchantPrograms = await db.query.programs.findMany({
+        where: eq(programs.merchantId, merchantId),
+      });
+      res.json(merchantPrograms);
+    } catch (err:any) {
+      console.error("Error fetching merchant programs:", err);
       next(err);
     }
   });

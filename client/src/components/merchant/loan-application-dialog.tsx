@@ -39,6 +39,15 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: programs } = useQuery({
+    queryKey: ['programs', merchantId],
+    queryFn: async () => {
+      const response = await fetch(`/api/merchants/${merchantId}/programs`);
+      if (!response.ok) throw new Error('Failed to fetch programs');
+      return response.json();
+    },
+  });
+
   const form = useForm<ApplicationFormData>({
     resolver: zodResolver(applicationSchema),
     defaultValues: {
