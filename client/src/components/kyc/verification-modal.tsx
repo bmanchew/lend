@@ -13,12 +13,18 @@ interface KycVerificationModalProps {
   onVerificationComplete?: () => void;
 }
 
+console.log("[KYC Modal] Module loaded");
+
 export function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
 }: KycVerificationModalProps) {
-  console.log("[KYC Modal] Rendering with props:", { isOpen, onVerificationComplete });
+  console.log("[KYC Modal] Component rendering", { 
+    isOpen, 
+    onClose: !!onClose,
+    onVerificationComplete: !!onVerificationComplete 
+  });
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId');
   const { toast } = useToast();
@@ -27,11 +33,17 @@ export function KycVerificationModal({
     queryKey: ['/api/kyc/status', userId],
     enabled: !!userId && isOpen,
     queryFn: async () => {
+      console.log("[KYC Modal] Fetching status for userId:", userId);
       const response = await fetch(`/api/kyc/status?userId=${userId}`);
+      console.log("[KYC Modal] Status response:", response.status);
+      
       if (!response.ok) {
+        console.error("[KYC Modal] Status fetch failed:", await response.text());
         throw new Error('Failed to fetch KYC status');
       }
-      return response.json();
+      const data = await response.json();
+      console.log("[KYC Modal] Status data:", data);
+      return data;
     },
   });
 
@@ -79,8 +91,21 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    if (kycData?.status === 'approved') {
-      onVerificationComplete?.();
+    console.log("[KYC Modal] Effect triggered", { 
+      status: kycData?.status,
+      hasComplete: !!onVerificationComplete,
+      hasClose: !!onClose
+    });
+    
+    try {
+      if (kycData?.status === 'approved') {
+        console.log("[KYC Modal] Verification approved, triggering callbacks");
+        onVerificationComplete?.();
+        onClose();
+      }
+    } catch (error) {
+      console.error("[KYC Modal] Error in completion handlers:", error);
+      // Still close modal on error to prevent UI lock
       onClose();
     }
   }, [kycData?.status, onVerificationComplete, onClose]);
