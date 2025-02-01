@@ -56,7 +56,8 @@ export function KycVerificationModal({
           },
           body: JSON.stringify({ 
             userId,
-            platform: isMobile ? 'mobile' : 'web'
+            platform: isMobile ? 'mobile' : 'web',
+            userAgent: navigator.userAgent
           })
         });
 

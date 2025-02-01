@@ -522,7 +522,10 @@ export function registerRoutes(app: Express): Server {
       // Update user platform
       await db
         .update(users)
-        .set({ platform })
+        .set({ 
+          platform,
+          userAgent: req.body.userAgent 
+        })
         .where(eq(users.id, userId));
 
       const sessionUrl = await diditService.initializeKycSession(userId);

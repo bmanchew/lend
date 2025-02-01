@@ -135,7 +135,8 @@ class DiditService {
       const isMobile = Boolean(user.platform === 'mobile');
       console.log("[DiditService] Initializing session with platform:", { 
         platform: user.platform, 
-        isMobile 
+        isMobile,
+        userAgent: user.userAgent
       });
 
       const sessionData = {
@@ -144,7 +145,8 @@ class DiditService {
         vendor_data: JSON.stringify({
           userId: user.id,
           username: user.username,
-          platform: user.platform || 'web'
+          platform: isMobile ? 'mobile' : 'web',
+          userAgent: user.userAgent
         }),
         redirect_url: completeReturnUrl,
         app_scheme: 'didit',
