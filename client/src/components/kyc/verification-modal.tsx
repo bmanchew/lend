@@ -1,8 +1,10 @@
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useMobile } from "@/hooks/use-mobile";
 
 interface VerificationModalProps {
   isOpen: boolean;
@@ -17,7 +19,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
-  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isMobile = useMobile();
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -48,7 +50,7 @@ export function KycVerificationModal({
           },
           body: JSON.stringify({ 
             userId,
-            platform: platform,
+            platform,
             userAgent: navigator.userAgent
           })
         });
@@ -78,10 +80,7 @@ export function KycVerificationModal({
 
   useEffect(() => {
     if (isOpen && (!kycData?.status || kycData?.status === 'not_started')) {
-      if (isMobile) {
-        // Automatically start verification on mobile
-        startVerification.mutate();
-      }
+      startVerification.mutate();
     } else if (kycData?.status === 'Approved') {
       toast({
         title: "Verification Complete",
@@ -89,7 +88,7 @@ export function KycVerificationModal({
       });
       onVerificationComplete?.();
     }
-  }, [isOpen, kycData?.status, isMobile]);
+  }, [isOpen, kycData?.status]);
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 p-4">
