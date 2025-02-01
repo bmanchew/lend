@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
-import { VerificationModal } from "@/components/kyc/verification-modal";
+import { KycVerificationModal } from "@/components/kyc/verification-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Import Dialog components
 
 
@@ -46,7 +46,7 @@ export default function CustomerDashboard() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.name}</h1>
 
-        <VerificationModal 
+        <KycVerificationModal 
           isOpen={showKycModal} 
           onClose={() => setShowKycModal(false)}
           onVerificationComplete={() => setShowKycModal(false)}
