@@ -51,7 +51,7 @@ export function registerRoutes(app: Express): Server {
           term: contracts.term,
           interestRate: contracts.interestRate,
           status: contracts.status,
-          downPayment: contracts.downPayment,
+          downPayment: contracts.downpayment,
           monthlyPayment: contracts.monthlyPayment,
           creditScore: contracts.creditScore,
           signedDocumentUrl: contracts.signedDocumentUrl,
