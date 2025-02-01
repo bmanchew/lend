@@ -26,10 +26,11 @@ export default function CustomerLogin() {
 
   const handleSendOTP = async () => {
     let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
-    if (!phoneNumber.startsWith('1')) {
-      phoneNumber = '1' + phoneNumber;
-    }
-    phoneNumber = '+' + phoneNumber;
+    // Remove leading 1 if present
+    phoneNumber = phoneNumber.replace(/^1/, '');
+    // Add +1 prefix
+    phoneNumber = '+1' + phoneNumber;
+    // Update form value with formatted number
     form.setValue("phoneNumber", phoneNumber);
 
     try {

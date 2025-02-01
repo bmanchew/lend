@@ -164,15 +164,20 @@ export function setupAuth(app: Express) {
         console.log('Validating OTP for user:', {
           lastOtpCode: user.lastOtpCode,
           inputCode: password,
-          otpExpiry: user.otpExpiry
+          otpExpiry: user.otpExpiry,
+          phoneNumber: fullPhone
         });
 
-        const isOtpValid = user.lastOtpCode === password && 
-                        user.otpExpiry && 
-                        new Date(user.otpExpiry) > new Date();
+        if (!user.lastOtpCode || !user.otpExpiry) {
+          return done(null, false, { message: "No active OTP found" });
+        }
 
-        if (!isOtpValid) {
+        if (user.lastOtpCode !== password) {
           return done(null, false, { message: "Invalid code" });
+        }
+
+        if (new Date(user.otpExpiry) <= new Date()) {
+          return done(null, false, { message: "OTP has expired" });
         }
 
         // Clear used OTP
