@@ -120,7 +120,7 @@ class DiditService {
         ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
         : 'http://localhost:3000';
 
-      const callbackUrl = new URL('/api/kyc/callback', replitDomain);
+      const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
       const completeReturnUrl = new URL(returnUrl || '/dashboard', replitDomain).toString();
 
       console.log("[DiditService] Session configuration:", {

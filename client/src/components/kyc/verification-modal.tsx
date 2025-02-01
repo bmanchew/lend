@@ -77,12 +77,14 @@ export function KycVerificationModal({
 
   // Effect to handle verification completion
   useEffect(() => {
-    if (kycData?.status === 'Approved') {
+    if (kycData?.status?.toLowerCase() === 'approved') {
       console.log('[KYC Modal] Verification completed successfully');
       if (onVerificationComplete) {
         onVerificationComplete();
       }
       onClose();
+      // Force reload to update UI state
+      window.location.reload();
     }
   }, [kycData?.status, onVerificationComplete, onClose]);
 
