@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
+import { KycVerificationModal } from "@/components/kyc/verification-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
@@ -35,9 +36,7 @@ export default function CustomerDashboard() {
     }
   }, [user]);
 
-  import { KycVerificationModal } from '@/components/kyc/verification-modal';
-
-const { data: contracts } = useQuery<SelectContract[]>({
+  const { data: contracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/customers/${user?.id}/contracts`],
   });
 
