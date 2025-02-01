@@ -166,9 +166,22 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      const merchantResults = await db.query.merchants.findMany({
-        where: eq(merchants.userId, userId),
-      });
+      console.log("[Merchant Lookup] Executing query for userId:", userId);
+      const merchantResults = await db
+        .select({
+          id: merchants.id,
+          userId: merchants.userId,
+          companyName: merchants.companyName,
+          ein: merchants.ein,
+          address: merchants.address,
+          website: merchants.website,
+          status: merchants.status,
+          reserveBalance: merchants.reserveBalance,
+          active: merchants.active,
+          createdAt: merchants.createdAt
+        })
+        .from(merchants)
+        .where(eq(merchants.userId, userId));
 
       console.log("[Merchant Lookup] Query results:", merchantResults);
 
