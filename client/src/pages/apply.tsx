@@ -7,14 +7,30 @@ export default function Apply() {
   const [searchParams] = useSearchParams();
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
+  const [verification, setVerification] = useState(false); // Added state for verification status
   const userId = localStorage.getItem('temp_user_id');
 
   useEffect(() => {
-    const isVerification = searchParams.get('verification') === 'true';
-    if (isVerification) {
-      setStarted(true);
+    const phoneNumber = searchParams.get('phone');
+    if (phoneNumber) {
+      // Auto-fill phone number if provided in URL
+      const loginUrl = `/auth/customer-login?phone=${phoneNumber}`;
+      window.location.href = loginUrl;
+    } else {
+        const isVerification = searchParams.get('verification') === 'true';
+        if (isVerification) {
+          setVerification(true); // Set verification status
+        }
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (userId && verification) {
+      // Placeholder for starting verification.  Replace with actual verification logic.
+      setStarted(true); 
+    }
+  }, [userId, verification]);
+
 
   const handleStart = () => {
     setStarted(true);

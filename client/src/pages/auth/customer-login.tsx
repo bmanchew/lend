@@ -6,10 +6,13 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import axios from "axios";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
+  const { toast } = useToast();
   
   const form = useForm({
     defaultValues: {
@@ -19,11 +22,38 @@ export default function CustomerLogin() {
     },
   });
 
+  const handleSendOTP = async () => {
+    const phoneNumber = form.getValues("phoneNumber");
+    if (!phoneNumber) {
+      toast({
+        title: "Error",
+        description: "Please enter your phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await axios.post("/api/auth/send-otp", { phoneNumber });
+      setIsOtpSent(true);
+      toast({
+        title: "Code Sent",
+        description: "Please check your phone for the verification code"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send verification code",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="container flex min-h-screen items-center justify-center">
       <div className="mx-auto w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Customer Login</h1>
+          <h1 className="text-2xl font-bold">Verify Your Identity</h1>
           <p className="text-gray-500">Enter your phone number to continue</p>
         </div>
 
@@ -50,7 +80,7 @@ export default function CustomerLogin() {
                   <FormItem>
                     <FormLabel>Verification Code</FormLabel>
                     <FormControl>
-                      <InputOTP maxLength={6} onComplete={field.onChange}>
+                      <InputOTP maxLength={6} value={field.value} onChange={field.onChange}>
                         <InputOTPGroup>
                           <InputOTPSlot index={0} />
                           <InputOTPSlot index={1} />
@@ -68,20 +98,17 @@ export default function CustomerLogin() {
             ) : (
               <Button 
                 type="button"
-                onClick={() => {
-                  const phoneNumber = form.getValues("phoneNumber");
-                  if (phoneNumber) {
-                    setIsOtpSent(true);
-                  }
-                }}
+                onClick={handleSendOTP}
                 className="w-full"
               >
                 Send Code
               </Button>
             )}
-            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-              Login
-            </Button>
+            {isOtpSent && (
+              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                Verify & Continue
+              </Button>
+            )}
           </form>
         </Form>
       </div>
