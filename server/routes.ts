@@ -51,13 +51,17 @@ export function registerRoutes(app: Express): Server {
           term: contracts.term,
           interestRate: contracts.interestRate,
           status: contracts.status,
+          downPayment: contracts.downPayment,
+          monthlyPayment: contracts.monthlyPayment,
           creditScore: contracts.creditScore,
           signedDocumentUrl: contracts.signedDocumentUrl,
           createdAt: contracts.createdAt
         })
         .from(contracts)
+        .orderBy(desc(contracts.createdAt))
         .where(eq(contracts.customerId, parseInt(req.params.id)));
 
+      console.log("Found contracts for customer:", customerContracts);
       res.json(customerContracts);
     } catch (err: any) {
       console.error("Error fetching customer contracts:", err);
