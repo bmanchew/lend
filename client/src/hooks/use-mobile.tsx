@@ -17,3 +17,12 @@ export function useIsMobile() {
 
   return !!isMobile
 }
+
+export function useMobile() {
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  console.log('[useMobile] Platform detection:', {
+    userAgent: navigator.userAgent,
+    isMobile
+  });
+  return isMobile;
+}

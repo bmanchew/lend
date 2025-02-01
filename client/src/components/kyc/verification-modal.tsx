@@ -40,6 +40,13 @@ export function KycVerificationModal({
       if (!userId) {
         throw new Error('User ID is required');
       }
+      
+      console.log('[KYC Verification] Starting verification:', {
+        userId,
+        platform,
+        isMobile,
+        userAgent: navigator.userAgent
+      });
 
       try {
         const response = await fetch('/api/kyc/start', {
