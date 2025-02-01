@@ -101,23 +101,53 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy({
-      usernameField: 'phoneNumber',
-      passwordField: 'code'
-    }, async (phoneNumber, code, done) => {
+      usernameField: 'username',
+      passwordField: 'password',
+      passReqToCallback: true
+    }, async (req, username, password, done) => {
       try {
-        // For admin/merchant, use regular username/password
-        if (code.length > 6) {
+        const loginType = req.body.loginType || 'customer';
+        
+        if (loginType === 'customer') {
           const [user] = await db
             .select()
             .from(users)
-            .where(eq(users.username, phoneNumber))
+            .where(eq(users.phoneNumber, username))
+            .limit(1);
+
+          if (!user || user.role !== 'customer') {
+            return done(null, false, { message: "Invalid phone number" });
+          }
+
+          // Verify OTP for customers
+          const isOtpValid = user.lastOtpCode === password && 
+                          user.otpExpiry && 
+                          new Date(user.otpExpiry) > new Date();
+
+          if (!isOtpValid) {
+            return done(null, false, { message: "Invalid or expired code" });
+          }
+
+          // Clear used OTP
+          await db
+            .update(users)
+            .set({ lastOtpCode: null, otpExpiry: null })
+            .where(eq(users.id, user.id));
+
+          return done(null, user);
+        } else {
+          // For admin/merchant, use regular username/password
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, username))
             .limit(1);
 
           if (!user || user.role === 'customer') {
             return done(null, false, { message: "Invalid credentials" });
           }
 
-          const isValid = await comparePasswords(code, user.password);
+          const isValid = await comparePasswords(password, user.password);
           if (!isValid) {
             return done(null, false, { message: "Invalid credentials" });
           }

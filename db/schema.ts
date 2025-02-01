@@ -15,6 +15,8 @@ export const users = pgTable("users", {
   phoneNumber: text("phone_number").unique(),
   lastOtpCode: text("last_otp_code"),
   otpExpiry: timestamp("otp_expiry"),
+  lastOtpCode: text("last_otp_code"),
+  otpExpiry: timestamp("otp_expiry"),
   faceIdHash: text("face_id_hash"),
 });
 
