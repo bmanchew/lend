@@ -327,6 +327,12 @@ export function registerRoutes(app: Express): Server {
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
       const contractNumber = `LN${Date.now()}`;
 
+      console.log('[Contract Creation] Creating contract with details:', {
+        merchantId,
+        customerId: customer.id,
+        amount,
+        fundingAmount: req.body.fundingAmount
+      });
       const newContract = await db.insert(contracts).values({
         merchantId,
         customerId: customer.id,
@@ -618,7 +624,11 @@ export function registerRoutes(app: Express): Server {
 
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { phone: borrowerPhone, firstName, lastName } = req.body;
+      console.log('[Loan Application] Received request:', {
+        body: req.body,
+        params: req.params
+      });
+      const { phone: borrowerPhone, firstName, lastName, amount } = req.body;
       const merchantId = parseInt(req.params.id);
 
       if (!borrowerPhone || !merchantId || !firstName || !lastName) {
