@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
@@ -14,7 +13,7 @@ export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
   const { toast } = useToast();
-  
+
   const [location] = useLocation();
   const form = useForm({
     defaultValues: {
@@ -30,17 +29,20 @@ export default function CustomerLogin() {
     if (!phoneNumber.startsWith('+1')) {
       phoneNumber = '+1' + phoneNumber.replace(/\D/g, '');
     }
-    
+
     try {
       const response = await axios.post("/api/sendOTP", { phoneNumber });
-      if (response.data.message === 'OTP sent successfully') {
+      if (response.data.success) {
         setIsOtpSent(true);
         toast({
           title: "Code Sent",
           description: "Enter the code to sign in to your account"
         });
+      } else {
+        throw new Error(response.data.error || 'Failed to send code');
       }
     } catch (error: any) {
+      setIsOtpSent(false);
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to send code",

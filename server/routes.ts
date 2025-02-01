@@ -465,8 +465,10 @@ export function registerRoutes(app: Express): Server {
       const sent = await smsService.sendOTP(phoneNumber, otp);
 
       if (sent) {
+        console.log('[Routes] Successfully sent OTP to:', phoneNumber);
         res.json({ success: true });
       } else {
+        console.error('[Routes] Failed to send OTP to:', phoneNumber);
         res.status(500).json({ error: "Failed to send OTP" });
       }
     } catch (err) {
