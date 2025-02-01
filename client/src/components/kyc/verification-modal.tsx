@@ -17,7 +17,6 @@ export function KycVerificationModal({
   onClose,
   onVerificationComplete
 }: VerificationModalProps) {
-  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
 
