@@ -14,10 +14,16 @@ export function DebitCardForm({ amount, onSuccess }: DebitCardFormProps) {
   const [expiry, setExpiry] = useState('');
   const [cvv, setCvv] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Integrate with payment processor
-    onSuccess();
+    try {
+      // TODO: Integrate with payment processor
+      // Simulating payment processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      onSuccess();
+    } catch (error) {
+      console.error('Payment error:', error);
+    }
   };
 
   return (

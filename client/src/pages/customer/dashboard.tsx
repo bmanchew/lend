@@ -106,18 +106,23 @@ export default function CustomerDashboard() {
                     >
                       Accept Offer
                     </Button>
-                    <Dialog open={showDownPayment} onOpenChange={setShowDownPayment}>
-                      <DialogContent>
+                    <Dialog 
+                      open={showDownPayment} 
+                      onOpenChange={setShowDownPayment}
+                    >
+                      <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
                           <DialogTitle>Complete Down Payment</DialogTitle>
                         </DialogHeader>
-                        <DebitCardForm 
-                          amount={contracts?.[0]?.downPayment ?? 0} 
-                          onSuccess={() => {
-                            setShowDownPayment(false);
-                            setShowBankLink(true);
-                          }} 
-                        />
+                        {showDownPayment && (
+                          <DebitCardForm 
+                            amount={Number(contracts?.[0]?.amount ?? 0) * 0.05} 
+                            onSuccess={() => {
+                              setShowDownPayment(false);
+                              setShowBankLink(true);
+                            }} 
+                          />
+                        )}
                       </DialogContent>
                     </Dialog>
                   </CardContent>
