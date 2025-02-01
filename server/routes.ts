@@ -302,6 +302,11 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
     try {
+      console.log('[KYC Webhook] Received webhook:', {
+        headers: req.headers,
+        body: req.body
+      });
+
       const signature = req.headers['x-signature'];
       const timestamp = req.headers['x-timestamp'];
       const rawBody = JSON.stringify(req.body);
@@ -314,6 +319,12 @@ export function registerRoutes(app: Express): Server {
       if (!diditService.verifyWebhookSignature(rawBody, signature as string, timestamp as string)) {
         console.error('[KYC Webhook] Invalid webhook signature');
         return res.status(401).json({ error: 'Invalid webhook signature' });
+      }
+
+      // Validate payload
+      if (!req.body || !req.body.session_id) {
+        console.error('[KYC Webhook] Invalid payload received');
+        return res.status(400).json({ error: 'Invalid payload' });
       }
 
       console.log('[KYC Webhook] Valid webhook signature received:', {
