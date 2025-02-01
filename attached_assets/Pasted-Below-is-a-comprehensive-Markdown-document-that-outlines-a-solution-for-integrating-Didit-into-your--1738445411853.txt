@@ -1,0 +1,321 @@
+Below is a comprehensive Markdown document that outlines a solution for integrating Didit into your web app in such a way that it works seamlessly on mobile browsers (and even within native apps via an in‑app browser). This guide covers everything from setting up Didit in your authentication flow (using NextAuth.js) to designing a mobile‑friendly KYC (Know Your Customer) flow, including recommendations for token handoff and webhook updates.
+
+---
+
+# Integrating Didit In‑App for Mobile Web Usage
+
+This document provides detailed instructions for your development team on how to integrate Didit’s identity verification into your web application so that it is fully accessible and functional on mobile devices. It covers NextAuth.js configuration with Didit, designing a responsive mobile web flow, and bridging sessions if needed with in‑app browser or deep linking techniques.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [System Architecture & Flow](#system-architecture--flow)
+4. [Didit & NextAuth.js Integration](#didit--nextauthjs-integration)
+    - [A. Setting Up Didit in the Didit Business Console](#a-setting-up-didit-in-the-didit-business-console)
+    - [B. Configuring NextAuth.js with Didit](#b-configuring-nextauthjs-with-didit)
+5. [Designing a Mobile‑Friendly KYC Flow](#designing-a-mobile-friendly-kyc-flow)
+    - [A. Responsive Web Design](#a-responsive-web-design)
+    - [B. In‑App Browser / WebView & Deep Linking](#b-in-app-browser--webview--deep-linking)
+6. [Handling Session & Token Handoff](#handling-session--token-handoff)
+7. [Configuring Webhooks for Realtime KYC Updates](#configuring-webhooks-for-realtime-kyc-updates)
+8. [Testing & Troubleshooting](#testing--troubleshooting)
+9. [Summary & Next Steps](#summary--next-steps)
+
+---
+
+## 1. Overview
+
+The goal is to integrate Didit’s identity verification system into your web application so that users (whether on desktop or mobile) can complete KYC directly from their browser. For mobile users, the flow must be fully optimized for smaller screens, with the option to use deep linking or an in‑app browser if you have a native mobile application. This approach leverages NextAuth.js for authentication and Didit as the verification engine.
+
+---
+
+## 2. Prerequisites
+
+Before beginning the integration, ensure that you have:
+
+- **A Next.js Application:**  
+  Your app should have NextAuth.js installed and configured for authentication.
+
+- **Didit Business Console Account:**  
+  You need an account at Didit Business Console to create an application and obtain your Client ID and Client Secret.  
+  *Reference: [Didit Docs – NextAuth.js Integration]()*
+
+- **Environment Setup:**  
+  Environment variables such as `AUTH_SECRET`, `DIDIT_CLIENT_ID`, `DIDIT_CLIENT_SECRET`, and a flag for staging (`DIDIT_IS_STAGING`) must be defined.
+
+- **Mobile Optimization Strategy:**  
+  Decide whether to rely solely on responsive web design or additionally use deep linking/in‑app browsers (or a mobile SDK if available) for a native experience.
+
+---
+
+## 3. System Architecture & Flow
+
+The integration involves these key components:
+
+- **Frontend (Next.js):**  
+  The web application that users access on desktop and mobile. It hosts the KYC pages, using a responsive design.
+
+- **Authentication Flow (NextAuth.js):**  
+  NextAuth.js handles user sign‑in (using OAuth/credentials) and integrates with Didit for identity verification.
+
+- **Didit Verification:**  
+  Didit handles the KYC process (document upload, facial recognition, etc.). It returns a verification session ID and status.
+
+- **Mobile Considerations:**  
+  Mobile users may access the KYC flow via:
+  - A responsive web page in a mobile browser.
+  - An in‑app browser/web view if using a native app.
+  - Deep linking to hand off tokens between the web session and the native app.
+
+- **Webhooks:**  
+  Didit sends real‑time updates about the verification status via webhooks to your backend. These updates can be used to update user sessions or trigger notifications.
+
+---
+
+## 4. Didit & NextAuth.js Integration
+
+### A. Setting Up Didit in the Didit Business Console
+
+1. **Log In & Create Application:**
+   - Log in to your [Didit Business Console]().
+   - Navigate to **Applications** and click **Create Application**.
+   - Enter your application name.
+   - Set the Redirect URI for development (e.g., `http://localhost:3000/auth/callback/didit`) or production (e.g., `https://yourdomain.com/auth/callback/didit`).
+   - Click **Create**.
+   - Note the **Client ID** and **Client Secret** for later use.
+
+   *Reference: [Didit Docs – Set up Didit]()*
+
+### B. Configuring NextAuth.js with Didit
+
+1. **Create/Update Your NextAuth.js Configuration:**  
+   In your Next.js project, create (or update) the NextAuth configuration file (e.g. `pages/api/auth/[...nextauth].js` or `auth.ts`):
+
+   ```typescript
+   import NextAuth from "next-auth";
+   import type { Provider } from "next-auth/providers";
+   import "next-auth/jwt";
+
+   // Configure Didit provider
+   const diditProvider: Provider = {
+     id: "didit",
+     name: "Didit",
+     type: "oauth",
+     authorization: {
+       url: process.env.DIDIT_IS_STAGING === "true"
+         ? "https://auth.staging.didit.me"
+         : "https://auth.didit.me",
+       params: { scope: "openid names document_detail" },
+     },
+     token: {
+       url: process.env.DIDIT_IS_STAGING === "true"
+         ? "https://apx.staging.didit.me/auth/v2/token"
+         : "https://apx.didit.me/auth/v2/token",
+     },
+     userinfo: {
+       url: process.env.DIDIT_IS_STAGING === "true"
+         ? "https://apx.staging.didit.me/auth/v2/users/retrieve/"
+         : "https://apx.didit.me/auth/v2/users/retrieve/",
+     },
+     issuer: process.env.DIDIT_IS_STAGING === "true"
+       ? "https://auth.staging.didit.me/"
+       : "https://auth.didit.me/",
+     clientId: process.env.DIDIT_CLIENT_ID,
+     clientSecret: process.env.DIDIT_CLIENT_SECRET,
+     checks: ["state", "pkce"],
+     profile(profile) {
+       return {
+         user_data: profile,
+         user_id: profile.user_id,
+         name: profile.names?.full_name,
+         email: profile.email?.email,
+         image: profile.picture,
+       };
+     },
+     style: {
+       logo: "/didit.png",
+     },
+   };
+
+   export default NextAuth({
+     debug: !!process.env.AUTH_DEBUG,
+     trustHost: true,
+     providers: [diditProvider],
+     basePath: "/auth",
+     session: { strategy: "jwt" },
+     callbacks: {
+       authorized({ request, auth }) {
+         const { pathname } = request.nextUrl;
+         if (pathname === "/middleware-example") return !!auth;
+         return true;
+       },
+       jwt({ token, trigger, session }) {
+         if (trigger === "update") token.name = session.user.name;
+         return token;
+       },
+       async session({ session, token }) {
+         if (token?.accessToken) session.accessToken = token.accessToken;
+         return session;
+       },
+     },
+   });
+   ```
+
+2. **Define Environment Variables:**  
+   In your `.env.local` file, add:
+   
+   ```env
+   AUTH_SECRET=your_nextauth_secret  # Generate with: npx auth secret
+   DIDIT_CLIENT_ID=your_didit_client_id
+   DIDIT_CLIENT_SECRET=your_didit_client_secret
+   DIDIT_IS_STAGING=false
+   ```
+   
+   *Reference: [Didit Docs – NextAuth.js Integration]()*
+
+---
+
+## 5. Designing a Mobile‑Friendly KYC Flow
+
+For the mobile experience, you have two main approaches:
+
+### A. Responsive Web Design
+
+- **Mobile-Optimized Pages:**  
+  Ensure your KYC pages (document capture, facial verification, etc.) are built with responsive CSS frameworks (like Tailwind CSS or Bootstrap) so that they render correctly on small screens.
+  
+- **Touch-Friendly UI:**  
+  Use large buttons, clear instructions, and progress indicators to guide users through the KYC process on mobile devices.
+
+### B. In‑App Browser / WebView & Deep Linking
+
+If you have a native mobile app or wish to provide a more “native” feel:
+
+1. **In‑App Browser or WebView:**  
+   Integrate the KYC flow inside an in‑app browser or WebView so that users do not leave your app.
+   
+2. **Deep Linking for Token Handoff:**  
+   Once a user completes the KYC on the mobile web page, use a deep link (e.g., `myapp://kyc-complete?token=...`) to return the user to the native app. The native app can then parse the token or session details and initialize its own session management.
+   
+   **Example (React Native):**
+   ```javascript
+   import { Linking } from 'react-native';
+
+   const redirectToApp = (token) => {
+     const deepLink = `myapp://kyc-complete?token=${encodeURIComponent(token)}`;
+     Linking.openURL(deepLink);
+   };
+   ```
+   
+3. **Unified Session Management:**  
+   Ensure that the authentication backend (NextAuth.js with Didit) issues tokens or session cookies that are compatible with both web and mobile flows. This may require passing tokens via secure storage (e.g., AsyncStorage in React Native).
+
+---
+
+## 6. Handling Session & Token Handoff
+
+- **Token Generation:**  
+  When a user completes the Didit KYC flow, the authentication backend should update the session (using JWT) to indicate that the user’s identity is verified.
+  
+- **Bridging Sessions:**  
+  If a user signs in via a mobile web browser, extract the session token from the URL or cookies and pass it to your mobile app (via deep linking or a shared secure endpoint). This allows the mobile SDK or your native code to “bootstrap” the session.
+
+- **Security Considerations:**  
+  Always use HTTPS, short-lived tokens, and proper signature verification (e.g., via PKCE) during token handoff to avoid token interception.
+
+---
+
+## 7. Configuring Webhooks for Realtime KYC Updates
+
+To ensure that the KYC status is updated in real time:
+
+1. **Implement a Webhook Endpoint:**  
+   Create a dedicated endpoint on your backend (e.g., `/api/kyc-webhook`) to handle POST requests from Didit whenever there is a change in the verification status.
+   
+   **Example (Express):**
+   ```javascript
+   const express = require("express");
+   const bodyParser = require("body-parser");
+   const crypto = require("crypto");
+   const app = express();
+   const PORT = process.env.PORT || 1337;
+   const WEBHOOK_SECRET_KEY = process.env.WEBHOOK_SECRET_KEY || "YOUR_WEBHOOK_SECRET_KEY";
+
+   // Capture raw body for signature validation
+   app.use(bodyParser.json({
+     verify: (req, res, buf, encoding) => {
+       if (buf && buf.length) {
+         req.rawBody = buf.toString(encoding || "utf8");
+       }
+     }
+   }));
+
+   app.post("/api/kyc-webhook", (req, res) => {
+     const signature = req.get("X-Signature");
+     const timestamp = req.get("X-Timestamp");
+     // Validate timestamp and signature here using your WEBHOOK_SECRET_KEY
+     // If valid, parse req.rawBody and update the user's KYC status in your database
+     res.json({ message: "Webhook received" });
+   });
+
+   app.listen(PORT, () => console.log(`Webhook endpoint listening on port ${PORT}`));
+   ```
+   
+   *Reference: [Didit Docs – Webhooks]()*
+
+2. **Update User Session:**  
+   Use the webhook payload to update the user’s KYC status in your database and, if applicable, notify the mobile app via push notifications or by updating the in‑app session.
+
+---
+
+## 8. Testing & Troubleshooting
+
+- **Local Testing:**  
+  Run your Next.js app locally and test the KYC flow in a mobile browser (or using device simulators). Use tools like Chrome DevTools to emulate mobile devices.
+  
+- **Webhook Testing:**  
+  Use services such as ngrok to expose your local webhook endpoint and simulate Didit webhook calls using Postman.
+  
+- **Session Validation:**  
+  Verify that tokens generated by NextAuth.js are correctly passed and recognized by both the web app and any native mobile code. Inspect cookies and token payloads using browser developer tools or API clients.
+
+- **Error Handling:**  
+  Provide clear feedback (error messages and retry options) on the KYC screens. Log errors for server‑side debugging.
+
+---
+
+## 9. Summary & Next Steps
+
+By following this document, your development team will be able to:
+
+- Integrate Didit into your Next.js app using NextAuth.js.
+- Configure the authentication and KYC flow so that it works seamlessly on mobile devices using responsive design and, if necessary, deep linking or an in‑app browser.
+- Handle session and token handoff between web and native contexts securely.
+- Receive realtime updates via webhooks to update the user’s verification status.
+
+### Next Steps:
+
+- **Refine UI/UX:**  
+  Work on making the KYC pages as intuitive and mobile‑friendly as possible.
+
+- **Evaluate Deep Linking vs. Native SDK:**  
+  Determine whether deep linking/in‑app browsers suffice or if you should adopt a native mobile SDK (if provided by Didit or another provider).
+
+- **Security Review:**  
+  Review your token handoff and webhook security to ensure no vulnerabilities exist.
+
+- **Deploy & Monitor:**  
+  After deployment, monitor user engagement and KYC completion rates to identify any friction points.
+
+*References:*
+- Didit Docs – NextAuth.js Integration:   
+- Didit Docs – Webhooks: 
+
+This document should serve as a robust guideline for developing a mobile-friendly in‑app KYC solution with Didit integrated into your web app.
+
+Happy coding!
+
+---
