@@ -658,7 +658,7 @@ export function registerRoutes(app: Express): Server {
       const applicationToken = smsService.generateApplicationToken();
 
       // Construct the application URL
-      const applicationUrl = `https://shi-fi-lend-brandon263.replit.app/auth/customer-login?phone=${borrowerPhone}`;
+      const applicationUrl = `https://shi-fi-lend-brandon263.replit.app/login/customer?phone=${borrowerPhone}`;
 
       // Send the SMS invitation
       const sent = await smsService.sendLoanApplicationLink(
