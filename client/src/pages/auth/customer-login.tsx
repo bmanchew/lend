@@ -80,7 +80,13 @@ export default function CustomerLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-4">
+          <form onSubmit={form.handleSubmit((data) => {
+            loginMutation.mutate({
+              username: data.phoneNumber,
+              password: data.code,
+              loginType: 'customer'
+            });
+          })} className="space-y-4">
             <FormField
               control={form.control}
               name="phoneNumber"
