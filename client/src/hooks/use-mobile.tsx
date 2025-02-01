@@ -24,22 +24,37 @@ export function useMobile() {
 
   React.useEffect(() => {
     const checkMobile = () => {
-      const ua = navigator.userAgent
-      const isSafari = /Safari/i.test(ua) && !/Chrome/i.test(ua)
-      const isChrome = /Chrome/i.test(ua)
-      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(ua)
+      // User agent detection
+      const ua = navigator.userAgent.toLowerCase()
+      const isMobileUA = /iphone|ipad|ipod|android|blackberry|windows phone|opera mini|silk/i.test(ua)
       
-      console.log('[useMobile] Browser detection:', {
+      // Screen size detection
+      const isMobileScreen = window.innerWidth <= MOBILE_BREAKPOINT
+      
+      // Touch capability detection
+      const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0)
+      
+      // Platform detection
+      const isMobilePlatform = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.platform)
+      
+      console.log('[useMobile] Enhanced detection:', {
         userAgent: ua,
-        isSafari,
-        isChrome,
-        isMobileDevice
+        isMobileUA,
+        isMobileScreen,
+        isTouchDevice,
+        isMobilePlatform,
+        maxTouchPoints: navigator.maxTouchPoints,
+        platform: navigator.platform
       })
       
-      setIsMobile(isMobileDevice)
+      // Combine all checks
+      const isDeviceMobile = isMobileUA || isMobilePlatform || (isTouchDevice && isMobileScreen)
+      setIsMobile(isDeviceMobile)
     }
     
     checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
   return isMobile
