@@ -313,7 +313,10 @@ export function registerRoutes(app: Express): Server {
       const rawBody = JSON.stringify(req.body);
 
       if (!signature || !timestamp) {
-        console.error('[KYC Webhook] Missing signature or timestamp headers');
+        console.error('[KYC Webhook] Missing signature or timestamp headers', {
+          headers: req.headers,
+          body: req.body
+        });
         return res.status(400).json({ error: 'Missing required headers' });
       }
 
