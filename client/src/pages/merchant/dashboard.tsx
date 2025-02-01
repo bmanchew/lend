@@ -57,7 +57,7 @@ export default function MerchantDashboard() {
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
