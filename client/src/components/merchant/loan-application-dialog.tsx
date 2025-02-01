@@ -1,8 +1,9 @@
+
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -11,20 +12,29 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 const applicationSchema = z.object({
-  borrowerName: z.string().min(1, "Borrower name is required"),
-  borrowerPhone: z.string().min(10, "Valid phone number is required"),
-  borrowerEmail: z.string().email("Valid email is required").optional().or(z.literal("")),
-  amount: z.string().optional(),
-  notes: z.string().optional()
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Valid email is required"),
+  phone: z.string().min(10, "Valid phone number is required"),
+  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  streetAddress: z.string().min(1, "Street address is required"),
+  aptNumber: z.string().optional(),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  zipCode: z.string().min(5, "Valid ZIP code is required"),
+  program: z.string().min(1, "Program is required"),
+  fundingAmount: z.string().min(1, "Funding amount is required"),
+  salesRepEmail: z.string().email("Valid sales rep email is required")
 });
 
 type ApplicationFormData = z.infer<typeof applicationSchema>;
 
 interface Props {
   merchantId: number;
+  merchantName: string;
 }
 
-export function LoanApplicationDialog({ merchantId }: Props) {
+export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -32,11 +42,19 @@ export function LoanApplicationDialog({ merchantId }: Props) {
   const form = useForm<ApplicationFormData>({
     resolver: zodResolver(applicationSchema),
     defaultValues: {
-      borrowerName: "",
-      borrowerPhone: "",
-      borrowerEmail: "",
-      amount: "",
-      notes: ""
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      dateOfBirth: "",
+      streetAddress: "",
+      aptNumber: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      program: "",
+      fundingAmount: "",
+      salesRepEmail: ""
     }
   });
 
@@ -47,7 +65,10 @@ export function LoanApplicationDialog({ merchantId }: Props) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          merchantName
+        }),
       });
       if (!response.ok) {
         throw new Error("Failed to send invitation");
@@ -83,78 +104,216 @@ export function LoanApplicationDialog({ merchantId }: Props) {
           <span>Send Loan Application</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Send Loan Application</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client First Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Jane" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Last Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Smith" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" placeholder="jane@example.com" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Phone</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="tel" placeholder="123-456-7890" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
-              name="borrowerName"
+              name="dateOfBirth"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Borrower Name</FormLabel>
+                  <FormLabel>Date of Birth</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="Enter borrower's full name" />
+                    <Input {...field} type="date" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="streetAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Street Address</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="123 ShiFi Lane" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="aptNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>APT/STE #</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="APT #2" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Atlanta" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="state"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>State</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GA">Georgia</SelectItem>
+                          <SelectItem value="FL">Florida</SelectItem>
+                          <SelectItem value="TX">Texas</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="zipCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>ZIP Code</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="12345" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="program"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Program</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select program" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="program1">Program 1</SelectItem>
+                          <SelectItem value="program2">Program 2</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="fundingAmount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Funding Amount Needed</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" min="0" step="0.01" placeholder="9800" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
-              name="borrowerPhone"
+              name="salesRepEmail"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel>Sales Rep Email</FormLabel>
                   <FormControl>
-                    <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                    <Input {...field} type="email" placeholder="sales@example.com" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="borrowerEmail"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email (Optional)</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="email" placeholder="borrower@example.com" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Loan Amount (Optional)</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="number" min="0" step="0.01" placeholder="Enter loan amount" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="Add any additional notes" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end gap-2">
+
+            <div className="flex justify-end gap-2 pt-4">
               <Button
                 type="button"
                 variant="outline"
@@ -162,12 +321,7 @@ export function LoanApplicationDialog({ merchantId }: Props) {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={sendInviteMutation.isPending}
-              >
-                Send Invitation
-              </Button>
+              <Button type="submit">Send Application</Button>
             </div>
           </form>
         </Form>
