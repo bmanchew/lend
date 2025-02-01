@@ -129,9 +129,10 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        const fullPhone = username;
+        const fullPhone = username.startsWith('+1') ? username : `+1${username.replace(/\D/g, '')}`;
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
+        // Find user by phone number
         const [user] = await db
           .select()
           .from(users)
@@ -139,7 +140,7 @@ export function setupAuth(app: Express) {
 
         console.log('[AUTH] User lookup result:', { 
           found: !!user,
-          user,
+          phoneNumber: fullPhone,
           providedOtp: password
         });
 
