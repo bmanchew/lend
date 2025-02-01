@@ -88,6 +88,17 @@ class SMSService {
 
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
     try {
+      // Ensure phone number is in E.164 format
+      if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+' + phoneNumber;
+      }
+      
+      // Basic validation
+      if (!/^\+\d{10,15}$/.test(phoneNumber)) {
+        console.error("[SMSService] Invalid phone number format:", phoneNumber);
+        return false;
+      }
+
       console.log("[SMSService] Sending OTP to:", phoneNumber);
 
       const message = await this.client.messages.create({
@@ -106,7 +117,11 @@ class SMSService {
     } catch (error: any) {
       console.error("[SMSService] Error sending OTP:", {
         phoneNumber,
-        error: error.message
+        error: error.message,
+        code: error.code,
+        statusCode: error.status,
+        moreInfo: error.moreInfo,
+        details: error.details
       });
       return false;
     }
