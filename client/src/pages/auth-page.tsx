@@ -126,88 +126,55 @@ export default function AuthPage() {
                     )}
                   />
 
-                  {loginForm.watch("loginType") === "customer" ? (
-                    <>
-                      <FormField
-                        control={loginForm.control}
-                        name="phoneNumber"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Phone Number</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {isOtpSent ? (
-                        <FormField
-                          control={loginForm.control}
-                          name="code"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Verification Code</FormLabel>
-                              <FormControl>
-                                <InputOTP maxLength={6} onComplete={field.onChange}>
-                                  <InputOTPGroup>
-                                    <InputOTPSlot index={0} />
-                                    <InputOTPSlot index={1} />
-                                    <InputOTPSlot index={2} />
-                                    <InputOTPSlot index={3} />
-                                    <InputOTPSlot index={4} />
-                                    <InputOTPSlot index={5} />
-                                  </InputOTPGroup>
-                                </InputOTP>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      ) : (
-                        <Button 
-                          type="button"
-                          onClick={() => {
-                            const phoneNumber = loginForm.getValues("phoneNumber");
-                            if (phoneNumber) {
-                              setIsOtpSent(true);
-                            }
-                          }}
-                          className="w-full"
-                        >
-                          Send Code
-                        </Button>
+                  <FormField
+                    control={loginForm.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {isOtpSent ? (
+                    <FormField
+                      control={loginForm.control}
+                      name="code"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Verification Code</FormLabel>
+                          <FormControl>
+                            <InputOTP maxLength={6} onComplete={field.onChange}>
+                              <InputOTPGroup>
+                                <InputOTPSlot index={0} />
+                                <InputOTPSlot index={1} />
+                                <InputOTPSlot index={2} />
+                                <InputOTPSlot index={3} />
+                                <InputOTPSlot index={4} />
+                                <InputOTPSlot index={5} />
+                              </InputOTPGroup>
+                            </InputOTP>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
                       )}
-                    </>
+                    />
                   ) : (
-                    <>
-                      <FormField
-                        control={loginForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Username</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="text" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={loginForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Password</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="password" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </>
+                    <Button 
+                      type="button"
+                      onClick={() => {
+                        const phoneNumber = loginForm.getValues("phoneNumber");
+                        if (phoneNumber) {
+                          setIsOtpSent(true);
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      Send Code
+                    </Button>
                   )}
                   <Button 
                     type="submit" 
