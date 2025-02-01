@@ -13,11 +13,12 @@ interface KycVerificationModalProps {
   onVerificationComplete?: () => void;
 }
 
-export function VerificationModal({ 
+export function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
 }: KycVerificationModalProps) {
+  console.log("[KYC Modal] Rendering with props:", { isOpen, onVerificationComplete });
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId');
   const { toast } = useToast();
@@ -36,22 +37,34 @@ export function VerificationModal({
 
   const { mutate: startKyc, isPending: isStarting } = useMutation({
     mutationFn: async () => {
+      console.log("[KYC Start] Initiating verification for userId:", userId);
+      
       if (!userId) {
+        console.error("[KYC Start] Missing userId");
         throw new Error('User ID is required');
       }
 
-      const response = await fetch('/api/kyc/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
+      try {
+        const response = await fetch('/api/kyc/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.details || error.error);
+        console.log("[KYC Start] Response status:", response.status);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          console.error("[KYC Start] API error:", data);
+          throw new Error(data.details || data.error || 'Failed to start verification');
+        }
+
+        console.log("[KYC Start] Success:", data);
+        return data;
+      } catch (error) {
+        console.error("[KYC Start] Request failed:", error);
+        throw error;
       }
-
-      return response.json();
     },
     onSuccess: (data) => {
       window.open(data.redirectUrl, 'verification', 'width=800,height=800');

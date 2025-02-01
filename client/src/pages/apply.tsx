@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
-import { VerificationModal } from '@/components/kyc/verification-modal';
+import { KycVerificationModal } from '@/components/kyc/verification-modal';
 import { Button } from '@/components/ui/button';
+console.log("[Apply Page] Loading with URL params:", window.location.search);
 
 export default function ApplyPage() {
   const [_, params] = useRoute('/apply/:token');
@@ -56,7 +57,7 @@ export default function ApplyPage() {
           <Button onClick={handleStart}>Get Started</Button>
         </div>
       ) : (
-        <VerificationModal
+        <KycVerificationModal
           isOpen={!kycCompleted}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
