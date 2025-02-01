@@ -50,8 +50,8 @@ export default function ApplyPage() {
       ) : (
         <VerificationModal
           isOpen={!kycCompleted}
-          onComplete={() => setKycCompleted(true)}
-          onOpenChange={(open) => !open && setKycCompleted(true)}
+          onClose={() => setKycCompleted(true)}
+          onVerificationComplete={() => setKycCompleted(true)}
         />
       )}
     </div>

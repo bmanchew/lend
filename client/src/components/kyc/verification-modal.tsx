@@ -6,6 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 
+// Debug log on module load
+console.log('[KYC Modal] Module loaded');
+
 interface KycStatus {
   status: string;
   sessionId?: string;
@@ -21,131 +24,126 @@ interface KycStartError {
   details?: string;
 }
 
-// Debug log to verify module loading
-console.log('[KYC Modal] Module loaded, preparing to export component');
+interface VerificationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onVerificationComplete?: () => void;
+}
 
 export function VerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
-}: { 
-  isOpen: boolean; 
-  onClose: () => void;
-  onVerificationComplete?: () => void;
-}) {
+}: VerificationModalProps) {
+  console.log('[KYC Modal] Rendering with props:', { isOpen });
+
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Query to check KYC status with polling
   const { data: kycData, isLoading: isCheckingStatus } = useQuery<KycStatus>({
     queryKey: ['/api/kyc/status', user?.id],
-    enabled: !!user?.id,
+    enabled: !!user?.id && isOpen,
     staleTime: 0,
     queryFn: async () => {
-      if (!user?.id) throw new Error('User ID is required');
-      console.log('[KYC Modal] Checking KYC status for user:', user.id);
+      console.log('[KYC Modal] Checking status for user:', user?.id);
+
+      if (!user?.id) {
+        console.error('[KYC Modal] No user ID available');
+        throw new Error('User ID is required');
+      }
 
       try {
         const response = await fetch(`/api/kyc/status?userId=${user.id}`);
+        console.log('[KYC Modal] Status response:', response.status);
+
         if (!response.ok) {
-          // If 404, return initial status instead of throwing
           if (response.status === 404) {
-            console.log('[KYC Modal] No existing KYC session, using initial status');
+            console.log('[KYC Modal] No existing session found');
             return { status: 'initial' };
           }
-          console.error('[KYC Modal] Failed to fetch KYC status:', {
-            status: response.status,
-            statusText: response.statusText
-          });
           throw new Error('Failed to fetch KYC status');
         }
 
         const data = await response.json();
-        console.log('[KYC Modal] Received KYC status:', data);
+        console.log('[KYC Modal] Status data:', data);
         return data;
       } catch (error) {
-        console.error('[KYC Modal] Error in status check:', error);
+        console.error('[KYC Modal] Status check error:', error);
         throw error;
       }
     },
-    enabled: isOpen && !!user?.id,
     refetchInterval: (data) => {
-      // Poll every 2 seconds if verification is ongoing
-      if (data?.status === 'pending' || data?.status === 'initialized' || data?.status === 'in_progress') {
-        console.log('[KYC Modal] Polling status:', data.status);
-        return 2000;
-      }
-      console.log('[KYC Modal] Stopping poll, final status:', data?.status);
-      return false;
+      const pollableStatus = data?.status === 'pending' || 
+                           data?.status === 'initialized' || 
+                           data?.status === 'in_progress';
+      console.log('[KYC Modal] Poll status:', { status: data?.status, shouldPoll: pollableStatus });
+      return pollableStatus ? 2000 : false;
     },
   });
 
-  // Effect to handle verification completion
-  useEffect(() => {
-    const status = kycData?.status?.toLowerCase();
-    if (status === 'approved') {
-      console.log('[KYC Modal] Verification completed successfully');
-      if (onVerificationComplete) {
-        onVerificationComplete();
-      }
-      onClose();
-      // Force reload to update UI state
-      window.location.reload();
-    } else if (status === 'pending' || status === 'initialized' || status === 'in_progress') {
-      console.log('[KYC Modal] Verification in progress:', status);
-    }
-  }, [kycData?.status, onVerificationComplete, onClose]);
-
-  // Mutation to start KYC process
-  const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error, void>({
+  const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error>({
     mutationFn: async () => {
-      if (!user?.id) throw new Error('User ID is required');
+      console.log('[KYC Modal] Starting verification for user:', user?.id);
 
-      console.log('[KYC Modal] Starting KYC process for user:', user.id);
-      try {
-        const response = await fetch('/api/kyc/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            userId: user.id,
-            returnUrl: '/dashboard'
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json() as KycStartError;
-          console.error('[KYC Modal] Failed to start KYC:', errorData);
-          throw new Error(errorData.details || errorData.error || 'Failed to start KYC process');
-        }
-
-        const data = await response.json();
-        console.log('[KYC Modal] KYC process started successfully:', {
-          userId: user.id,
-          redirectUrl: data.redirectUrl
-        });
-        return data;
-      } catch (error) {
-        console.error('[KYC Modal] Error starting KYC process:', error);
-        throw error;
+      if (!user?.id) {
+        throw new Error('User ID is required');
       }
+
+      const response = await fetch('/api/kyc/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: user.id,
+          returnUrl: '/dashboard'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json() as KycStartError;
+        console.error('[KYC Modal] Start error:', errorData);
+        throw new Error(errorData.details || errorData.error);
+      }
+
+      const data = await response.json();
+      console.log('[KYC Modal] Start successful:', data);
+      return data;
     },
     onSuccess: (data) => {
       console.log('[KYC Modal] Opening verification window');
       window.open(data.redirectUrl, 'verification', 'width=800,height=800');
     },
-    onError: (error: Error) => {
-      console.error('[KYC Modal] Error starting KYC:', error);
+    onError: (error) => {
+      console.error('[KYC Modal] Start error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to start verification process. Please try again.",
+        description: error.message || "Failed to start verification",
         variant: "destructive",
       });
     },
   });
 
+  useEffect(() => {
+    try {
+      console.log('[KYC Modal] Effect triggered:', {
+        isOpen,
+        userId: user?.id,
+        status: kycData?.status
+      });
+
+      if (kycData?.status === 'approved') {
+        console.log('[KYC Modal] Verification completed');
+        onVerificationComplete?.();
+        onClose();
+      }
+    } catch (error) {
+      console.error('[KYC Modal] Effect error:', error);
+    }
+  }, [kycData?.status, onVerificationComplete, onClose, isOpen, user?.id]);
+
   const renderContent = () => {
+    console.log('[KYC Modal] Rendering content for status:', kycData?.status);
+
     if (isCheckingStatus) {
-      console.log('[KYC Modal] Rendering loading state');
       return (
         <div className="flex justify-center p-4">
           <Loader2 className="h-8 w-8 animate-spin" />
@@ -154,11 +152,10 @@ export function VerificationModal({
     }
 
     if (kycData?.status === 'Approved') {
-      console.log('[KYC Modal] Rendering success state');
       return (
         <div className="space-y-4">
           <p className="text-green-600 font-medium">
-            Your identity has been verified successfully!
+            Verification successful!
           </p>
           <div className="flex justify-end">
             <Button onClick={onClose}>Continue</Button>
@@ -167,12 +164,12 @@ export function VerificationModal({
       );
     }
 
-    if (kycData?.status === 'pending' || kycData?.status === 'in_progress' || kycData?.status === 'initialized') {
-      console.log('[KYC Modal] Rendering pending state');
+    const isPending = ['pending', 'in_progress', 'initialized'].includes(kycData?.status || '');
+    if (isPending) {
       return (
         <div className="space-y-4">
           <p className="text-amber-600">
-            Please complete the verification process in the opened window.
+            Please complete the verification in the opened window.
           </p>
           <div className="flex justify-center items-center space-x-2">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -183,10 +180,7 @@ export function VerificationModal({
           <div className="flex justify-end space-x-2">
             <Button variant="outline" onClick={onClose}>Later</Button>
             <Button 
-              onClick={() => {
-                console.log('[KYC Modal] Restarting verification');
-                startKyc();
-              }} 
+              onClick={() => startKyc()} 
               disabled={isStarting}
             >
               {isStarting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -197,39 +191,14 @@ export function VerificationModal({
       );
     }
 
-    if (kycData?.status === 'Declined') {
-      console.log('[KYC Modal] Rendering declined state');
-      return (
-        <div className="space-y-4">
-          <p className="text-red-600">
-            Your verification was not successful. Please try again.
-          </p>
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={onClose}>Later</Button>
-            <Button 
-              onClick={() => {
-                console.log('[KYC Modal] Retrying verification after decline');
-                startKyc();
-              }} 
-              disabled={isStarting}
-            >
-              {isStarting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Retry Verification
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    console.log('[KYC Modal] Rendering initial state');
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Before you can proceed with your loan application, we need to verify your identity.
+          We need to verify your identity to proceed.
           This process is quick and secure.
         </p>
         <div className="space-y-2">
-          <h4 className="font-medium">What you'll need:</h4>
+          <h4 className="font-medium">You'll need:</h4>
           <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
             <li>Government-issued photo ID</li>
             <li>Proof of address</li>
@@ -239,10 +208,7 @@ export function VerificationModal({
         <div className="flex justify-end space-x-2">
           <Button variant="outline" onClick={onClose}>Later</Button>
           <Button 
-            onClick={() => {
-              console.log('[KYC Modal] Starting initial verification');
-              startKyc();
-            }} 
+            onClick={() => startKyc()} 
             disabled={isStarting}
           >
             {isStarting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -252,15 +218,6 @@ export function VerificationModal({
       </div>
     );
   };
-
-  useEffect(() => {
-    try {
-      console.log('[KYC Modal] Modal state changed:', {
-      isOpen,
-      userId: user?.id,
-      currentStatus: kycData?.status
-    });
-  }, [isOpen, user?.id, kycData?.status]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
