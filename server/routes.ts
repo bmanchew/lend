@@ -220,13 +220,24 @@ export function registerRoutes(app: Express): Server {
       const allMerchants = await db
         .select()
         .from(merchants)
-        .leftJoin(users, eq(merchants.userId, users.id));
-      
-      const merchantsWithPrograms = allMerchants.map(row => ({
-        ...row.merchants,
-        user: row.users,
-        programs: []
-      }));
+        .leftJoin(users, eq(merchants.userId, users.id))
+        .leftJoin(programs, eq(merchants.id, programs.merchantId));
+
+      const merchantsMap = new Map();
+      allMerchants.forEach(row => {
+        if (!merchantsMap.has(row.merchants.id)) {
+          merchantsMap.set(row.merchants.id, {
+            ...row.merchants,
+            user: row.users,
+            programs: []
+          });
+        }
+        if (row.programs) {
+          merchantsMap.get(row.merchants.id).programs.push(row.programs);
+        }
+      });
+
+      const merchantsWithPrograms = Array.from(merchantsMap.values());
       
       res.json(merchantsWithPrograms);
     } catch (err:any) {
