@@ -392,11 +392,9 @@ export function registerRoutes(app: Express): Server {
         .returning();
 
       // Start KYC process
-      const sessionUrl = await diditService.initializeKycSession(user.id);
-      
-      res.json({ 
+      res.json({
         userId: user.id,
-        redirectUrl: sessionUrl 
+        redirectUrl: `/apply?userId=${user.id}#verification`
       });
     } catch (err) {
       console.error('Error creating borrower account:', err);

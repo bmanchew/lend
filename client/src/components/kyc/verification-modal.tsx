@@ -1,10 +1,11 @@
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
 interface KycVerificationModalProps {
   isOpen: boolean;
@@ -17,31 +18,15 @@ export function KycVerificationModal({
   onClose,
   onVerificationComplete
 }: KycVerificationModalProps) {
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('userId');
   const { toast } = useToast();
-  const [tempUserId] = useState(() => {
-    const stored = localStorage.getItem('temp_user_id');
-    return stored ? parseInt(stored) : null;
-  });
-
-  const effectiveUserId = user?.id || tempUserId;
-
-  console.log('[KYC Modal] Rendering with context:', {
-    authUserId: user?.id,
-    tempUserId,
-    effectiveUserId,
-    isOpen
-  });
 
   const { data: kycData, isLoading: isCheckingStatus } = useQuery({
-    queryKey: ['/api/kyc/status', effectiveUserId],
-    enabled: !!effectiveUserId && isOpen,
+    queryKey: ['/api/kyc/status', userId],
+    enabled: !!userId && isOpen,
     queryFn: async () => {
-      if (!effectiveUserId) {
-        throw new Error('User ID is required');
-      }
-
-      const response = await fetch(`/api/kyc/status?userId=${effectiveUserId}`);
+      const response = await fetch(`/api/kyc/status?userId=${userId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch KYC status');
       }
@@ -51,17 +36,14 @@ export function KycVerificationModal({
 
   const { mutate: startKyc, isPending: isStarting } = useMutation({
     mutationFn: async () => {
-      if (!effectiveUserId) {
+      if (!userId) {
         throw new Error('User ID is required');
       }
 
       const response = await fetch('/api/kyc/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: effectiveUserId,
-          returnUrl: '/dashboard'
-        }),
+        body: JSON.stringify({ userId }),
       });
 
       if (!response.ok) {
@@ -99,7 +81,7 @@ export function KycVerificationModal({
       );
     }
 
-    if (kycData?.status === 'Approved') {
+    if (kycData?.status === 'approved') {
       return (
         <div className="space-y-4">
           <p className="text-green-600 font-medium">
