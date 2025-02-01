@@ -1,6 +1,7 @@
 
 import { db } from "@db";
 import { merchants } from "@db/schema";
+import { eq } from "drizzle-orm";
 
 async function createMerchant() {
   try {
