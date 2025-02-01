@@ -92,19 +92,34 @@ export default function CustomerLogin() {
                 control={form.control}
                 name="code"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Verification Code</FormLabel>
+                  <FormItem className="space-y-4">
+                    <FormLabel className="text-center block">Enter Verification Code</FormLabel>
                     <FormControl>
-                      <InputOTP maxLength={6} value={field.value} onChange={field.onChange}>
-                        <InputOTPGroup>
-                          <InputOTPSlot index={0} />
-                          <InputOTPSlot index={1} />
-                          <InputOTPSlot index={2} />
-                          <InputOTPSlot index={3} />
-                          <InputOTPSlot index={4} />
-                          <InputOTPSlot index={5} />
-                        </InputOTPGroup>
-                      </InputOTP>
+                      <div className="flex flex-col items-center gap-4">
+                        <InputOTP 
+                          maxLength={6} 
+                          value={field.value} 
+                          onChange={field.onChange}
+                          className="gap-2"
+                        >
+                          <InputOTPGroup>
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={0} />
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={1} />
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={2} />
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={3} />
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={4} />
+                            <InputOTPSlot className="w-12 h-12 text-lg" index={5} />
+                          </InputOTPGroup>
+                        </InputOTP>
+                        <Button 
+                          type="button" 
+                          variant="link" 
+                          className="text-sm text-muted-foreground"
+                          onClick={handleSendOTP}
+                        >
+                          Resend Code
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
