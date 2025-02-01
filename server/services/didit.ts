@@ -39,7 +39,7 @@ class DiditService {
     };
 
     console.log("[DiditService] Initialized with configuration", {
-      webhookUrl: this.config.webhookUrl,
+      webhookUrl: 'https://shi-fi-lend-brandon263.replit.app/api/kyc/webhook',
       clientId: this.config.clientId.substring(0, 4) + '***'
     });
   }
