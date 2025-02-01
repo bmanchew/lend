@@ -107,7 +107,7 @@ export function setupAuth(app: Express) {
     }, async (req, username, password, done) => {
       try {
         const loginType = req.body.loginType || 'customer';
-        
+
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
           const [user] = await db
@@ -127,7 +127,7 @@ export function setupAuth(app: Express) {
 
           return done(null, user);
         }
-        
+
         // For customers, use phone & OTP
         const [user] = await db
           .select()
@@ -287,12 +287,12 @@ export function setupAuth(app: Express) {
       timestamp: new Date().toISOString()
     });
     const { phoneNumber } = req.body;
-    
+
     if (!phoneNumber) {
       console.error('[AUTH] Missing phone number in request');
       return res.status(400).json({ error: 'Phone number is required' });
     }
-    
+
     try {
       console.log('[AUTH] Generating OTP for:', phoneNumber);
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -301,7 +301,7 @@ export function setupAuth(app: Express) {
 
       console.log('[AUTH] Attempting to send OTP');
       const sent = await smsService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
-      
+
       if (!sent) {
         console.error('[AUTH] SMS service failed to send OTP');
         return res.status(500).json({ error: 'Failed to send OTP' });
