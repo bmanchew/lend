@@ -21,8 +21,30 @@ export default function CustomerLogin() {
       phoneNumber: "",
       code: "",
       loginType: "customer"
-    },
+    }
   });
+
+  const handleSendOTP = async () => {
+    let phoneNumber = form.getValues("phoneNumber");
+    if (!phoneNumber.startsWith('+1')) {
+      phoneNumber = '+1' + phoneNumber.replace(/\D/g, '');
+    }
+    
+    try {
+      await axios.post("/api/sendOTP", { phoneNumber });
+      setIsOtpSent(true);
+      toast({
+        title: "Code Sent",
+        description: "Enter the code to sign in to your account"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send code",
+        variant: "destructive"
+      });
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.split('?')[1]);

@@ -128,15 +128,27 @@ export function setupAuth(app: Express) {
           return done(null, user);
         }
 
-        // For customers, use phone & OTP
+        // For customers, use phone & OTP only
         const [user] = await db
           .select()
           .from(users)
           .where(eq(users.phoneNumber, username))
           .limit(1);
 
-        if (!user || user.role !== 'customer') {
-          return done(null, false, { message: "Invalid phone number" });
+        if (!user) {
+          // Create new user if doesn't exist
+          const [newUser] = await db
+            .insert(users)
+            .values({
+              username: username,
+              password: Math.random().toString(36).slice(-8),
+              email: `${username.replace(/\D/g, '')}@temp.shifi.com`,
+              name: '',
+              role: 'customer',
+              phoneNumber: username,
+            })
+            .returning();
+          user = newUser;
         }
 
         const isOtpValid = user.lastOtpCode === password && 
@@ -144,7 +156,7 @@ export function setupAuth(app: Express) {
                         new Date(user.otpExpiry) > new Date();
 
         if (!isOtpValid) {
-          return done(null, false, { message: "Invalid or expired code" });
+          return done(null, false, { message: "Invalid code" });
         }
 
         // Clear used OTP
