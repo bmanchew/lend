@@ -116,8 +116,8 @@ class DiditService {
 
       const accessToken = await this.getAccessToken();
 
-      const replitDomain = process.env.REPL_SLUG && process.env.REPL_OWNER
-        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+      const replitDomain = process.env.REPL_ID 
+        ? `https://${process.env.REPL_ID}.id.repl.co`
         : 'http://localhost:3000';
 
       const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
