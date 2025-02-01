@@ -28,6 +28,19 @@ export function KycVerificationModal({
   const userId = searchParams.get('userId');
   const { toast } = useToast();
 
+  console.log("[KYC Modal] Initializing with userId:", userId);
+
+  if (!userId) {
+    console.error("[KYC Modal] Missing userId in URL parameters");
+    toast({
+      title: "Error",
+      description: "User ID is required to start verification",
+      variant: "destructive",
+    });
+    onClose();
+    return null;
+  }
+
   const { data: kycData, isLoading: isCheckingStatus } = useQuery({
     queryKey: ['/api/kyc/status', userId],
     enabled: !!userId && isOpen,

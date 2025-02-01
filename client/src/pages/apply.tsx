@@ -9,6 +9,7 @@ export default function ApplyPage() {
   const [_, params] = useRoute('/apply/:token');
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
+  const [userId, setUserId] = useState(null); // Added userId state
 
   const handleStart = async () => {
     try {
@@ -37,6 +38,7 @@ export default function ApplyPage() {
         throw new Error('No user ID returned from server');
       }
 
+      setUserId(data.userId); // Set userId
       setStarted(true);
 
       if (data.redirectUrl) {
@@ -59,9 +61,10 @@ export default function ApplyPage() {
         </div>
       ) : (
         <KycVerificationModal
-          isOpen={!kycCompleted}
+          isOpen={!kycCompleted && userId !== null} // Added userId check
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
+          userId={userId} // Pass userId as prop
         />
       )}
     </div>
