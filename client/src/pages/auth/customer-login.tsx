@@ -1,7 +1,8 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
+import { useLocation } from "wouter";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ export default function CustomerLogin() {
   const [isOtpSent, setIsOtpSent] = useState(false);
   const { toast } = useToast();
   
+  const [location] = useLocation();
   const form = useForm({
     defaultValues: {
       phoneNumber: "",
@@ -21,6 +23,15 @@ export default function CustomerLogin() {
       loginType: "customer"
     },
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.split('?')[1]);
+    const phone = params.get('phone');
+    if (phone) {
+      form.setValue('phoneNumber', phone);
+      handleSendOTP();
+    }
+  }, [location]);
 
   const handleSendOTP = async () => {
     const phoneNumber = form.getValues("phoneNumber");

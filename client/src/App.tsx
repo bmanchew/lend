@@ -20,9 +20,14 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        <Redirect to="/login/customer" /> {/* Default redirect to customer login */}
+        <Redirect to="/login/customer" />
       </Route>
-      <Route path="/login/customer" component={CustomerLogin} />
+      <Route path="/login/customer">
+        <CustomerLogin />
+      </Route>
+      <Route path="/auth/customer-login">
+        <CustomerLogin />
+      </Route>
       <Route path="/login/merchant" component={MerchantLogin} />
       <Route path="/login/admin" component={AdminLogin} />
       <ProtectedRoute path="/customer" component={CustomerDashboard} />
