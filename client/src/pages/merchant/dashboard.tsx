@@ -40,6 +40,7 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
+          {console.log("Merchant data:", merchant)}
           {merchant && (
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />

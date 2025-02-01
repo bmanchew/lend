@@ -100,7 +100,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="lg" className="gap-2">
+        <Button size="lg" className="gap-2 bg-primary text-white hover:bg-primary/90">
           <span>Send Loan Application</span>
         </Button>
       </DialogTrigger>
