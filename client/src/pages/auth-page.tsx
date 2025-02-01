@@ -299,6 +299,21 @@ export default function AuthPage() {
                       </FormItem>
                     )}
                   />
+                  {registerForm.watch("role") === "customer" && (
+                    <FormField
+                      control={registerForm.control}
+                      name="phoneNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl>
+                            <Input type="tel" placeholder="+1 (555) 000-0000" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <Button 
                     type="submit" 
                     className="w-full"
