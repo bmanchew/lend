@@ -1,10 +1,11 @@
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation } from "react-router-dom";
 
 interface KycVerificationModalProps {
   isOpen: boolean;
@@ -12,9 +13,7 @@ interface KycVerificationModalProps {
   onVerificationComplete?: () => void;
 }
 
-console.log("[KYC Modal] Module loaded");
-
-export default function KycVerificationModal({ 
+export function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
@@ -123,7 +122,6 @@ export default function KycVerificationModal({
       }
     } catch (error) {
       console.error("[KYC Modal] Error in completion handlers:", error);
-      // Still close modal on error to prevent UI lock
       onClose();
     }
   }, [kycData?.status, onVerificationComplete, onClose]);
@@ -216,3 +214,5 @@ export default function KycVerificationModal({
     </Dialog>
   );
 }
+
+export default KycVerificationModal;
