@@ -138,7 +138,7 @@ export function setupAuth(app: Express) {
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
         // Find user by phone number
-        const [user] = await db
+        let [user] = await db
           .select()
           .from(users)
           .where(eq(users.phoneNumber, fullPhone));
