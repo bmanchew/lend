@@ -332,7 +332,7 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ error: 'Failed to send OTP' });
       }
 
-      await db.update(users).set({ lastOtpCode: otp, otpExpiry: expiry.toISOString() }).where(eq(users.phoneNumber, phoneNumber));
+      await db.update(users).set({ lastOtpCode: otp, otpExpiry: expiry }).where(eq(users.phoneNumber, phoneNumber));
       res.json({ message: 'OTP sent successfully' });
     } catch (error) {
       console.error('Error sending OTP:', error);
