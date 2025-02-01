@@ -25,10 +25,12 @@ export default function CustomerLogin() {
   });
 
   const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("phoneNumber");
-    if (!phoneNumber.startsWith('+1')) {
-      phoneNumber = '+1' + phoneNumber.replace(/\D/g, '');
+    let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
+    if (!phoneNumber.startsWith('1')) {
+      phoneNumber = '1' + phoneNumber;
     }
+    phoneNumber = '+' + phoneNumber;
+    form.setValue("phoneNumber", phoneNumber);
 
     try {
       const response = await axios.post("/api/sendOTP", { phoneNumber });

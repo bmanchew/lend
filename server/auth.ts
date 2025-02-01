@@ -133,11 +133,14 @@ export function setupAuth(app: Express) {
         let normalizedPhone = username.replace(/^\+?1/, '');
         // Remove any non-digit characters
         normalizedPhone = normalizedPhone.replace(/\D/g, '');
+        
+        // Add +1 back for consistent format
+        const fullPhone = '+1' + normalizedPhone;
 
         let user = await db
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, normalizedPhone))
+          .where(eq(users.phoneNumber, fullPhone))
           .limit(1)
           .then(rows => rows[0]);
 
@@ -151,11 +154,11 @@ export function setupAuth(app: Express) {
               email: `${normalizedPhone}@temp.shifi.com`,
               name: '',
               role: 'customer',
-              phoneNumber: normalizedPhone,
+              phoneNumber: fullPhone,
             })
             .returning()
             .then(rows => rows[0]);
-          user = newUser; // Assign the newly created user to the user variable
+          user = newUser;
         }
 
         console.log('Validating OTP for user:', {
