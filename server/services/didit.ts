@@ -133,7 +133,10 @@ class DiditService {
       const sessionData = {
         callback: callbackUrl.toString(),
         features: 'OCR + FACE',
-        vendor_data: user.id.toString(),
+        vendor_data: JSON.stringify({
+          userId: user.id,
+          username: user.username
+        }),
         redirect_url: completeReturnUrl
       };
 
@@ -271,9 +274,11 @@ class DiditService {
           .where(eq(verificationSessions.sessionId, session_id));
 
         if (status === 'Approved' || status === 'Declined') {
-          const userId = parseInt(vendor_data);
+          const vendorData = JSON.parse(vendor_data);
+          const userId = vendorData.userId;
           console.log("[DiditService] Updating user KYC status", {
             userId,
+            username: vendorData.username,
             status: status === 'Approved' ? 'verified' : 'failed'
           });
 
