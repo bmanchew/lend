@@ -42,9 +42,15 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const { data: programs } = useQuery({
     queryKey: ['programs', merchantId],
     queryFn: async () => {
+      console.log('Fetching programs for merchant:', merchantId);
       const response = await fetch(`/api/merchants/${merchantId}/programs`);
-      if (!response.ok) throw new Error('Failed to fetch programs');
-      return response.json();
+      if (!response.ok) {
+        console.error('Failed to fetch programs:', response.statusText);
+        throw new Error('Failed to fetch programs');
+      }
+      const data = await response.json();
+      console.log('Fetched programs:', data);
+      return data;
     },
   });
 
@@ -284,8 +290,11 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                           <SelectValue placeholder="Select program" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="program1">Program 1</SelectItem>
-                          <SelectItem value="program2">Program 2</SelectItem>
+                          {programs?.map((program) => (
+                            <SelectItem key={program.id} value={program.id.toString()}>
+                              {program.name} ({program.term} months @ {program.interestRate}%)
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </FormControl>
