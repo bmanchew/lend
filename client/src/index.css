@@ -7,6 +7,21 @@
     @apply border-border;
   }
 
+
+/* Improve touch interactions */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.touch-none {
+  touch-action: none;
+}
+
+.touch-auto {
+  touch-action: auto !important;
+}
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }

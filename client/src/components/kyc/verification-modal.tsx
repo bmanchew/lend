@@ -105,8 +105,8 @@ export function KycVerificationModal({
   }, [kycData?.status, onVerificationComplete]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()} className="z-50">
-      <DialogContent className="z-50 relative">
+    <Dialog open={isOpen} onOpenChange={() => onClose()} className="z-[9999]">
+      <DialogContent className="z-[9999] relative touch-none">
         <DialogHeader>
           <DialogTitle>Identity Verification Required</DialogTitle>
         </DialogHeader>
@@ -127,8 +127,12 @@ export function KycVerificationModal({
           <Button
             type="button"
             role="button"
-            style={{ touchAction: 'manipulation' }}
-            className="relative z-[100]"
+            style={{ 
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              cursor: 'pointer'
+            }}
+            className="relative z-[9999] touch-auto active:scale-95 transition-transform"
             onClick={async (e) => {
               e.preventDefault();
               e.stopPropagation();
