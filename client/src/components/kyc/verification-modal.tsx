@@ -77,11 +77,14 @@ export function KycVerificationModal({
 
   // Effect to handle verification completion
   useEffect(() => {
-    if (kycData?.status === 'Approved' && onVerificationComplete) {
+    if (kycData?.status === 'Approved') {
       console.log('[KYC Modal] Verification completed successfully');
-      onVerificationComplete();
+      if (onVerificationComplete) {
+        onVerificationComplete();
+      }
+      onClose();
     }
-  }, [kycData?.status, onVerificationComplete]);
+  }, [kycData?.status, onVerificationComplete, onClose]);
 
   // Mutation to start KYC process
   const { mutate: startKyc, isPending: isStarting } = useMutation<KycStartResponse, Error, void>({
