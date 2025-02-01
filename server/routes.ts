@@ -675,9 +675,12 @@ export function registerRoutes(app: Express): Server {
       // Construct the application URL
       const applicationUrl = `https://shi-fi-lend-brandon263.replit.app/login/customer?phone=${borrowerPhone}`;
 
+      // Format phone number consistently
+      const formattedPhone = borrowerPhone.startsWith('+1') ? borrowerPhone : `+1${borrowerPhone}`;
+      
       // Send the SMS invitation
       const sent = await smsService.sendLoanApplicationLink(
-        borrowerPhone,
+        formattedPhone,
         merchant.companyName,
         applicationUrl
       );
