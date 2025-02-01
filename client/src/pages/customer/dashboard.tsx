@@ -13,9 +13,22 @@ export default function CustomerDashboard() {
 
   // Check if KYC is needed on first load
   useEffect(() => {
-    if (user && user.role === 'customer' && (!user.kycStatus || user.kycStatus === 'initial' || user.kycStatus === 'failed')) {
-      console.log('[Dashboard] Showing KYC modal for user:', user.id, 'Status:', user.kycStatus);
-      setShowKycModal(true);
+    console.log('[Dashboard] Checking KYC status:', {
+      userId: user?.id,
+      role: user?.role,
+      kycStatus: user?.kycStatus
+    });
+    
+    if (user && user.role === 'customer') {
+      const needsKyc = !user.kycStatus || 
+                      user.kycStatus === 'initial' || 
+                      user.kycStatus === 'failed' ||
+                      user.kycStatus === 'pending';
+      
+      if (needsKyc) {
+        console.log('[Dashboard] Opening KYC modal:', { userId: user.id, status: user.kycStatus });
+        setShowKycModal(true);
+      }
     }
   }, [user]);
 
