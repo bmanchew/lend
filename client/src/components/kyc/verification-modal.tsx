@@ -21,7 +21,10 @@ interface KycStartError {
   details?: string;
 }
 
-export function KycVerificationModal({ 
+// Debug log to verify module loading
+console.log('[KYC Modal] Module loaded, preparing to export component');
+
+export function VerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete
@@ -251,7 +254,8 @@ export function KycVerificationModal({
   };
 
   useEffect(() => {
-    console.log('[KYC Modal] Modal state changed:', {
+    try {
+      console.log('[KYC Modal] Modal state changed:', {
       isOpen,
       userId: user?.id,
       currentStatus: kycData?.status

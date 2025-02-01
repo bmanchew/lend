@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
 import { VerificationModal } from '@/components/kyc/verification-modal';
@@ -23,11 +22,11 @@ export default function ApplyPage() {
           phone: ''
         })
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to create account');
       }
-      
+
       const data = await response.json();
       if (data.userId && data.redirectUrl) {
         window.location.href = data.redirectUrl;
@@ -43,7 +42,7 @@ export default function ApplyPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-4">Loan Application</h1>
-      
+
       {!started ? (
         <div className="text-center">
           <Button onClick={handleStart}>Get Started</Button>
