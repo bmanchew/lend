@@ -14,7 +14,7 @@ interface KycVerificationModalProps {
 
 console.log("[KYC Modal] Module loaded");
 
-export function KycVerificationModal({ 
+export default function KycVerificationModal({ 
   isOpen, 
   onClose,
   onVerificationComplete

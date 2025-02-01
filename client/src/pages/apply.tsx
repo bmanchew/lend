@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
-import { KycVerificationModal } from '../components/kyc/verification-modal';
+import KycVerificationModal from '../components/kyc/verification-modal';
 console.log("[Apply Page] Importing KycVerificationModal");
 import { Button } from '@/components/ui/button';
 console.log("[Apply Page] Loading with URL params:", window.location.search);
@@ -61,10 +61,9 @@ export default function ApplyPage() {
         </div>
       ) : (
         <KycVerificationModal
-          isOpen={!kycCompleted && userId !== null} // Added userId check
+          isOpen={!kycCompleted && userId !== null}
           onClose={() => setKycCompleted(true)}
           onVerificationComplete={() => setKycCompleted(true)}
-          userId={userId} // Pass userId as prop
         />
       )}
     </div>
