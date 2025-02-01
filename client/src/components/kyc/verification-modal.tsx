@@ -1,4 +1,3 @@
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -36,7 +35,7 @@ export function KycVerificationModal({
       console.log("[KYC Modal] Fetching status for userId:", userId);
       const response = await fetch(`/api/kyc/status?userId=${userId}`);
       console.log("[KYC Modal] Status response:", response.status);
-      
+
       if (!response.ok) {
         console.error("[KYC Modal] Status fetch failed:", await response.text());
         throw new Error('Failed to fetch KYC status');
@@ -50,7 +49,7 @@ export function KycVerificationModal({
   const { mutate: startKyc, isPending: isStarting } = useMutation({
     mutationFn: async () => {
       console.log("[KYC Start] Initiating verification for userId:", userId);
-      
+
       if (!userId) {
         console.error("[KYC Start] Missing userId");
         throw new Error('User ID is required');
@@ -65,7 +64,7 @@ export function KycVerificationModal({
 
         console.log("[KYC Start] Response status:", response.status);
         const data = await response.json();
-        
+
         if (!response.ok) {
           console.error("[KYC Start] API error:", data);
           throw new Error(data.details || data.error || 'Failed to start verification');
@@ -96,7 +95,7 @@ export function KycVerificationModal({
       hasComplete: !!onVerificationComplete,
       hasClose: !!onClose
     });
-    
+
     try {
       if (kycData?.status === 'approved') {
         console.log("[KYC Modal] Verification approved, triggering callbacks");
