@@ -140,6 +140,39 @@ describe('KycVerificationModal Mobile Tests', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <KycVerificationModal
+
+
+  it('receives and uses user ID correctly', async () => {
+    // Mock AuthContext with a test user ID
+    vi.mock('@/hooks/use-auth', () => ({
+      useAuth: () => ({
+        user: { id: 39 }
+      })
+    }));
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'not_started' })
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <KycVerificationModal
+          isOpen={true}
+          onClose={() => {}}
+          onVerificationComplete={() => {}}
+        />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Verify the user ID is used in the API call
+      expect(mockFetch).toHaveBeenCalledWith('/api/kyc/status?userId=39', expect.any(Object));
+    });
+  });
+
+
           isOpen={true}
           onClose={() => {}}
           onVerificationComplete={() => {}}
