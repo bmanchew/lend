@@ -1,6 +1,6 @@
 
 import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { io as socketIO, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
 
 export function useSocket(merchantId: number) {

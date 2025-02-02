@@ -869,7 +869,7 @@ export function registerRoutes(app: Express): Server {
         status: 'recorded'
       });
 
-      io.to(`merchant_${req.params.id}`).emit('application_update', {
+      global.io.to(`merchant_${req.params.id}`).emit('application_update', {
         type: 'loan_application_attempt',
         data: event[0]
       });
