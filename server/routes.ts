@@ -939,8 +939,8 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ error: 'Merchant not found' });
       }
 
-      // Generate a unique application token
-      const applicationToken = smsService.generateApplicationToken();
+      // Generate a token using the existing OTP generator
+      const applicationToken = smsService.generateOTP();
 
       // Format and validate phone number
       const cleanPhone2 = (borrowerPhone || '').replace(/\D/g, '');
