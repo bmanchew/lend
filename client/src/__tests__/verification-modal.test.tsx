@@ -1,15 +1,19 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act, screen } from '@testing-library/react';
+import { render, act, screen, waitFor } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+// Create mockToast before mocking the hook
+const mockToast = vi.fn();
+
+// Mock useToast hook
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({
-    toast: vi.fn()
+    toast: mockToast
   })
 }));
 
+// Mock useMobile hook
 vi.mock('@/hooks/use-mobile', () => ({
   useMobile: () => true
 }));
@@ -23,18 +27,22 @@ describe('KycVerificationModal Mobile Tests', () => {
     }
   });
 
+  let mockFetch: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
+    // Clear all mocks before each test
     vi.clearAllMocks();
-    localStorage.setItem('temp_user_id', '123');
-    global.fetch = vi.fn();
-    Object.defineProperty(window, 'location', {
-      value: { href: '' },
-      writable: true
-    });
+    mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+    localStorage.getItem.mockReturnValue('123');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('initiates KYC verification on mobile and handles successful flow', async () => {
-    global.fetch
+    mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ status: 'not_started' })
@@ -59,27 +67,22 @@ describe('KycVerificationModal Mobile Tests', () => {
       </QueryClientProvider>
     );
 
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    // Verify API calls
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    
     // Check status API call
-    const firstCall = global.fetch.mock.calls[0];
-    expect(firstCall[0]).toBe('/api/kyc/status?userId=123');
-    
+    expect(mockFetch).toHaveBeenNthCalledWith(1, '/api/kyc/status?userId=123', expect.any(Object));
+
     // Check start verification API call
-    const secondCall = global.fetch.mock.calls[1];
-    expect(secondCall[0]).toBe('/api/kyc/start');
-    const requestBody = JSON.parse(secondCall[1].body);
-    expect(requestBody).toEqual({
+    const [url, config] = mockFetch.mock.calls[1];
+    expect(url).toBe('/api/kyc/start');
+    expect(JSON.parse(config.body)).toEqual({
       userId: '123',
       platform: 'mobile',
-      userAgent: navigator.userAgent
+      userAgent: 'iPhone'
     });
-    expect(secondCall[1].headers['X-Mobile-Client']).toBe('true');
+    expect(config.headers['X-Mobile-Client']).toBe('true');
 
     // Check redirect
     expect(window.location.href).toBe('https://verification.url');
@@ -88,8 +91,11 @@ describe('KycVerificationModal Mobile Tests', () => {
     expect(screen.getByText(/Starting verification process/i)).toBeTruthy();
   });
 
-  it('handles API errors gracefully', async () => {
-    global.fetch.mockRejectedValueOnce(new Error('API Error'));
+  it('handles pending KYC status', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'pending' })
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -101,10 +107,61 @@ describe('KycVerificationModal Mobile Tests', () => {
       </QueryClientProvider>
     );
 
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     expect(screen.getByText(/Please wait/i)).toBeTruthy();
+  });
+
+  it('handles API errors gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('API Error'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <KycVerificationModal
+          isOpen={true}
+          onClose={() => {}}
+          onVerificationComplete={() => {}}
+        />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockToast).toHaveBeenCalledWith({
+        title: "Verification Error",
+        description: "Failed to start verification. Please try again.",
+        variant: "destructive"
+      });
+    });
+  });
+
+  it('handles successful KYC completion', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'Approved' })
+    });
+
+    const onVerificationComplete = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <KycVerificationModal
+          isOpen={true}
+          onClose={() => {}}
+          onVerificationComplete={onVerificationComplete}
+        />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(onVerificationComplete).toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith({
+        title: "Verification Complete",
+        description: "Your identity has been verified successfully."
+      });
+    });
   });
 });
