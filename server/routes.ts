@@ -978,7 +978,7 @@ export function registerRoutes(app: Express): Server {
           .returning();
       }
 
-      console.log('Created/Updated user account:', user);
+      console.log('Created/Updated user account:, user);
 
       // Fetch merchant details to include in the SMS
       const [merchant] = await db
@@ -1027,11 +1027,17 @@ export function registerRoutes(app: Express): Server {
 
         if (result.success) {
           debugLog('SMS sent successfully');
+          // Emit contract update event to merchant's room
+          global.io.to(`merchant_${merchantId}`).emit('contract_update', {
+            type: 'new_application',
+            contractId: newContract[0].id,
+            status: 'draft'
+          });
           res.json({ 
             status: 'success',
-            message: 'Loanapplication invitation sent successfully',
+            message: 'Loan application invitation sent successfully',
             applicationUrl
-                  });
+          });
         } else {
           debugLog('SMS failed to send:', result.error);
           res.status(400).json({ 
