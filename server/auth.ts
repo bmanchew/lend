@@ -250,10 +250,19 @@ export function setupAuth(app: Express) {
             phone: user.phoneNumber,
             expected: normalizedStoredOTP,
             received: normalizedInputOTP,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            otpExpiry: user.otpExpiry,
+            currentTime: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid verification code" });
         }
+
+        console.log('[AUTH] OTP validation successful:', {
+          userId: user.id,
+          phone: user.phoneNumber,
+          otpMatched: true,
+          timestamp: new Date().toISOString()
+        });
 
         console.log('[AUTH] OTP validation successful:', {
           userId: user.id,

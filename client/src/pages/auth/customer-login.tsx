@@ -74,6 +74,11 @@ export default function CustomerLogin() {
 
   const handleVerifyAndContinue = async (data) => {
     try {
+      console.log('[CustomerLogin] Verifying OTP:', { 
+        phoneNumber: data.phoneNumber,
+        code: data.code
+      });
+
       // Format phone number consistently
       let phoneNumber = data.phoneNumber.replace(/\D/g, '');
       phoneNumber = phoneNumber.replace(/^1/, '');
@@ -81,14 +86,14 @@ export default function CustomerLogin() {
 
       // Validate OTP format
       const otp = data.code.trim();
-      if (!/^\d{6}$/.test(otp)) {
+      if (!otp || !/^\d{6}$/.test(otp)) {
         toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
         return;
       }
 
-      const response = await axios.post("/api/login", { 
+      const response = await axios.post("/api/login", {
         username: phoneNumber,
-        password: data.code,
+        password: otp,
         loginType: 'customer'
       });
       
