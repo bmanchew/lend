@@ -1,0 +1,299 @@
+Below is a focused Markdown document that outlines a solution to make your web app automatically start the mobile verification flow when a user logs in. This guide centers on creating a seamless mobile experience where—upon login—the app immediately prompts the user (via their mobile browser) to capture their driver’s license photo for Didit verification.
+
+---
+
+```markdown
+# Seamless Mobile Verification Flow on Login
+
+This document explains how to modify your web app so that, when a mobile user logs in, the app immediately starts the verification flow by prompting the user to capture a driver’s license photo. The solution leverages HTML5’s native camera capture functionality, automatic event triggering on mobile devices, and integration with Didit’s document verification API. This ensures a seamless, branded experience for your mobile users.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [Mobile-First Automatic Capture Flow](#mobile-first-automatic-capture-flow)
+   - [Detecting Mobile Devices](#detecting-mobile-devices)
+   - [Auto-Triggering the Camera](#auto-triggering-the-camera)
+4. [File Capture and Upload Process](#file-capture-and-upload-process)
+5. [Backend Integration with Didit](#backend-integration-with-didit)
+6. [Putting It All Together: Complete Example](#putting-it-all-together-complete-example)
+7. [Testing and Troubleshooting](#testing-and-troubleshooting)
+8. [Next Steps](#next-steps)
+
+---
+
+## 1. Overview
+
+When a mobile user logs in to your web app, you want the verification process to begin immediately—without requiring extra taps. The goal is to automatically prompt the user to capture their driver’s license photo. Once the photo is captured, it is uploaded to your backend for processing via Didit’s API. This document details the front-end and back-end modifications needed to achieve this seamless mobile experience.
+
+---
+
+## 2. Prerequisites
+
+- **Web App Framework:** A Next.js (or similar) web app that supports mobile-responsive design.
+- **Didit Integration:** Existing integration with Didit’s Identity Verification API (reference: [didit-full-demo](https://github.com/didit-protocol/didit-full-demo)).
+- **Mobile Browser Support:** The solution assumes modern mobile browsers that support HTML5 input attributes (e.g., Chrome on Android, Safari on iOS).
+- **Backend Endpoint:** An API endpoint (e.g., `/api/upload-driver-license`) that receives the captured image and forwards it to Didit for verification.
+- **Environment Variables:** Securely stored API keys, Didit Client ID, Client Secret, and any other configuration required by Didit.
+
+---
+
+## 3. Mobile-First Automatic Capture Flow
+
+### Detecting Mobile Devices
+
+Use a JavaScript function to detect if the app is being accessed from a mobile device. This detection is based on the user agent.
+
+```javascript
+function isMobileDevice() {
+  return /Mobi|Android/i.test(navigator.userAgent);
+}
+```
+
+### Auto-Triggering the Camera
+
+Place a hidden file input element in your HTML that is configured to open the camera. Use the `capture` attribute to ensure the device’s camera is invoked.
+
+```html
+<!-- Hidden input element to capture the driver’s license image -->
+<input type="file" id="driverLicenseInput" accept="image/*" capture="environment" style="display:none;">
+```
+
+Immediately after the user logs in (or on page load if the user is already authenticated), automatically trigger this input:
+
+```javascript
+function autoTriggerCapture() {
+  const fileInput = document.getElementById("driverLicenseInput");
+  if (fileInput && isMobileDevice()) {
+    // Delay slightly to ensure the page is fully loaded
+    setTimeout(() => {
+      fileInput.click();
+    }, 500);
+  }
+}
+
+// Trigger when the DOM is fully loaded
+document.addEventListener("DOMContentLoaded", autoTriggerCapture);
+```
+
+---
+
+## 4. File Capture and Upload Process
+
+Once the user captures an image, handle the file input’s `change` event. This example reads the file and sends it via a `fetch` call (using FormData) to your backend.
+
+```javascript
+document.getElementById("driverLicenseInput").addEventListener("change", function(event) {
+  const file = event.target.files[0];
+  if (file) {
+    console.log("Captured file:", file.name);
+    
+    // Prepare form data for upload
+    const formData = new FormData();
+    formData.append("document", file);
+    formData.append("documentType", "driver_license"); // This should match Didit's expected value
+    
+    // Upload the file to your backend endpoint
+    fetch("/api/upload-driver-license", {
+      method: "POST",
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log("Didit response:", data);
+      // Optionally, update UI based on the verification session or further instructions
+    })
+    .catch(err => {
+      console.error("Error uploading document:", err);
+    });
+  }
+});
+```
+
+---
+
+## 5. Backend Integration with Didit
+
+Your backend should expose an endpoint (e.g., `/api/upload-driver-license`) that:
+
+1. Receives the file (via FormData).
+2. Processes and uploads the file to Didit’s API (using the document verification endpoint).
+3. Returns the Didit response (session ID, status, etc.) to the front end.
+
+*Example (using Node.js and Express):*
+
+```javascript
+// backend/uploadDriverLicense.js
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const router = express.Router();
+
+// Configure multer to store the file temporarily
+const upload = multer({ dest: 'uploads/' });
+
+router.post('/api/upload-driver-license', upload.single('document'), async (req, res) => {
+  try {
+    const { file } = req;
+    const { documentType } = req.body;
+    
+    // (Optional) Read file from disk if needed, then upload to Didit
+    // For this example, assume Didit accepts a file URL or base64 string
+    // Here, you might upload the file to a cloud storage service and get a URL, or convert it to base64.
+    // We'll assume a file URL is generated.
+    const fileUrl = `https://your-storage-service.com/uploads/${file.filename}`;
+    
+    const diditResponse = await axios.post(
+      process.env.DIDIT_API_URL + '/create-verification-session',
+      {
+        documentType: documentType,
+        documentUrl: fileUrl
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.DIDIT_API_TOKEN}`
+        }
+      }
+    );
+    
+    res.status(200).json(diditResponse.data);
+  } catch (error) {
+    console.error("Error uploading driver's license:", error.response ? error.response.data : error);
+    res.status(500).json({ error: "Document upload failed" });
+  }
+});
+
+module.exports = router;
+```
+
+*Note:* Adjust the Didit API endpoint, payload, and authentication details according to Didit’s latest documentation.
+
+---
+
+## 6. Incorporating the Didit Full Demo
+
+The [didit-full-demo](https://github.com/didit-protocol/didit-full-demo) repository provides a Next.js implementation of Didit Identity Verification. Key aspects to leverage include:
+
+- **Environment Configuration:** Use the provided `.env.example` as a guide.
+- **API Routes:** Adapt the verification session creation and webhook handling routes for your project.
+- **UI Components:** Use the demo’s approach for a responsive, mobile-friendly UI and adapt it to automatically trigger the camera capture.
+
+Review the repository to understand how Didit’s verification workflow is implemented and integrate similar patterns into your solution.
+
+---
+
+## 7. Complete Code Example
+
+Below is a complete HTML/JavaScript example that auto-triggers the driver’s license capture on mobile and uploads the image:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automatic Driver’s License Capture</title>
+  <style>
+    /* Hide the file input; optional manual trigger button for debugging */
+    #driverLicenseInput { display: none; }
+    #manualCaptureBtn {
+      padding: 10px 20px;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Hidden file input to capture the driver's license photo -->
+  <input type="file" id="driverLicenseInput" accept="image/*" capture="environment">
+  
+  <!-- Optional manual trigger button (useful for testing on non-mobile devices) -->
+  <button id="manualCaptureBtn" onclick="document.getElementById('driverLicenseInput').click()">Capture License Manually</button>
+  
+  <script>
+    // Mobile detection
+    function isMobileDevice() {
+      return /Mobi|Android/i.test(navigator.userAgent);
+    }
+    
+    // Auto-trigger camera capture on mobile devices
+    function autoTriggerCapture() {
+      const fileInput = document.getElementById("driverLicenseInput");
+      if (fileInput && isMobileDevice()) {
+        setTimeout(() => {
+          fileInput.click();
+        }, 500);
+      }
+    }
+    
+    document.addEventListener("DOMContentLoaded", autoTriggerCapture);
+    
+    // Handle file capture and upload
+    document.getElementById("driverLicenseInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        console.log("Captured file:", file.name);
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("documentType", "driver_license");
+        
+        // Upload file to backend endpoint
+        fetch("/api/upload-driver-license", {
+          method: "POST",
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Didit response:", data);
+          // Optionally, update UI or proceed with further steps based on the Didit response
+        })
+        .catch(err => {
+          console.error("Error uploading document:", err);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+```
+
+---
+
+## 8. Testing and Troubleshooting
+
+- **Test on Actual Mobile Devices:**  
+  Verify the automatic camera capture and file upload on both Android (Chrome) and iOS (Safari).
+- **Remote Debugging:**  
+  Use mobile debugging tools (Chrome DevTools via USB or remote debugging on iOS) to inspect console logs and network requests.
+- **Backend Verification:**  
+  Confirm that the file is received by your backend and that the Didit API call is successful.
+- **UI Feedback:**  
+  Provide loading indicators and error messages to guide the user in case of issues.
+
+---
+
+## 9. Next Steps
+
+1. **Integrate the Auto-Trigger and Upload Code:**  
+   Add the provided code into your web app’s authentication landing page.
+2. **Implement Backend API:**  
+   Develop and test the `/api/upload-driver-license` endpoint to interact with Didit.
+3. **Review Didit Documentation:**  
+   Ensure all API parameters and authentication details are in line with Didit’s latest requirements.
+4. **User Experience Enhancements:**  
+   Consider adding progress indicators and clear instructions after the image is captured.
+5. **Gather Feedback:**  
+   Test with real mobile users, capture logs, and refine the flow as needed.
+
+---
+
+This document focuses on making your web app mobile-first by automatically triggering the driver's license capture process immediately upon login, and seamlessly integrating with Didit’s verification API. Use this guide as the basis for implementing and refining your mobile KYC experience.
+
+Happy coding!
+```
+
+---
+
+This document should now provide your developer with a clear, mobile-first integration plan that automatically starts the verification process upon login and offers a seamless experience on mobile devices.
