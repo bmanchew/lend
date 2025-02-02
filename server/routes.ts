@@ -4,7 +4,7 @@ import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
-import { hashPassword } from "./auth";
+import { authService } from "./auth";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
@@ -251,7 +251,7 @@ export function registerRoutes(app: Express): Server {
       // Generate random password for new users
         const tempPassword = Math.random().toString(36).slice(-8);
         console.log("[Merchant Creation] Generated temporary password");
-        const hashedPassword = await hashPassword(tempPassword);
+        const hashedPassword = await authService.hashPassword(tempPassword);
 
         console.log("[Merchant Creation] Creating new merchant user account");
         [merchantUser] = await db
