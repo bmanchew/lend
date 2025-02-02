@@ -813,6 +813,12 @@ export function registerRoutes(app: Express): Server {
       console.log(`[LoanApplication][${requestId}] ${message}`, data || "");
     };
 
+    debugLog('Received application request', {
+      body: req.body,
+      merchantId: req.params.id,
+      timestamp: new Date().toISOString()
+    });
+
     // Log the full application details
     console.log("[LoanApplication] Received new application:", {
       merchantId: req.params.id,

@@ -62,6 +62,12 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
+      console.log('[LoanApplication] Starting submission:', {
+        data,
+        timestamp: new Date().toISOString(),
+        merchantId,
+        merchantName
+      });
       const debugLog = (message: string, data?: any) => {
         console.log(`[LoanDialog][${Date.now().toString(36)}] ${message}`, data || '');
       };
@@ -106,23 +112,48 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('[LoanApplication] API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          timestamp: new Date().toISOString()
+        });
         throw new Error(errorData.error || "Failed to send invitation");
       }
+      
+      console.log('[LoanApplication] API Success Response:', {
+        status: response.status,
+        timestamp: new Date().toISOString()
+      });
 
       const responseData = await response.json();
       debugLog('Application submission successful', responseData);
       return responseData;
     },
     onSuccess: (data) => {
+      console.log('[LoanApplication] Submission successful:', {
+        data,
+        timestamp: new Date().toISOString()
+      });
+      
       toast({
         title: "Success",
         description: "Loan application sent successfully",
       });
+      
+      // Reset form and update UI state
       setOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
+
+      // Handle redirection
       if (data.redirectUrl) {
-        window.location.href = data.redirectUrl;
+        console.log('[LoanApplication] Redirecting to:', data.redirectUrl);
+        setTimeout(() => {
+          window.location.href = data.redirectUrl;
+        }, 100); // Small delay to ensure toast is visible
+      } else {
+        console.log('[LoanApplication] No redirect URL provided');
       }
     },
     onError: (error: any) => {
