@@ -944,11 +944,11 @@ export function registerRoutes(app: Express): Server {
 
       // Format and validate phone number
       const phoneDigits = (borrowerPhone || '').replace(/\D/g, '');
-      const formattedPhone = phoneDigits.startsWith('1') ? 
+      const normalizedPhone = phoneDigits.startsWith('1') ? 
         `+${phoneDigits}` : 
         `+1${phoneDigits.slice(-10)}`;
       
-      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
+      if (!normalizedPhone.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
         return res.status(400).json({ error: 'Invalid phone number format' });
       }
