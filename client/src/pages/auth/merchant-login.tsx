@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -11,6 +12,7 @@ type LoginFormData = {
 };
 
 export default function MerchantLogin() {
+  const navigate = useNavigate();
   const { loginMutation } = useAuth();
 
   const form = useForm<LoginFormData>({
@@ -34,7 +36,10 @@ export default function MerchantLogin() {
         loginType: "merchant"
       });
       console.log('[MerchantLogin] Login successful:', response);
-      window.location.href = '/merchant/dashboard';
+      // Store login response data
+      localStorage.setItem('user', JSON.stringify(response));
+      // Use navigate instead of window.location
+      navigate('/merchant/dashboard');
     } catch (error) {
       console.error("[MerchantLogin] Login failed:", {
         error,
