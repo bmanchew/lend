@@ -506,14 +506,21 @@ export function registerRoutes(app: Express): Server {
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-      console.log('[KYC] Starting verification with headers:', req.headers);
-      // Force mobile flow for all KYC sessions
-      const platform = 'mobile';
-      const isMobileClient = true;
+      console.log('[KYC] Starting verification:', {
+        userId,
+        headers: req.headers,
+        userAgent: req.headers['user-agent'],
+        platform: req.body.platform || 'mobile'
+      });
 
       if (!userId) {
+        console.error('[KYC] Missing user ID in request');
         return res.status(400).json({ error: 'Missing user ID' });
       }
+
+      // Always force mobile flow
+      const platform = 'mobile';
+      const isMobileClient = true;
 
       console.log('Starting KYC process:', {
         userId,

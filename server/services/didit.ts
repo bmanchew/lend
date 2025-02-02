@@ -140,13 +140,19 @@ class DiditService {
         detectedFromUA: /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(user.userAgent || '')
       });
 
+      console.log("[DiditService] Creating session with config:", {
+        userId: user.id,
+        platform: 'mobile',
+        callback: callbackUrl.toString()
+      });
+
       const sessionData = {
         callback: callbackUrl.toString(),
         features: 'OCR + FACE',
         vendor_data: JSON.stringify({
           userId: user.id,
           username: user.username,
-          platform: isMobile ? 'mobile' : 'web',
+          platform: 'mobile', // Always mobile
           userAgent: user.userAgent
         }),
         redirect_url: completeReturnUrl,
