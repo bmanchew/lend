@@ -845,10 +845,29 @@ export function registerRoutes(app: Express): Server {
           firstName: req.body.firstName,
           lastName: req.body.lastName,
           amount: req.body.amount || req.body.fundingAmount,
+          timestamp: new Date().toISOString(),
+          userAgent: req.headers['user-agent'],
+          stage: 'initiation',
           requestId
         }),
         status: 'received'
       }).returning();
+
+      // Track merchant activity
+      await db.insert(webhookEvents).values({
+        eventType: 'merchant_activity',
+        payload: JSON.stringify({
+          merchantId: req.params.id,
+          action: 'send_application',
+          timestamp: new Date().toISOString(),
+          details: {
+            borrowerPhone: req.body.phone,
+            amount: req.body.amount || req.body.fundingAmount,
+            requestId
+          }
+        }),
+        status: 'recorded'
+      });
 
       io.to(`merchant_${req.params.id}`).emit('application_update', {
         type: 'loan_application_attempt',

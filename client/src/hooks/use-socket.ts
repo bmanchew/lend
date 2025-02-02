@@ -18,6 +18,10 @@ export function useSocket(merchantId: number) {
       // Trigger UI refresh here
     });
 
+    socketRef.current.on('merchant_activity', (activity) => {
+      console.log('Received merchant activity:', activity);
+    });
+
     return () => {
       socketRef.current?.disconnect();
     };
