@@ -36,10 +36,10 @@ export default function CustomerLogin() {
         });
         return;
       }
-      
+
       // Remove leading 1 if present
       phoneNumber = phoneNumber.replace(/^1/, '');
-      
+
       // Validate length
       if (phoneNumber.length !== 10) {
         toast({
@@ -52,25 +52,33 @@ export default function CustomerLogin() {
 
       // Add +1 prefix
       phoneNumber = '+1' + phoneNumber;
-      
+
       console.log('[CustomerLogin] Formatted phone:', {
         original: form.getValues("phoneNumber"),
         formatted: phoneNumber
       });
-    console.log('Formatted phone:', phoneNumber);
-    // Update form value with formatted number
-    form.setValue("username", phoneNumber);
-
-    try {
-      const response = await axios.post("/api/sendOTP", { phoneNumber });
-      console.log('OTP Response:', response.data);
-      setIsOtpSent(true);
-      toast({
-        title: "Code Sent",
-        description: "Enter the code to sign in to your account"
+      console.log('[CustomerLogin] Attempting to send OTP:', {
+        formattedPhone: phoneNumber,
+        timestamp: new Date().toISOString()
       });
+
+      const response = await axios.post("/api/sendOTP", { phoneNumber });
+      console.log('[CustomerLogin] OTP Response:', response.data);
+
+      if (response.data?.message === 'OTP sent successfully') {
+        setIsOtpSent(true);
+        toast({
+          title: "Code Sent",
+          description: "Enter the code to sign in to your account"
+        });
+      } else {
+        throw new Error('Failed to send verification code');
+      }
     } catch (error: any) {
-      console.error('OTP send error:', error);
+      console.error('[CustomerLogin] OTP send error:', {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
       setIsOtpSent(false);
       toast({
         title: "Error",
@@ -123,7 +131,7 @@ export default function CustomerLogin() {
         password: otp,
         loginType: 'customer'
       });
-      
+
       const userData = response.data;
       console.log("[CustomerLogin] Login response:", userData);
 
