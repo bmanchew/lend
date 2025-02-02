@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
+import { useLocation, useNavigate } from "wouter";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,8 @@ export default function CustomerLogin() {
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [user, setUser] = useState(null); // Added state to store user data
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
 
-  const [location] = useLocation();
   const form = useForm({
     defaultValues: {
       phoneNumber: "",
@@ -76,11 +76,16 @@ export default function CustomerLogin() {
     try {
       const response = await axios.post("/api/verifyOTP", { username: data.phoneNumber, code: data.code });
       const userData = response.data;
-      console.log('[CustomerLogin] User verified:', userData);
-      localStorage.setItem('temp_user_id', userData.id.toString());
-      setUser(userData);
-      initiateKYC(userData.id);
-      setLocation('/apply?verification=true&from=login');
+      console.log("[CustomerLogin] Verification response:", userData);
+
+      if (userData && userData.id) {
+        localStorage.setItem('temp_user_id', userData.id.toString());
+        setUser(userData);
+        initiateKYC(userData.id);
+        setLocation('/apply?verification=true&from=login');
+      } else {
+        toast({ title: "Error", description: "Invalid user data received", variant: "destructive" });
+      }
     } catch (error) {
       console.error("Verification error:", error);
       toast({ title: "Error", description: "Verification failed", variant: "destructive" });
