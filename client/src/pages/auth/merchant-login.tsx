@@ -12,7 +12,6 @@ export default function MerchantLogin() {
     defaultValues: {
       username: "",
       password: "",
-      loginType: "merchant"
     },
   });
 
@@ -63,7 +62,11 @@ export default function MerchantLogin() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loginMutation.isPending}
+            >
               {loginMutation.isPending ? "Logging in..." : "Login"}
             </Button>
           </form>
