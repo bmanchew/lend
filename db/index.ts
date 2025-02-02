@@ -2,7 +2,7 @@ import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
 import * as schema from "./schema";
-import { QueryCache } from 'drizzle-orm/query-cache';
+// Remove query cache as it's not needed for basic functionality
 
 neonConfig.webSocketConstructor = ws;
 
@@ -12,13 +12,8 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const queryCache = new QueryCache({
-  max: 100, // Maximum cache size
-  ttl: 1000 * 60 * 5 // 5 minutes TTL
-});
-
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema, queryCache });
+export const db = drizzle({ client: pool, schema });
 
 
 // Basic error handling and logging example.  This should be expanded upon for a production system.
