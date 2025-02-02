@@ -126,7 +126,7 @@ export function setupAuth(app: Express) {
     }, async (req, username, password, done) => {
       try {
         const loginType = req.body.loginType || 'customer';
-        
+
         // Ensure we have required credentials
         if (!username || !password) {
           return done(null, false, { message: "Missing credentials" });
@@ -215,32 +215,25 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "No active OTP found" });
         }
 
+        // Check if OTP is expired
         const now = new Date();
-        const expiry = new Date(user.otpExpiry);
-        
-        console.log('[AUTH] OTP validation:', {
-          storedOtp: user.lastOtpCode,
-          providedOtp: password,
-          now: now.toISOString(),
-          expiry: expiry.toISOString(),
-          isExpired: expiry <= now
-        });
-
-        if (user.lastOtpCode !== password) {
-          console.error('[AUTH] OTP mismatch:', {
-            stored: user.lastOtpCode,
-            provided: password
-          });
-          return done(null, false, { message: "Invalid code" });
-        }
-
-        if (expiry <= now) {
+        if (now > new Date(user.otpExpiry)) {
           console.error('[AUTH] OTP expired:', {
-            now: now.toISOString(),
-            expiry: expiry.toISOString()
+            expiry: user.otpExpiry,
+            now: now.toISOString()
           });
-          return done(null, false, { message: "Code has expired" });
+          return done(null, false, { message: "OTP has expired" });
         }
+
+        // Compare OTP with stored value
+        if (user.lastOtpCode !== password) {
+          console.error('[AUTH] Invalid OTP provided:', {
+            expected: user.lastOtpCode,
+            received: password
+          });
+          return done(null, false, { message: "Invalid verification code" });
+        }
+
 
         // Clear used OTP
         await db
@@ -350,7 +343,7 @@ export function setupAuth(app: Express) {
         user: user,
         info: info
       });
-      
+
       if (err) {
         console.error('Login error:', err);
         return res.status(500).json({ message: "Login failed" });
