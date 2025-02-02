@@ -2,40 +2,40 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-// Mock window object
-const windowMock = {
-  location: { href: '' },
-  navigator: {
-    userAgent: 'iPhone',
-    platform: 'iOS',
-    vendor: 'Apple'
-  }
-};
-
 // Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
-  clear: vi.fn()
+  clear: vi.fn(),
+  removeItem: vi.fn()
 };
+
+// Mock fetch
+global.fetch = vi.fn();
+
+// Mock window properties
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+Object.defineProperty(window, 'location', { 
+  value: { href: '', pathname: '', search: '' },
+  writable: true
+});
+
+// Mock ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
 
 // Setup before each test
 beforeEach(() => {
   // Setup localStorage
-  global.localStorage = localStorageMock;
-  global.localStorage.getItem.mockReturnValue('123');
-  
+
   // Setup window location
-  Object.defineProperty(window, 'location', {
-    value: windowMock.location,
-    writable: true
-  });
-  
+
   // Setup navigator
-  Object.defineProperty(window, 'navigator', {
-    value: windowMock.navigator,
-    writable: true
-  });
+  vi.clearAllMocks();
+  fetch.mockClear();
 });
 
 // Cleanup after each test
