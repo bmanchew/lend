@@ -160,12 +160,16 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
             }
 
             try {
+              const values = form.getValues();
               const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(form.getValues()),
+                body: JSON.stringify({
+                  ...values,
+                  fundingAmount: parseFloat(values.fundingAmount),
+                }),
               });
 
               if (!response.ok) {
