@@ -69,6 +69,16 @@ class SMSService {
         to: toNumber
       });
 
+      if (message.status === 'failed' || message.errorCode) {
+        console.error("[SMSService] Message failed:", {
+          toNumber,
+          messageId: message.sid,
+          status: message.status,
+          errorCode: message.errorCode
+        });
+        return false;
+      }
+
       console.log("[SMSService] Successfully sent message:", {
         toNumber,
         messageId: message.sid,
@@ -81,6 +91,8 @@ class SMSService {
         toNumber,
         error: error.message,
         code: error.code,
+        twilioCode: error.code,
+        moreInfo: error.moreInfo
       });
       return false;
     }

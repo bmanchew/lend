@@ -933,25 +933,45 @@ export function registerRoutes(app: Express): Server {
       // Construct the application URL
       const applicationUrl = `https://shi-fi-lend-brandon263.replit.app/login/customer?phone=${borrowerPhone}`;
 
-      // Format phone number consistently
-      const formattedPhone = borrowerPhone.startsWith('+1') ? borrowerPhone : `+1${borrowerPhone}`;
+      try {
+        // Format phone number consistently
+        const cleanPhone = (borrowerPhone || '').replace(/\D/g, '');
+        const formattedPhone = cleanPhone.startsWith('1') ? 
+          `+${cleanPhone}` : 
+          `+1${cleanPhone}`;
 
-      // Send the SMS invitation
-      const sent = await smsService.sendLoanApplicationLink(
-        formattedPhone,
-        merchantRecord.companyName,
-        applicationUrl
-      );
-
-      if (sent) {
-        res.json({ 
-          status: 'success',
-          message: 'Loan application invitation sent successfully',
-          applicationUrl
+        debugLog('Sending SMS with:', {
+          phone: formattedPhone,
+          merchant: merchantRecord.companyName,
+          url: applicationUrl
         });
-      } else {
-        res.status(500).json({ 
-          error: 'Failed to send loan application invitation' 
+
+        // Send the SMS invitation
+        const sent = await smsService.sendLoanApplicationLink(
+          formattedPhone,
+          merchantRecord.companyName,
+          applicationUrl
+        );
+
+        if (sent) {
+          debugLog('SMS sent successfully');
+          res.json({ 
+            status: 'success',
+            message: 'Loan application invitation sent successfully',
+            applicationUrl
+          });
+        } else {
+          debugLog('SMS failed to send');
+          res.status(500).json({ 
+            error: 'Failed to send loan application invitation',
+            details: 'SMS service returned failure'
+          });
+        }
+      } catch (err) {
+        console.error('Error in send-loan-application:', err);
+        res.status(500).json({
+          error: 'Failed to send loan application invitation',
+          details: err.message
         });
       }
     } catch (err) {
