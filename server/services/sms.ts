@@ -1,3 +1,4 @@
+
 import twilio from 'twilio';
 const { Twilio } = twilio;
 import { logger } from '../lib/logger';
@@ -8,8 +9,8 @@ const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 
 const client = new Twilio(accountSid, authToken);
 
-class SMSService {
-  private static formatPhoneNumber(phone: string): string {
+export const smsService = {
+  formatPhoneNumber(phone: string): string {
     if (!phone) throw new Error('Phone number is required');
 
     // Remove all non-numeric characters
@@ -23,9 +24,9 @@ class SMSService {
     }
 
     throw new Error('Invalid phone number format');
-  }
+  },
 
-  static async sendSMS(to: string, message: string): Promise<boolean> {
+  async sendSMS(to: string, message: string): Promise<boolean> {
     try {
       const formattedPhone = this.formatPhoneNumber(to);
 
@@ -41,12 +42,27 @@ class SMSService {
       logger.error('Error sending SMS:', error);
       throw error;
     }
-  }
+  },
 
-  static async sendOTP(phone: string, code: string): Promise<boolean> {
+  async sendOTP(phone: string, code: string): Promise<boolean> {
     const message = `Your verification code is: ${code}`;
     return this.sendSMS(phone, message);
-  }
-}
+  },
 
-export default SMSService;
+  generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  },
+
+  async sendLoanApplicationLink(phone: string, merchantName: string, url: string): Promise<{success: boolean, error?: string}> {
+    try {
+      const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${url}`;
+      await this.sendSMS(phone, message);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error sending loan application link:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};
+
+export default smsService;
