@@ -153,11 +153,21 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        let fullPhone = username.replace(/\D/g, '');
-        // Remove leading 1 if present
-        fullPhone = fullPhone.replace(/^1/, '');
-        // Add +1 prefix
-        fullPhone = '+1' + fullPhone;
+        const formatPhone = (phone: string): string => {
+          let clean = phone.replace(/\D/g, '');
+          clean = clean.replace(/^1/, '');
+          if (clean.length !== 10) {
+            throw new Error('Phone number must be 10 digits');
+          }
+          return '+1' + clean;
+        };
+
+        const fullPhone = formatPhone(username);
+        console.log('[AUTH] Phone formatting:', {
+          original: username,
+          formatted: fullPhone,
+          timestamp: new Date().toISOString()
+        });
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
         // Find user by phone number

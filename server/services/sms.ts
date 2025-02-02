@@ -193,14 +193,26 @@ class SMSService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  private formatPhoneNumber(phone: string): string {
+    // Remove all non-digits
+    let clean = phone.replace(/\D/g, '');
+    // Remove leading 1 if present
+    clean = clean.replace(/^1/, '');
+    // Ensure exactly 10 digits
+    if (clean.length !== 10) {
+      throw new Error('Phone number must be 10 digits');
+    }
+    // Add +1 prefix
+    return '+1' + clean;
+  }
+
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
     try {
-      // Clean the phone number to only digits
-      let cleanPhone = phoneNumber.replace(/\D/g, '');
-      // Remove leading 1 if present
-      cleanPhone = cleanPhone.replace(/^1/, '');
-      // Add +1 prefix
-      phoneNumber = '+1' + cleanPhone;
+      const formattedPhone = this.formatPhoneNumber(phoneNumber);
+      console.log('[SMSService] Formatting phone for OTP:', {
+        original: phoneNumber,
+        formatted: formattedPhone
+      });
 
       console.log('[SMSService] Phone number formatting:', {
         original: phoneNumber,

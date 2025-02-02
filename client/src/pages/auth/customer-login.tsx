@@ -26,19 +26,37 @@ export default function CustomerLogin() {
   });
 
   const handleSendOTP = async () => {
-    let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
-    if (!phoneNumber) {
-      toast({
-        title: "Error",
-        description: "Please enter a phone number",
-        variant: "destructive"
+    try {
+      let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
+      if (!phoneNumber) {
+        toast({
+          title: "Error",
+          description: "Please enter a phone number",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Remove leading 1 if present
+      phoneNumber = phoneNumber.replace(/^1/, '');
+      
+      // Validate length
+      if (phoneNumber.length !== 10) {
+        toast({
+          title: "Error", 
+          description: "Phone number must be 10 digits",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Add +1 prefix
+      phoneNumber = '+1' + phoneNumber;
+      
+      console.log('[CustomerLogin] Formatted phone:', {
+        original: form.getValues("phoneNumber"),
+        formatted: phoneNumber
       });
-      return;
-    }
-    // Remove leading 1 if present
-    phoneNumber = phoneNumber.replace(/^1/, '');
-    // Add +1 prefix
-    phoneNumber = '+1' + phoneNumber;
     console.log('Formatted phone:', phoneNumber);
     // Update form value with formatted number
     form.setValue("username", phoneNumber);
