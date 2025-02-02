@@ -6,6 +6,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { insertUserSchema } from "@db/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useMobile } from "@/hooks/use-mobile";
 import {
   Form,
   FormControl,
@@ -27,12 +28,14 @@ import {
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
-
+  const isMobile = useMobile();
   const [isOtpSent, setIsOtpSent] = useState(false);
+
   const loginForm = useForm({
     defaultValues: {
       phoneNumber: "",
       code: "",
+      loginType: "customer"
     },
   });
 
@@ -48,6 +51,18 @@ export default function AuthPage() {
   });
 
   if (user) {
+    console.log('[Auth] User authenticated, redirecting:', {
+      role: user.role,
+      isMobile,
+      platform: navigator.platform
+    });
+
+    // For customers, redirect to apply page with verification flag
+    if (user.role === 'customer') {
+      const applyUrl = `/apply?verification=true&from=login&platform=${isMobile ? 'mobile' : 'web'}`;
+      console.log('[Auth] Redirecting to apply:', applyUrl);
+      return <Redirect to={applyUrl} />;
+    }
     return <Redirect to={`/${user.role}`} />;
   }
 
