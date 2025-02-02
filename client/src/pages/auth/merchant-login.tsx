@@ -38,12 +38,14 @@ export default function MerchantLogin() {
       console.log('[MerchantLogin] Login successful:', response);
       // Store login response data
       localStorage.setItem('user', JSON.stringify(response));
-      // Use navigate instead of window.location
-      navigate('/merchant/dashboard');
+      console.log('[MerchantLogin] Attempting navigation to dashboard');
+      navigate('/merchant/dashboard', { replace: true });
     } catch (error) {
       console.error("[MerchantLogin] Login failed:", {
         error,
         data,
+        errorType: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       });
       toast({

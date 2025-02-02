@@ -17,6 +17,7 @@ import ApplyPage from "@/pages/apply"; // Placeholder component
 
 
 function AppRouter() { // Renamed Router to AppRouter
+  console.log('[Router] Rendering AppRouter'); // Added logging
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login/customer" />} /> {/* Replaced Redirect */}
@@ -29,12 +30,17 @@ function AppRouter() { // Renamed Router to AppRouter
       <Route path="/admin" element={<ProtectedRoute component={AdminDashboard} />} /> {/* Modified ProtectedRoute usage */}
       <Route path="/admin/kyc-verifications" element={<ProtectedRoute component={KycVerificationsPage} />} /> {/* Modified ProtectedRoute usage */}
       <Route path="/apply/:token" element={<ApplyPage />} />
+      <Route path="/merchant/dashboard" element={<ProtectedRoute allowedRoles={["merchant"]}>
+            {console.log('[Router] Rendering merchant dashboard')}
+            <MerchantDashboard />
+          </ProtectedRoute>} />
       <Route path="*" element={<NotFound />} /> {/* Used * for catch-all */}
     </Routes>
   );
 }
 
 function App() {
+  console.log('[App] Rendering App'); // Added logging
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

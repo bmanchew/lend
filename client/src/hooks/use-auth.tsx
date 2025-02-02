@@ -88,8 +88,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: SelectUser) => {
+      console.log('[Auth] Login successful:', {
+        userId: user.id,
+        role: user.role,
+        timestamp: new Date().toISOString()
+      });
       queryClient.setQueryData(["/api/user"], user);
-      setLocation(user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`);
+      const targetPath = user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`;
+      console.log('[Auth] Redirecting to:', {
+        path: targetPath,
+        timestamp: new Date().toISOString()
+      });
+      setLocation(targetPath);
     },
     onError: (error: Error) => {
       toast({
