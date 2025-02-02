@@ -56,8 +56,7 @@ describe('Borrower Flow Tests', () => {
         Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ 
-            message: 'OTP sent successfully',
-            phoneNumber: '+15555555555'
+            message: 'OTP sent successfully'
           })
         })
       )
@@ -69,7 +68,8 @@ describe('Borrower Flow Tests', () => {
             username: 'testuser',
             role: 'borrower',
             kycStatus: 'pending',
-            phoneNumber: '+15555555555'
+            phoneNumber: '+15555555555',
+            lastOtpCode: '123456'
           })
         })
       )

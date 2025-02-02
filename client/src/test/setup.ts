@@ -47,6 +47,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.clearAllTimers();
   if (global.fetch.mockClear) {
     global.fetch.mockClear();
   }
