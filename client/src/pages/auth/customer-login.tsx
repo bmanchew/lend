@@ -74,6 +74,15 @@ export default function CustomerLogin() {
 
   const handleVerifyAndContinue = async (data) => {
     try {
+      if (!data.code) {
+        toast({ 
+          title: "Error", 
+          description: "Please enter verification code", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
       console.log('[CustomerLogin] Verifying OTP:', { 
         phoneNumber: data.phoneNumber,
         code: data.code
@@ -163,7 +172,12 @@ export default function CustomerLogin() {
                         <InputOTP
                           maxLength={6}
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={(value) => {
+                            field.onChange(value);
+                            if (value.length === 6) {
+                              form.handleSubmit(handleVerifyAndContinue)();
+                            }
+                          }}
                           className="gap-2"
                         >
                           <InputOTPGroup>
