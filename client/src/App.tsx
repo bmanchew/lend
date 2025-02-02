@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { Switch, Route, Redirect } from "wouter";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"; // Changed import
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -16,29 +16,21 @@ import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 import ApplyPage from "@/pages/apply"; // Placeholder component
 
 
-import { Router as BrowserRouter } from "wouter";
-
-function Router() {
+function AppRouter() { // Renamed Router to AppRouter
   return (
-    <Switch>
-      <Route path="/">
-        <Redirect to="/login/customer" />
-      </Route>
-      <Route path="/login/customer">
-        <CustomerLogin />
-      </Route>
-      <Route path="/auth/customer-login">
-        <CustomerLogin />
-      </Route>
-      <Route path="/login/merchant" component={MerchantLogin} />
-      <Route path="/login/admin" component={AdminLogin} />
-      <ProtectedRoute path="/customer" component={CustomerDashboard} />
-      <ProtectedRoute path="/merchant" component={MerchantDashboard} />
-      <ProtectedRoute path="/admin" component={AdminDashboard} />
-      <ProtectedRoute path="/admin/kyc-verifications" component={KycVerificationsPage} />
-      <Route path="/apply/:token" component={ApplyPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <Routes>
+      <Route path="/" element={<Navigate to="/login/customer" />} /> {/* Replaced Redirect */}
+      <Route path="/login/customer" element={<CustomerLogin />} />
+      <Route path="/auth/customer-login" element={<CustomerLogin />} />
+      <Route path="/login/merchant" element={<MerchantLogin />} />
+      <Route path="/login/admin" element={<AdminLogin />} />
+      <Route path="/customer" element={<ProtectedRoute component={CustomerDashboard} />} /> {/* Modified ProtectedRoute usage */}
+      <Route path="/merchant" element={<ProtectedRoute component={MerchantDashboard} />} /> {/* Modified ProtectedRoute usage */}
+      <Route path="/admin" element={<ProtectedRoute component={AdminDashboard} />} /> {/* Modified ProtectedRoute usage */}
+      <Route path="/admin/kyc-verifications" element={<ProtectedRoute component={KycVerificationsPage} />} /> {/* Modified ProtectedRoute usage */}
+      <Route path="/apply/:token" element={<ApplyPage />} />
+      <Route path="*" element={<NotFound />} /> {/* Used * for catch-all */}
+    </Routes>
   );
 }
 
@@ -47,7 +39,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <Router />
+          <AppRouter />
           <Toaster />
         </BrowserRouter>
       </AuthProvider>

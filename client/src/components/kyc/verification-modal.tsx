@@ -17,7 +17,8 @@ export function KycVerificationModal({
   onVerificationComplete
 }: VerificationModalProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  import { useAuth } from '../../hooks/use-auth';
+const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
 
