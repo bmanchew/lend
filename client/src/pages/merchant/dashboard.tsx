@@ -46,6 +46,23 @@ export default function MerchantDashboard() {
     enabled: !!merchant,
   });
 
+  // Listen for real-time contract updates
+  useEffect(() => {
+    if (socket && merchant?.id) {
+      socket.on('contract_update', (data) => {
+        if (data.merchantId === merchant.id) {
+          refetchContracts();
+        }
+      });
+
+      socket.on('application_update', (data) => {
+        if (data.merchantId === merchant.id) {
+          refetchContracts();
+        }
+      });
+    }
+  }, [socket, merchant?.id, refetchContracts]);
+
   // Connect to socket for real-time updates
   const socket = useSocket(merchant?.id);
 

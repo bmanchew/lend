@@ -128,6 +128,30 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
+        <Card className="col-span-2 mb-4">
+          <CardHeader>
+            <CardTitle>Recent Contract Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {contracts?.slice(0, 10).map(contract => (
+                <div key={contract.id} className="flex items-center justify-between p-4 border rounded">
+                  <div>
+                    <p className="font-medium">Contract #{contract.contractNumber}</p>
+                    <p className="text-sm text-muted-foreground">Amount: ${Number(contract.amount).toFixed(2)}</p>
+                    <p className="text-sm text-muted-foreground">Merchant: {contract.merchants?.companyName}</p>
+                  </div>
+                  <div className="text-right">
+                    <Badge>{contract.status}</Badge>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {new Date(contract.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
         <div className="grid gap-4 grid-cols-2">
           <Card>
             <CardHeader>
