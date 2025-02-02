@@ -11,8 +11,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {
+  const requestId = Date.now().toString(36);
   const start = Date.now();
   const path = req.path;
+  
+  console.log(`[API] ${req.method} ${path} started`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: req.headers
+  });
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;

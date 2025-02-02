@@ -14,12 +14,31 @@ import { smsService } from "./services/sms"; // Added import for sms service
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
-export async function hashPassword(password: string) {
-  console.log("[Auth] Generating password hash");
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
-  return `${derivedKey.toString("hex")}.${salt}`;
+class AuthService {
+  async hashPassword(password: string) {
+    console.log("[AuthService] Generating password hash");
+    const salt = randomBytes(16).toString("hex");
+    const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+    return `${derivedKey.toString("hex")}.${salt}`;
+  }
+
+  async comparePasswords(supplied: string, stored: string) {
+    console.log("[AuthService] Comparing passwords");
+    try {
+      if (!supplied || !stored) return false;
+      const [hashedPassword, salt] = stored.split(".");
+      if (!hashedPassword || !salt) return false;
+      const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
+      const storedBuf = Buffer.from(hashedPassword, "hex");
+      return suppliedBuf.length === storedBuf.length && timingSafeEqual(storedBuf, suppliedBuf);
+    } catch (error) {
+      console.error("[AuthService] Password comparison error:", error);
+      return false;
+    }
+  }
 }
+
+export const authService = new AuthService();
 
 async function comparePasswords(supplied: string, stored: string) {
   console.log("[Auth] Comparing passwords");

@@ -895,12 +895,23 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    console.error("Global error handler caught:", err); 
+  // Error handling middleware
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    console.error("[API] Error caught:", {
+      message: err.message,
+      stack: err.stack,
+      status: err.status
+    });
+
     if (!res.headersSent) {
-      res.status(500).json({ 
+      const status = err.status || 500;
+      const message = status === 500 ? 'Internal Server Error' : err.message;
+
+      res.status(status).json({
         status: "error",
-        message: err.message || "Internal server error" 
+        message,
+        code: err.code,
+        requestId: Date.now().toString(36)
       });
     }
   });
