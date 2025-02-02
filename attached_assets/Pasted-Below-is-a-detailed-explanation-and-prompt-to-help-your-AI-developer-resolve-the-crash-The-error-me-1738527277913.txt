@@ -1,0 +1,59 @@
+Below is a detailed explanation and prompt to help your AI developer resolve the crash. The error message indicates that in your file `server/services/sms.ts` at line 112, the variable (or symbol) `formattedPhone` has been declared more than once in the same scope. This is causing ESBuild (or TSX) to throw a "TransformError" and crash the application.
+
+---
+
+**Prompt for AI Developer to Fix the Duplicate Declaration Issue:**
+
+We recently implemented changes to improve phone number formatting for OTP delivery. However, after deploying, the app crashes with the following error:
+
+```
+Error [TransformError]: Transform failed with 1 error:
+/home/runner/workspace/server/services/sms.ts:112:12: ERROR: The symbol "formattedPhone" has already been declared
+```
+
+This error indicates that the variable `formattedPhone` is being declared more than once in the same scope (likely using `let` or `const`), causing a duplicate symbol error.
+
+**Action Steps:**
+
+1. **Locate the Duplicate Declaration:**  
+   Open `server/services/sms.ts` and navigate to line 112. Check for any duplicate declarations of `formattedPhone` in the same scope (e.g., inside the same function or block).
+
+2. **Remove or Rename:**  
+   - If the variable is declared twice unintentionally, remove the duplicate declaration.  
+   - Alternatively, if both declarations are needed in different contexts, rename one of them so that each variable has a unique name.
+
+3. **Check Block Scope:**  
+   Ensure that the variable declarations use block-scoped keywords (i.e., `let` or `const`) and that they are not overlapping due to a misplaced curly brace `{}` that might have caused two separate declarations in what is perceived as the same block.
+
+4. **Rebuild and Test:**  
+   After making these changes, rebuild your project and test to ensure that the error is resolved and that phone number formatting still functions as expected.
+
+**Example Fix:**
+
+If your code looked something like this:
+
+```typescript
+function formatPhoneNumber(phone: string): string {
+  let formattedPhone = phone.replace(/\D/g, '');
+  // ... some logic ...
+  let formattedPhone = "+1" + formattedPhone; // Duplicate declaration causing error
+  return formattedPhone;
+}
+```
+
+You might fix it by updating the second declaration to simply reassign the variable, like so:
+
+```typescript
+function formatPhoneNumber(phone: string): string {
+  let formattedPhone = phone.replace(/\D/g, '');
+  // ... some logic ...
+  formattedPhone = "+1" + formattedPhone; // Removed duplicate declaration
+  return formattedPhone;
+}
+```
+
+Once you update the file accordingly, redeploy and test sending OTP to verify that the error is resolved.
+
+---
+
+This prompt should guide the developer to locate and resolve the duplicate declaration of `formattedPhone` in your code.
