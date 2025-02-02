@@ -160,11 +160,17 @@ export function KycVerificationModal({
         console.log('[KYC Modal] Starting new verification');
         setVerificationStarted(true);
         const result = await startVerification.mutateAsync();
-        
-        if (!result) {
-          throw new Error('No response from verification service');
+
+        if (!result || !result.redirectUrl) {
+          console.error('[KYC Modal] Invalid verification response:', result);
+          toast({
+            title: "Verification Error",
+            description: "Unable to start verification. Please try again.",
+            variant: "destructive"
+          });
+          throw new Error('Invalid verification response');
         }
-        
+
         console.log('[KYC Modal] Verification initialized:', result);
       } catch (error: any) {
         console.error('[KYC Modal] Failed to initialize verification:', error);

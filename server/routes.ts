@@ -948,7 +948,10 @@ export function registerRoutes(app: Express): Server {
         `+${cleanPhone2}` : 
         `+1${cleanPhone2}`;
 
-      if (!formattedPhone2.match(/^\+1[0-9]{10}$/)) {
+      const cleanPhone = formattedPhone2.replace(/\D/g, '').slice(-10);
+      const standardizedPhone = `+1${cleanPhone}`;
+      
+      if (!standardizedPhone.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
         return res.status(400).json({ error: 'Invalid phone number format' });
       }

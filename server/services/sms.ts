@@ -29,18 +29,27 @@ export const smsService = {
   async sendSMS(to: string, message: string): Promise<boolean> {
     try {
       const formattedPhone = this.formatPhoneNumber(to);
+      
+      if (!twilioPhone || !accountSid || !authToken) {
+        logger.error('Missing Twilio configuration');
+        return false;
+      }
 
-      await client.messages.create({
+      const result = await client.messages.create({
         body: message,
         to: formattedPhone,
         from: twilioPhone,
       });
 
-      logger.info(`SMS sent successfully to ${formattedPhone}`);
+      logger.info(`SMS sent successfully to ${formattedPhone}`, { messageId: result.sid });
       return true;
-    } catch (error) {
-      logger.error('Error sending SMS:', error);
-      throw error;
+    } catch (error: any) {
+      logger.error('Error sending SMS:', {
+        error: error.message,
+        code: error.code,
+        phone: to
+      });
+      return false;
     }
   },
 
