@@ -12,9 +12,24 @@ export default function AdminLogin() {
     defaultValues: {
       username: "",
       password: "",
-      loginType: "admin"
+      loginType: "admin" as const
     },
   });
+
+  async function onSubmit(data: any) {
+    try {
+      await loginMutation.mutateAsync({
+        ...data,
+        deviceInfo: {
+          isMobile: false,
+          platform: window.navigator.platform,
+          userAgent: window.navigator.userAgent
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  }
 
   return (
     <div className="container flex min-h-screen items-center justify-center">
@@ -25,7 +40,7 @@ export default function AdminLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="username"
@@ -33,7 +48,7 @@ export default function AdminLogin() {
                 <FormItem>
                   <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input {...field} type="text" />
+                    <Input {...field} type="text" required />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -46,14 +61,14 @@ export default function AdminLogin() {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input {...field} type="password" />
+                    <Input {...field} type="password" required />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-              Login
+              {loginMutation.isPending ? 'Logging in...' : 'Login'}
             </Button>
           </form>
         </Form>
