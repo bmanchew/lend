@@ -21,14 +21,25 @@ export default function MerchantLogin() {
   });
 
   const onSubmit = async (data: FormData) => {
+    console.log('[MerchantLogin] Attempting login:', {
+      username: data.username,
+      loginType: "merchant",
+      timestamp: new Date().toISOString()
+    });
+
     try {
-      await loginMutation.mutateAsync({
+      const response = await loginMutation.mutateAsync({
         username: data.username,
         password: data.password,
         loginType: "merchant"
       });
+      console.log('[MerchantLogin] Login successful:', response);
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("[MerchantLogin] Login failed:", {
+        error,
+        data,
+        timestamp: new Date().toISOString()
+      });
       toast({
         title: "Login failed",
         description: error instanceof Error ? error.message : "An error occurred",
