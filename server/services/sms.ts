@@ -62,10 +62,14 @@ class SMSService {
   ): Promise<{success: boolean; error?: string}> {
     try {
       // Standardized phone number cleaning
-      const cleanPhone = (toNumber || '').toString()
+      let cleanPhone = (toNumber || '').toString()
         .replace(/\D/g, '')  // Remove non-digits
-        .replace(/^1/, '')   // Remove leading 1
         .slice(-10);        // Take last 10 digits
+      
+      // Handle missing country code
+      if (cleanPhone.length === 10) {
+        cleanPhone = '1' + cleanPhone;
+      }
 
       console.log("[SMSService] Phone cleaning:", {
         input: toNumber,

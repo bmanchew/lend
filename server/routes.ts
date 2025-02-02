@@ -880,12 +880,16 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid amount' });
       }
 
+      // Format phone number consistently
+      const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
+      const formattedPhone = `+1${cleanPhone}`;
+
       // First check if user exists
-      debugLog('Looking up existing user with phone:', borrowerPhone);
+      debugLog('Looking up existing user with phone:', formattedPhone);
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, borrowerPhone))
+        .where(eq(users.phoneNumber, formattedPhone))
         .limit(1);
 
       debugLog('User lookup result:', existingUser || 'Not found');
