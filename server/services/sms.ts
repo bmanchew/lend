@@ -57,12 +57,12 @@ class SMSService {
   private formatPhoneNumber(phone: string): string {
     // Remove all non-digits
     let cleaned = (phone || '').toString().replace(/\D/g, '');
-    
+
     // Handle numbers with country code
     if (cleaned.length === 11 && cleaned.startsWith('1')) {
       cleaned = cleaned.substring(1);
     }
-    
+
     // Validate length
     if (cleaned.length !== 10) {
       console.error("[SMSService] Invalid phone length:", {
@@ -73,7 +73,7 @@ class SMSService {
       });
       throw new Error('Phone number must be exactly 10 digits');
     }
-    
+
     // Add +1 prefix
     return '+1' + cleaned;
   }
@@ -92,36 +92,6 @@ class SMSService {
         timestamp: new Date().toISOString()
       });
 
-      console.log("[SMSService] Phone number cleaning:", {
-        original: toNumber,
-        rawPhone: toNumber?.rawPhone,
-        cleaned: cleanPhone
-      });
-      // Handle 10 or 11 digit numbers (with or without country code)
-      if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
-        cleanPhone = cleanPhone.substring(1);
-      }
-      if (cleanPhone.length !== 10) {
-        console.error("[SMSService] Invalid phone number length:", {
-          original: toNumber,
-          cleaned: cleanPhone,
-          length: cleanPhone.length
-        });
-        return {success: false, error: 'Invalid phone number format'};
-      }
-      const formattedPhone = `+1${cleanPhone}`;
-
-      if (cleanPhone.length !== 10) {
-        console.error("[SMSService] Invalid phone format:", {
-          original: toNumber,
-          cleaned: cleanPhone,
-          formatted: formattedPhone,
-          length: cleanPhone.length
-        });
-        return {success: false, error: 'Phone number must be 10 digits'};
-      }
-
-      // Validate URL
       try {
         new URL(applicationUrl);
       } catch {
@@ -131,7 +101,6 @@ class SMSService {
 
       console.log("[SMSService] Sending loan application link:", {
         originalNumber: toNumber,
-        cleanNumber: cleanPhone,
         formattedNumber: formattedPhone,
         merchant: merchantName,
         url: applicationUrl,
@@ -209,59 +178,20 @@ class SMSService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  private formatPhoneNumber(phone: string): string {
-    // Remove all non-digits
-    let clean = (phone || '').toString().replace(/\D/g, '');
-    
-    // Handle 11-digit numbers starting with 1
-    if (clean.length === 11 && clean.startsWith('1')) {
-      clean = clean.substring(1);
-    }
-    
-    // Validate length after cleaning
-    if (clean.length !== 10) {
-      console.error("[SMSService] Invalid phone length:", {
-        original: phone,
-        cleaned: clean,
-        length: clean.length
-      });
-      throw new Error('Phone number must be 10 digits');
-    }
-    
-    // Add +1 prefix
-    const formatted = '+1' + clean;
-    
-    console.log("[SMSService] Phone formatting:", {
-      input: phone,
-      cleaned: clean,
-      formatted: formatted
-    });
-    
-    return formatted;
-  }
-
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
     try {
       const formattedPhone = this.formatPhoneNumber(phoneNumber);
-      
+
       console.log('[SMSService] Sending OTP:', {
         original: phoneNumber,
         formatted: formattedPhone,
         timestamp: new Date().toISOString()
       });
 
-      console.log("[SMSService] Sending OTP:", {
-        originalNumber: phoneNumber,
-        cleanNumber: cleanPhone,
-        formattedNumber: '+1' + cleanPhone,
-        code: code,
-        timestamp: new Date().toISOString()
-      });
-
       const message = await this.client.messages.create({
         body: `Your ShiFi login code is: ${code}. Valid for 5 minutes.`,
         from: this.config.fromNumber,
-        to: phoneNumber
+        to: formattedPhone
       });
 
       console.log("[SMSService] Successfully sent OTP:", {
