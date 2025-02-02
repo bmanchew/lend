@@ -17,14 +17,21 @@ export default function AdminLogin() {
 
   async function onSubmit(data: any) {
     try {
-      await loginMutation.mutateAsync({
+      const response = await loginMutation.mutateAsync({
         ...data,
+        loginType: 'admin',
         deviceInfo: {
           isMobile: false,
           platform: window.navigator.platform,
           userAgent: window.navigator.userAgent
         }
       });
+      
+      if (response?.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        console.error('Unexpected role after login:', response?.role);
+      }
     } catch (error) {
       console.error('Login error:', error);
     }
