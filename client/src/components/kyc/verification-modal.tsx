@@ -92,7 +92,7 @@ export function KycVerificationModal({
 
   useEffect(() => {
     if (isOpen) {
-      if ((!kycData?.status || kycData?.status === 'not_started')) {
+      if (!kycData?.status || kycData?.status === 'not_started') {
         console.log('[KYC Modal] Auto-starting verification:', {
           isMobile,
           status: kycData?.status
@@ -100,14 +100,13 @@ export function KycVerificationModal({
         startVerification.mutate();
       } else if (kycData?.status === 'Approved') {
         toast({
-          title: "Verification Complete", 
+          title: "Verification Complete",
           description: "Your identity has been verified successfully."
         });
         onVerificationComplete?.();
       }
     }
   }, [isOpen, kycData?.status, isMobile, startVerification, toast, onVerificationComplete]);
-
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 p-4">
