@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);
-      setLocation(`/${user.role}`);
+      setLocation(user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`);
     },
     onError: (error: Error) => {
       toast({
