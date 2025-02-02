@@ -53,11 +53,6 @@ export const contracts = pgTable('contracts', {
   id: serial('id').primaryKey(),
   merchantId: integer('merchant_id').references(() => merchants.id),
   customerId: integer('customer_id').references(() => users.id),
-  customer: {
-    referencedTable: users,
-    columns: [users.id],
-    referencedColumns: ['id']
-  },
   contractNumber: varchar('contract_number', { length: 255 }),
   amount: decimal('amount', { precision: 10, scale: 2 }),
   term: integer('term'),
