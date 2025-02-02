@@ -23,7 +23,10 @@ export default function MerchantLogin() {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await loginMutation.mutateAsync(data);
+      await loginMutation.mutateAsync({
+        ...data,
+        loginType: "merchant"
+      });
     } catch (error) {
       console.error("Login failed:", error);
     }
