@@ -117,13 +117,13 @@ export class SMSService {
 }
 
 // Create and export an instance
-const twilioFromNumber = process.env.TWILIO_FROM_NUMBER;
-if (!twilioFromNumber) {
-  console.error('[SMSService] Missing TWILIO_FROM_NUMBER environment variable');
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+if (!twilioPhoneNumber) {
+  console.error('[SMSService] Missing TWILIO_PHONE_NUMBER environment variable');
 }
 
 export const smsService = new SMSService({
   accountSid: process.env.TWILIO_ACCOUNT_SID || '',
   authToken: process.env.TWILIO_AUTH_TOKEN || '',
-  fromNumber: twilioFromNumber || ''
+  fromNumber: twilioPhoneNumber || ''
 });
