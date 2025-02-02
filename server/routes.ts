@@ -440,8 +440,8 @@ export function registerRoutes(app: Express): Server {
           .set({
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
             email: customerDetails.email,
-            // Update role to customer if not already
-            role: 'customer'
+            role: 'customer',
+            phoneNumber: customerDetails.phone // Ensure phone number is updated
           })
           .where(eq(users.id, existingUser.id))
           .returning();
@@ -454,6 +454,7 @@ export function registerRoutes(app: Express): Server {
             email: customerDetails.email,
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
             role: 'customer',
+            phoneNumber: customerDetails.phone,
             phoneNumber: customerDetails.phone,
           })
           .returning();
