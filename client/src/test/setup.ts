@@ -1,4 +1,3 @@
-
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
@@ -34,15 +33,34 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Reset mocks between tests
+// Setup before each test
 beforeEach(() => {
   vi.clearAllMocks();
-  if (global.fetch.mockClear) {
+  if (global.fetch && typeof global.fetch.mockClear === 'function') {
     global.fetch.mockClear();
   }
-  window.localStorage.getItem.mockClear();
-  window.localStorage.setItem.mockClear();
-  
+
+  // Mock window.matchMedia
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+
+  // Reset localStorage mocks
+  const storage = {};
+  window.localStorage.getItem = vi.fn(key => storage[key]);
+  window.localStorage.setItem = vi.fn((key, value) => storage[key] = value);
+  window.localStorage.clear = vi.fn(() => Object.keys(storage).forEach(key => delete storage[key]));
+
   // Mock ResizeObserver
   global.ResizeObserver = vi.fn().mockImplementation(() => ({
     observe: vi.fn(),
@@ -62,6 +80,7 @@ beforeEach(() => {
   });
 });
 
+// Cleanup after each test
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();

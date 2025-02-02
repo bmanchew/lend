@@ -55,7 +55,10 @@ describe('Borrower Flow Tests', () => {
       .mockImplementationOnce(() => 
         Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ message: 'OTP sent successfully' })
+          json: () => Promise.resolve({ 
+            message: 'OTP sent successfully',
+            phoneNumber: '+15555555555'
+          })
         })
       )
       .mockImplementationOnce(() =>
