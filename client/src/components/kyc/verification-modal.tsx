@@ -20,6 +20,9 @@ export function KycVerificationModal({
   const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
+
+  // Log user info for debugging
+  console.log('[KYC Modal] User info:', { userId, user });
   const [verificationStarted, setVerificationStarted] = useState(false);
 
   // Platform detection
