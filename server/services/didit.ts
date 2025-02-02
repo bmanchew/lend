@@ -151,12 +151,12 @@ class DiditService {
         }),
         redirect_url: completeReturnUrl,
         app_scheme: 'didit',
-        mobile_flow: isMobile,
+        mobile_flow: true, // Force mobile flow for all users
         mobile_settings: {
-          allow_app: isMobile,
+          allow_app: true,
           fallback_to_web: true,
-          app_timeout: 5000,
-          force_mobile_flow: isMobile,
+          app_timeout: 10000,
+          force_mobile_flow: true,
           universal_link_enabled: true
         }
       };
