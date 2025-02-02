@@ -16,11 +16,6 @@ const applicationSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().min(10, "Valid phone number is required"),
-  streetAddress: z.string().min(1, "Street address is required"),
-  aptNumber: z.string().optional(),
-  city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  zipCode: z.string().min(5, "Valid ZIP code is required"),
   program: z.string().min(1, "Program is required"),
   fundingAmount: z.string().min(1, "Funding amount is required"),
   salesRepEmail: z.string().email("Valid sales rep email is required")
@@ -60,11 +55,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       lastName: "",
       email: "",
       phone: "",
-      streetAddress: "",
-      aptNumber: "",
-      city: "",
-      state: "",
-      zipCode: "",
       program: "",
       fundingAmount: "",
       salesRepEmail: ""
@@ -267,132 +257,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="streetAddress"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Street Address</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="123 ShiFi Lane" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="aptNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>APT/STE #</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="APT #2" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>City</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Atlanta" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="state"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>State</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="AL">Alabama</SelectItem>
-                          <SelectItem value="AK">Alaska</SelectItem>
-                          <SelectItem value="AZ">Arizona</SelectItem>
-                          <SelectItem value="AR">Arkansas</SelectItem>
-                          <SelectItem value="CA">California</SelectItem>
-                          <SelectItem value="CO">Colorado</SelectItem>
-                          <SelectItem value="CT">Connecticut</SelectItem>
-                          <SelectItem value="DE">Delaware</SelectItem>
-                          <SelectItem value="FL">Florida</SelectItem>
-                          <SelectItem value="GA">Georgia</SelectItem>
-                          <SelectItem value="HI">Hawaii</SelectItem>
-                          <SelectItem value="ID">Idaho</SelectItem>
-                          <SelectItem value="IL">Illinois</SelectItem>
-                          <SelectItem value="IN">Indiana</SelectItem>
-                          <SelectItem value="IA">Iowa</SelectItem>
-                          <SelectItem value="KS">Kansas</SelectItem>
-                          <SelectItem value="KY">Kentucky</SelectItem>
-                          <SelectItem value="LA">Louisiana</SelectItem>
-                          <SelectItem value="ME">Maine</SelectItem>
-                          <SelectItem value="MD">Maryland</SelectItem>
-                          <SelectItem value="MA">Massachusetts</SelectItem>
-                          <SelectItem value="MI">Michigan</SelectItem>
-                          <SelectItem value="MN">Minnesota</SelectItem>
-                          <SelectItem value="MS">Mississippi</SelectItem>
-                          <SelectItem value="MO">Missouri</SelectItem>
-                          <SelectItem value="MT">Montana</SelectItem>
-                          <SelectItem value="NE">Nebraska</SelectItem>
-                          <SelectItem value="NV">Nevada</SelectItem>
-                          <SelectItem value="NH">New Hampshire</SelectItem>
-                          <SelectItem value="NJ">New Jersey</SelectItem>
-                          <SelectItem value="NM">New Mexico</SelectItem>
-                          <SelectItem value="NY">New York</SelectItem>
-                          <SelectItem value="NC">North Carolina</SelectItem>
-                          <SelectItem value="ND">North Dakota</SelectItem>
-                          <SelectItem value="OH">Ohio</SelectItem>
-                          <SelectItem value="OK">Oklahoma</SelectItem>
-                          <SelectItem value="OR">Oregon</SelectItem>
-                          <SelectItem value="PA">Pennsylvania</SelectItem>
-                          <SelectItem value="RI">Rhode Island</SelectItem>
-                          <SelectItem value="SC">South Carolina</SelectItem>
-                          <SelectItem value="SD">South Dakota</SelectItem>
-                          <SelectItem value="TN">Tennessee</SelectItem>
-                          <SelectItem value="TX">Texas</SelectItem>
-                          <SelectItem value="UT">Utah</SelectItem>
-                          <SelectItem value="VT">Vermont</SelectItem>
-                          <SelectItem value="VA">Virginia</SelectItem>
-                          <SelectItem value="WA">Washington</SelectItem>
-                          <SelectItem value="WV">West Virginia</SelectItem>
-                          <SelectItem value="WI">Wisconsin</SelectItem>
-                          <SelectItem value="WY">Wyoming</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="zipCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>ZIP Code</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="12345" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
