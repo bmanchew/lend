@@ -147,13 +147,17 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
 
       // Handle redirection
-      if (data.redirectUrl) {
-        console.log('[LoanApplication] Redirecting to:', data.redirectUrl);
-        setTimeout(() => {
-          window.location.href = data.redirectUrl;
-        }, 100); // Small delay to ensure toast is visible
+      if (data.applicationUrl) {
+        console.log('[LoanApplication] Redirecting to:', data.applicationUrl);
+        // Use direct redirection instead of setTimeout
+        window.location.href = data.applicationUrl;
       } else {
-        console.log('[LoanApplication] No redirect URL provided');
+        console.warn('[LoanApplication] No application URL provided in response');
+        toast({
+          title: "Warning",
+          description: "Application sent but redirect URL is missing",
+          variant: "warning"
+        });
       }
     },
     onError: (error: any) => {
