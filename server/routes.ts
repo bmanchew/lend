@@ -432,24 +432,25 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.phoneNumber, customerDetails.phone))
         .limit(1);
 
+      // Always update or create user to ensure latest information
       let customer;
       if (existingUser) {
-        // Update existing user
         [customer] = await db
           .update(users)
           .set({
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
             email: customerDetails.email,
+            // Update role to customer if not already
+            role: 'customer'
           })
           .where(eq(users.id, existingUser.id))
           .returning();
       } else {
-        // Create new user
         [customer] = await db
           .insert(users)
           .values({
             username: customerDetails.phone,
-            password: Math.random().toString(36).slice(-8), // Temporary password
+            password: Math.random().toString(36).slice(-8),
             email: customerDetails.email,
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
             role: 'customer',
@@ -457,6 +458,8 @@ export function registerRoutes(app: Express): Server {
           })
           .returning();
       }
+
+      // Always send the SMS invitation regardless of existing user
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
