@@ -122,7 +122,7 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    if (!isOpen || !userId) return;
+    if (!isOpen) return;
 
     console.log('[KYC Modal] Modal opened:', {
       isMobile,
@@ -132,26 +132,50 @@ export function KycVerificationModal({
       verificationStarted
     });
 
+    if (!userId) {
+      console.error('[KYC Modal] No user ID available');
+      toast({
+        title: "Verification Error",
+        description: "User ID not found. Please try logging in again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const initializeVerification = async () => {
       if (verificationStarted) return;
 
-      if (!kycData?.status || kycData?.status === 'not_started') {
+      try {
         console.log('[KYC Modal] Starting new verification');
         setVerificationStarted(true);
-        await startVerification.mutateAsync();
-      } else if (kycData?.status === 'Approved') {
-        console.log('[KYC Modal] User already verified');
+        const result = await startVerification.mutateAsync();
+        
+        if (!result) {
+          throw new Error('No response from verification service');
+        }
+        
+        console.log('[KYC Modal] Verification initialized:', result);
+      } catch (error: any) {
+        console.error('[KYC Modal] Failed to initialize verification:', error);
         toast({
-          title: "Verification Complete",
-          description: "Your identity has been verified successfully."
+          title: "Verification Error",
+          description: error.message || "Failed to start verification. Please try again.",
+          variant: "destructive"
         });
-        onVerificationComplete?.();
+        setVerificationStarted(false);
       }
     };
 
-    initializeVerification().catch(error => {
-      console.error('[KYC Modal] Failed to initialize verification:', error);
-    });
+    if (!kycData?.status || kycData?.status === 'not_started') {
+      initializeVerification();
+    } else if (kycData?.status === 'Approved') {
+      console.log('[KYC Modal] User already verified');
+      toast({
+        title: "Verification Complete",
+        description: "Your identity has been verified successfully."
+      });
+      onVerificationComplete?.();
+    }
   }, [isOpen, kycData?.status, userId]);
 
   return (
