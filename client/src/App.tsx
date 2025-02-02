@@ -30,10 +30,13 @@ function AppRouter() { // Renamed Router to AppRouter
       <Route path="/admin" element={<ProtectedRoute component={AdminDashboard} />} /> {/* Modified ProtectedRoute usage */}
       <Route path="/admin/kyc-verifications" element={<ProtectedRoute component={KycVerificationsPage} />} /> {/* Modified ProtectedRoute usage */}
       <Route path="/apply/:token" element={<ApplyPage />} />
-      <Route path="/merchant/dashboard" element={<ProtectedRoute allowedRoles={["merchant"]}>
-            {console.log('[Router] Rendering merchant dashboard')}
-            <MerchantDashboard />
-          </ProtectedRoute>} />
+      <Route path="/merchant/dashboard" element={
+        <ProtectedRoute 
+          path="/merchant/dashboard"
+          allowedRoles={["merchant"]} 
+          component={MerchantDashboard}
+        />
+      } />
       <Route path="*" element={<NotFound />} /> {/* Used * for catch-all */}
     </Routes>
   );
