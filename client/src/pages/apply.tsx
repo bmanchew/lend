@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { KycVerificationModal } from "../components/kyc/verification-modal";
 import { Button } from "@/components/ui/button";
 
 export default function Apply() {
   const [location] = useLocation();
+  const [, params] = useRoute("/apply/:token");
   const searchParams = new URLSearchParams(window.location.search);
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
