@@ -6,21 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useMutation } from "@tanstack/react-query";
 
+type LoginFormData = {
+  username: string;
+  password: string;
+};
+
 export default function MerchantLogin() {
-  const { login } = useAuth();
+  const { loginMutation } = useAuth();
   
-  const form = useForm({
+  const form = useForm<LoginFormData>({
     defaultValues: {
       username: "",
       password: "",
     },
   });
 
-  const loginMutation = useMutation({
-    mutationFn: (data: any) => login({ ...data, loginType: "merchant" }),
-  });
-
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: LoginFormData) => {
     try {
       await loginMutation.mutateAsync(data);
     } catch (error) {
