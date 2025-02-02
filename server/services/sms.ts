@@ -7,6 +7,9 @@ export class SMSService {
   private config: SMSConfig;
 
   constructor(config: SMSConfig) {
+    if (!config.fromNumber) {
+      throw new Error('Twilio from number is required');
+    }
     this.config = config;
     this.client = twilio(config.accountSid, config.authToken);
   }
@@ -114,8 +117,13 @@ export class SMSService {
 }
 
 // Create and export an instance
+const twilioFromNumber = process.env.TWILIO_FROM_NUMBER;
+if (!twilioFromNumber) {
+  console.error('[SMSService] Missing TWILIO_FROM_NUMBER environment variable');
+}
+
 export const smsService = new SMSService({
   accountSid: process.env.TWILIO_ACCOUNT_SID || '',
   authToken: process.env.TWILIO_AUTH_TOKEN || '',
-  fromNumber: process.env.TWILIO_FROM_NUMBER || ''
+  fromNumber: twilioFromNumber || ''
 });
