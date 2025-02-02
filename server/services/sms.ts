@@ -98,9 +98,12 @@ class SMSService {
       }
 
       console.log("[SMSService] Sending loan application link:", {
-        to: toNumber,
+        originalNumber: toNumber,
+        cleanNumber: cleanPhone,
+        formattedNumber: formattedPhone,
         merchant: merchantName,
-        url: applicationUrl
+        url: applicationUrl,
+        timestamp: new Date().toISOString()
       });
 
       const message = await this.client.messages.create({
@@ -189,7 +192,13 @@ class SMSService {
         return false;
       }
 
-      console.log("[SMSService] Sending OTP to:", phoneNumber);
+      console.log("[SMSService] Sending OTP:", {
+        originalNumber: phoneNumber,
+        cleanNumber: cleanPhone,
+        formattedNumber: '+1' + cleanPhone,
+        code: code,
+        timestamp: new Date().toISOString()
+      });
 
       const message = await this.client.messages.create({
         body: `Your ShiFi login code is: ${code}. Valid for 5 minutes.`,
