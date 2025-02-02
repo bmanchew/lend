@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -89,16 +88,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       if (isNaN(fundingAmount) || fundingAmount <= 0) {
         throw new Error('Invalid funding amount');
       }
-      console.log('[LoanDialog] Parsed funding amount:', {
-        raw: data.fundingAmount,
-        parsed: fundingAmount,
-        isValid: !isNaN(fundingAmount)
-      });
-      console.log('Parsed funding amount:', {
-        raw: data.fundingAmount,
-        parsed: fundingAmount,
-        isNaN: isNaN(fundingAmount)
-      });
+
       const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
         method: "POST",
         headers: {
@@ -109,23 +99,31 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
           merchantName,
           amount: fundingAmount,
           fundingAmount: data.fundingAmount,
-          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),  // Clean and format phone number
-          rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10) // Add raw phone for consistency
+          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),
+          rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)
         }),
       });
+
       if (!response.ok) {
-        throw new Error("Failed to send invitation");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to send invitation");
       }
-      return response.json();
+
+      const responseData = await response.json();
+      debugLog('Application submission successful', responseData);
+      return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
-        description: "Loan application invitation sent successfully",
+        description: "Loan application sent successfully",
       });
       setOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+      }
     },
     onError: (error: any) => {
       console.error('[LoanDialog] Error:', error);
@@ -217,7 +215,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               />
             </div>
 
-            
+
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
