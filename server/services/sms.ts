@@ -195,15 +195,33 @@ class SMSService {
 
   private formatPhoneNumber(phone: string): string {
     // Remove all non-digits
-    let clean = phone.replace(/\D/g, '');
-    // Remove leading 1 if present
-    clean = clean.replace(/^1/, '');
-    // Ensure exactly 10 digits
+    let clean = (phone || '').toString().replace(/\D/g, '');
+    
+    // Handle 11-digit numbers starting with 1
+    if (clean.length === 11 && clean.startsWith('1')) {
+      clean = clean.substring(1);
+    }
+    
+    // Validate length after cleaning
     if (clean.length !== 10) {
+      console.error("[SMSService] Invalid phone length:", {
+        original: phone,
+        cleaned: clean,
+        length: clean.length
+      });
       throw new Error('Phone number must be 10 digits');
     }
+    
     // Add +1 prefix
-    return '+1' + clean;
+    const formatted = '+1' + clean;
+    
+    console.log("[SMSService] Phone formatting:", {
+      input: phone,
+      cleaned: clean,
+      formatted: formatted
+    });
+    
+    return formatted;
   }
 
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
