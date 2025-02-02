@@ -1,0 +1,44 @@
+Below is a detailed prompt you can provide to your AI developer to create a fix for inconsistent phone number formatting. This prompt focuses on ensuring that any phone number entered by the user—regardless of format—is converted to the standard +1 format, with robust logging to help track any issues. You can copy and adjust this prompt for your development environment.
+
+---
+
+**Prompt for AI Developer:**
+
+We are experiencing issues with OTP delivery because our SMS service (located in `server/services/sms.ts`) is not consistently formatting phone numbers. For example, when a user enters the phone number `9492803572` (or any other variant such as `(949) 280-3572`, `949.280.3572`, or `1-949-280-3572`), our system should automatically convert it to the standard format `+19492803572` before sending the OTP.
+
+**Requirements:**
+
+1. **Create/Update a Function:**
+   - Develop a function (e.g., `formatPhoneNumber(input: string): string`) in `server/services/sms.ts` that:
+     - Accepts any phone number format as input.
+     - Removes any non-digit characters.
+     - Checks if the number has 10 digits; if so, prepends `+1`.
+     - If the number already includes a country code (e.g., starts with `1` or `+1`), ensure it is formatted correctly as `+1XXXXXXXXXX`.
+     - If the input does not match expected lengths (10 or 11 digits), log an error and handle the case appropriately.
+
+2. **Logging:**
+   - Add logging (using your current logging library or `console.log`) to record the original phone number and the formatted result. For example:
+     ```
+     Original input: 9492803572, Formatted output: +19492803572
+     ```
+   - Ensure that any error in formatting (e.g., invalid length) is logged with a clear error message.
+
+3. **Integration:**
+   - Update the code in `server/services/sms.ts` where the phone number is processed (e.g., before sending the OTP) to use the new `formatPhoneNumber` function.
+   - Confirm that after this change, when testing with the phone number `9492803572`, the logs show the correctly formatted number and an OTP is successfully sent.
+
+4. **Testing:**
+   - Provide unit tests for the function with various input formats:
+     - Plain 10-digit number: `"9492803572"` → `"+19492803572"`
+     - Number with dashes: `"949-280-3572"` → `"+19492803572"`
+     - Number with parentheses and spaces: `"(949) 280 3572"` → `"+19492803572"`
+     - Number with country code: `"1-949-280-3572"` or `"+1 (949) 280-3572"` → `"+19492803572"`
+   - Confirm that an invalid format is handled (e.g., a 9-digit number should log an error).
+
+**Context Note:**
+
+Looking through the logs, we tracked the application status for the number 9492803572 and found that no OTP was sent due to a formatting issue. Fixing the phone number formatting logic should resolve this, and after deployment, retest by sending an OTP to 9492803572.
+
+---
+
+This prompt should provide a clear roadmap for your AI developer to implement the necessary changes. It emphasizes both robust phone number normalization and proper logging to ensure that any formatting issues can be quickly identified and resolved.
