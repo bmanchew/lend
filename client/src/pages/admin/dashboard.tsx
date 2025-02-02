@@ -1,95 +1,98 @@
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-} from "recharts";
-import { useQuery } from "@tanstack/react-query";
-import type { SelectMerchant, SelectContract, InsertUser } from "@db/schema";
-import { useForm } from "react-hook-form";
-import { CreateMerchantForm } from "@/components/admin/create-merchant-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { insertUserSchema } from "@db/schema";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { SelectMerchant, SelectContract } from "@db/schema";
+import { DataTable } from "@/components/ui/data-table";
+import { ColumnDef } from "@tanstack/react-table";
+import { format } from "date-fns";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, Phone, Mail, FileText, UserCheck, Clock } from "lucide-react";
+import { useState } from "react";
 
 export default function AdminDashboard() {
-  const { user, registerMutation } = useAuth();
-  const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("all");
 
-  const form = useForm<InsertUser>({
-    resolver: zodResolver(insertUserSchema),
-    defaultValues: {
-      username: "",
-      password: "",
-      email: "",
-      name: "",
-      role: "admin" as const,
-    },
+  const { data: contracts } = useQuery<SelectContract[]>({
+    queryKey: ["/api/contracts"],
   });
 
   const { data: merchants } = useQuery<SelectMerchant[]>({
     queryKey: ["/api/merchants"],
   });
 
-  const { data: contracts } = useQuery<SelectContract[]>({
-    queryKey: ["/api/contracts"],
-  });
-
-  const chartData = [
-    { name: "Jan", value: 4000 },
-    { name: "Feb", value: 3000 },
-    { name: "Mar", value: 6000 },
-    { name: "Apr", value: 8000 },
-    { name: "May", value: 7000 },
+  const contractColumns: ColumnDef<SelectContract>[] = [
+    {
+      accessorKey: "contractNumber",
+      header: "Contract #",
+    },
+    {
+      accessorKey: "merchants.companyName",
+      header: "Merchant",
+    },
+    {
+      accessorKey: "amount",
+      header: "Amount",
+      cell: ({ row }) => `$${Number(row.getValue("amount")).toFixed(2)}`,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ getValue }) => (
+        <Badge variant={getValue() === "active" ? "success" : "secondary"}>
+          {getValue()}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "createdAt",
+      header: "Created",
+      cell: ({ getValue }) => format(new Date(getValue()), "MMM d, yyyy"),
+    },
   ];
 
-  const onSubmit = async (data: InsertUser) => {
-    try {
-      await registerMutation.mutateAsync(data);
-      toast({
-        title: "Success",
-        description: "New admin user created successfully",
+  const filteredContracts = contracts?.filter(contract => {
+    const matchesSearch = 
+      contract.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contract.merchants?.companyName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = selectedStatus === "all" || contract.status === selectedStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  const updateContractStatus = useMutation({
+    mutationFn: async ({ contractId, status }: { contractId: number; status: string }) => {
+      const response = await fetch(`/api/contracts/${contractId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
       });
-      form.reset();
-    } catch (error) {
-      // Error handling is already done in the mutation
-    }
-  };
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+    },
+  });
 
   return (
     <PortalLayout>
       <div className="space-y-8">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Admin Dashboard
-        </h1>
-
-        <div className="p-6 bg-white rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Create Merchant Account</h2>
-          <CreateMerchantForm />
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Admin CRM Dashboard</h1>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader>
-              <CardTitle>Total Merchants</CardTitle>
+              <CardTitle>Total Contracts</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{merchants?.length ?? 0}</p>
+              <p className="text-2xl font-bold">{contracts?.length ?? 0}</p>
             </CardContent>
           </Card>
 
@@ -117,196 +120,123 @@ export default function AdminDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Default Rate</CardTitle>
+              <CardTitle>Merchants</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">
-                {((contracts?.filter(c => c.status === "defaulted").length ?? 0) / 
-                  (contracts?.length ?? 1) * 100).toFixed(1)}%
-              </p>
+              <p className="text-2xl font-bold">{merchants?.length ?? 0}</p>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="col-span-2 mb-4">
-          <CardHeader>
-            <CardTitle>Recent Contract Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {contracts?.slice(0, 10).map(contract => (
-                <div key={contract.id} className="flex items-center justify-between p-4 border rounded">
-                  <div>
-                    <p className="font-medium">Contract #{contract.contractNumber}</p>
-                    <p className="text-sm text-muted-foreground">Amount: ${Number(contract.amount).toFixed(2)}</p>
-                    <p className="text-sm text-muted-foreground">Merchant: {contract.merchants?.companyName}</p>
-                  </div>
-                  <div className="text-right">
-                    <Badge>{contract.status}</Badge>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {new Date(contract.createdAt).toLocaleDateString()}
-                    </p>
+        <Tabs defaultValue="contracts">
+          <TabsList>
+            <TabsTrigger value="contracts">Contract Management</TabsTrigger>
+            <TabsTrigger value="merchants">Merchant Management</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="contracts">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Contract Management</CardTitle>
+                  <div className="flex gap-4">
+                    <Input
+                      placeholder="Search contracts..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-64"
+                    />
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className="border rounded p-2"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                    </select>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <div className="grid gap-4 grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create Admin User</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Username</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input type="password" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Full Name</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button 
-                    type="submit" 
-                    className="w-full"
-                    disabled={registerMutation.isPending}
-                  >
-                    Create Admin User
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={contractColumns}
+                  data={filteredContracts || []}
+                  onRowClick={(row) => {
+                    // Open contract details dialog
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Performance</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-        <Card className="col-span-2">
-            <CardHeader>
-              <CardTitle>Active Merchants</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {merchants?.map(merchant => (
-                  <div key={merchant.id} className="space-y-2 p-4 border rounded">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{merchant.companyName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Reserve Balance: ${merchant.reserveBalance}
-                        </p>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        merchant.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                      }`}>
-                        {merchant.status}
-                      </span>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <h4 className="font-medium">Programs</h4>
-                      <div className="grid gap-2">
-                        {merchant.programs?.map(program => (
-                          <div key={program.id} className="text-sm p-2 bg-gray-50 rounded">
-                            {program.name} - {program.term} months @ {program.interestRate}%
+          <TabsContent value="merchants">
+            <Card>
+              <CardHeader>
+                <CardTitle>Merchant Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {merchants?.map((merchant) => (
+                    <Collapsible key={merchant.id}>
+                      <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{merchant.companyName}</span>
+                          <Badge>{merchant.status}</Badge>
+                        </div>
+                        <ChevronDown className="h-4 w-4" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="p-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <h4 className="font-medium mb-2">Contact Information</h4>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                <span>{merchant.email}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4" />
+                                <span>{merchant.phoneNumber}</span>
+                              </div>
+                            </div>
                           </div>
-                        ))}
-                        <form 
-                          className="flex gap-2"
-                          onSubmit={async (e) => {
-                            e.preventDefault();
-                            const form = e.target as HTMLFormElement;
-                            const formData = new FormData(form);
-                            
-                            await fetch(`/api/merchants/${merchant.id}/programs`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                name: formData.get('name'),
-                                term: parseInt(formData.get('term') as string),
-                                interestRate: parseFloat(formData.get('interestRate') as string),
-                              }),
-                            });
-                            
-                            form.reset();
-                          }}
-                        >
-                          <Input name="name" placeholder="Program Name" required />
-                          <Input name="term" type="number" placeholder="Term (months)" required />
-                          <Input name="interestRate" type="number" step="0.01" placeholder="Rate %" required />
-                          <Button type="submit" size="sm">Add</Button>
-                        </form>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                          <div>
+                            <h4 className="font-medium mb-2">Performance</h4>
+                            <div className="space-y-2">
+                              <div>Total Contracts: {
+                                contracts?.filter(c => c.merchantId === merchant.id).length
+                              }</div>
+                              <div>Active Contracts: {
+                                contracts?.filter(c => c.merchantId === merchant.id && c.status === "active").length
+                              }</div>
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="communications">
+            <Card>
+              <CardHeader>
+                <CardTitle>Communication History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Communication logs would go here */}
+                  <p>Communication history and logs will be displayed here</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </PortalLayout>
   );
