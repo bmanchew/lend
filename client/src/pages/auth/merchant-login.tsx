@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ type LoginFormData = {
 
 export default function MerchantLogin() {
   const { loginMutation } = useAuth();
-  
+
   const form = useForm<LoginFormData>({
     defaultValues: {
       username: "",
@@ -21,16 +20,14 @@ export default function MerchantLogin() {
     },
   });
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: any) => {
     try {
       await loginMutation.mutateAsync({
         ...data,
         loginType: "merchant"
       });
-      console.log("Login successful");
     } catch (error) {
       console.error("Login failed:", error);
-      throw error; // Re-throw to trigger form error handling
     }
   };
 
