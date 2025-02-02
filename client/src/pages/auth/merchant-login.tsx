@@ -41,7 +41,18 @@ export default function MerchantLogin() {
       // Store login response data
       localStorage.setItem('user', JSON.stringify(response));
       console.log('[MerchantLogin] Attempting navigation to dashboard');
-      navigate('/merchant/dashboard', { replace: true });
+
+      if (response?.role === 'merchant') {
+        navigate('/merchant/dashboard', { replace: true });
+      } else {
+        console.warn("[MerchantLogin] Unexpected role:", response?.role);
+        toast({
+          title: "Login successful, but unexpected role.",
+          description: `Role: ${response?.role}`,
+          variant: "warning"
+        });
+      }
+
     } catch (error) {
       console.error("[MerchantLogin] Login failed:", {
         error,
