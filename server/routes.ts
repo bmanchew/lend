@@ -18,7 +18,7 @@ const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
 function cacheMiddleware(duration: number) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET') return next();
-    
+
     const key = `__express__${req.originalUrl}`;
     const cachedResponse = apiCache.get(key);
 
@@ -828,17 +828,7 @@ export function registerRoutes(app: Express): Server {
       timestamp: new Date().toISOString()
     });
 
-    debugLog('Starting loan application process', {
-      body: req.body,
-      merchantId: req.params.id,
-      timestamp: new Date().toISOString()
-    });
     try {
-      const requestId = Date.now().toString(36);
-      const debugLog = (message: string, data?: any) => {
-        console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
-      };
-
       debugLog('Request received', {
         body: req.body,
         params: req.params,
@@ -882,45 +872,22 @@ export function registerRoutes(app: Express): Server {
         amount: amount || fundingAmount
       });
 
-      if (!borrowerPhone || !merchantId || !firstName || !lastName) {
-        return res.status(400).json({ 
-          error: 'Missing required fields' 
-        });
-      }
-
-      // Normalize and validate phone number
-      const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
-      
-      if (cleanPhone.length !== 10) {
-        debugLog('Invalid phone number format:', { 
-          original: borrowerPhone,
-          cleaned: cleanPhone,
-          requestId 
-        });
-        return res.status(400).json({ 
-          error: 'Invalid phone number format. Please provide a 10-digit US phone number.',
-          requestId
-        });
-      }
-      
-      const phone = '+1' + cleanPhone;
-      debugLog('Normalized phone:', { original: borrowerPhone, formatted: phone });
 
       // Validate amount
-      const parsedAmount = parseFloat(amount);
+      const parsedAmount = parseFloat(amount || fundingAmount);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        debugLog('Invalid amount:', amount);
+        debugLog('Invalid amount:', amount || fundingAmount);
         return res.status(400).json({ error: 'Invalid amount' });
       }
 
       // First check if user exists
-      debugLog('Looking up existing user with phone:', phone);
+      debugLog('Looking up existing user with phone:', borrowerPhone);
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phone))
+        .where(eq(users.phoneNumber, borrowerPhone))
         .limit(1);
-      
+
       debugLog('User lookup result:', existingUser || 'Not found');
 
       // Always use existing user if found
@@ -938,6 +905,8 @@ export function registerRoutes(app: Express): Server {
         }
       } else {
         // Create new user with unique email based on phone
+        const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
+        const fullPhone = '+1' + normalizedPhone;
         const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
         [user] = await db
           .insert(users)
