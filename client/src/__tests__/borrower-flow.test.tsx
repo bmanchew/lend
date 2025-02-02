@@ -48,7 +48,9 @@ describe('Borrower Flow Tests', () => {
   });
 
   it('completes full borrower flow from OTP to KYC initiation', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({
+      shouldAdvanceTime: true
+    });
     
     // Mock successful OTP send
     mockFetch
@@ -128,11 +130,12 @@ describe('Borrower Flow Tests', () => {
       });
     });
 
-    // Enter OTP code
+    // Enter OTP code 
     const otpInputs = screen.getAllByRole('textbox');
-    otpInputs.forEach((input, i) => {
-      fireEvent.change(input, { target: { value: i.toString() } });
+    otpInputs.forEach((input) => {
+      fireEvent.change(input, { target: { value: '1' } });
     });
+    vi.advanceTimersByTime(1000);
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/login', expect.any(Object));
