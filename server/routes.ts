@@ -318,22 +318,26 @@ export function registerRoutes(app: Express): Server {
     console.log("[Merchants] Fetching all merchants");
     try {
       const allMerchants = await db
-        .select()
+        .select({
+          merchant: merchants,
+          user: users,
+          program: programs
+        })
         .from(merchants)
         .leftJoin(users, eq(merchants.userId, users.id))
         .leftJoin(programs, eq(merchants.id, programs.merchantId));
 
       const merchantsMap = new Map();
       allMerchants.forEach(row => {
-        if (!merchantsMap.has(row.merchants.id)) {
-          merchantsMap.set(row.merchants.id, {
-            ...row.merchants,
-            user: row.users,
+        if (!merchantsMap.has(row.merchant.id)) {
+          merchantsMap.set(row.merchant.id, {
+            ...row.merchant,
+            user: row.user,
             programs: []
           });
         }
-        if (row.programs) {
-          merchantsMap.get(row.merchants.id).programs.push(row.programs);
+        if (row.program) {
+          merchantsMap.get(row.merchant.id).programs.push(row.program);
         }
       });
 
