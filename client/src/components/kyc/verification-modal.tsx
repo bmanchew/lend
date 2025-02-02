@@ -62,6 +62,9 @@ export function KycVerificationModal({
         throw new Error('User ID is required');
       }
 
+      const platform = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
+      console.log('[KYC Modal] Detected platform:', platform);
+
       console.log('[KYC Modal] Starting verification:', {
         userId,
         platform,

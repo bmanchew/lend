@@ -171,9 +171,14 @@ class DiditService {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 10000,
+          validateStatus: (status) => status === 201
         }
-      );
+      ).catch(error => {
+        console.error("[DiditService] Session creation failed:", error.response?.data || error.message);
+        throw new Error(error.response?.data?.message || "Failed to create verification session");
+      });
 
       if (!response.data || !response.data.url) {
         console.error("[DiditService] Invalid API response format", response.data);
