@@ -16,7 +16,6 @@ const applicationSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().min(10, "Valid phone number is required"),
-  dateOfBirth: z.string().min(1, "Date of birth is required"),
   streetAddress: z.string().min(1, "Street address is required"),
   aptNumber: z.string().optional(),
   city: z.string().min(1, "City is required"),
@@ -61,7 +60,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       lastName: "",
       email: "",
       phone: "",
-      dateOfBirth: "",
       streetAddress: "",
       aptNumber: "",
       city: "",
@@ -268,20 +266,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="dateOfBirth"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date of Birth</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="date" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
