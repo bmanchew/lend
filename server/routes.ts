@@ -888,7 +888,7 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Normalize phone number handling
+      // Normalize and validate phone number
       const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
       
       if (cleanPhone.length !== 10) {
@@ -903,8 +903,8 @@ export function registerRoutes(app: Express): Server {
         });
       }
       
-      const formattedPhone = '+1' + cleanPhone;
-      debugLog('Normalized phone:', { original: borrowerPhone, formatted: formattedPhone });
+      const phone = '+1' + cleanPhone;
+      debugLog('Normalized phone:', { original: borrowerPhone, formatted: phone });
 
       // Validate amount
       const parsedAmount = parseFloat(amount);
@@ -914,11 +914,11 @@ export function registerRoutes(app: Express): Server {
       }
 
       // First check if user exists
-      debugLog('Looking up existing user with phone:', fullPhone);
+      debugLog('Looking up existing user with phone:', phone);
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, fullPhone))
+        .where(eq(users.phoneNumber, phone))
         .limit(1);
       
       debugLog('User lookup result:', existingUser || 'Not found');
