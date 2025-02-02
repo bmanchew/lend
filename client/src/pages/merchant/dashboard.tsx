@@ -29,17 +29,27 @@ export default function MerchantDashboard() {
   const { data: merchant, isLoading, error } = useQuery<SelectMerchant>({
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/merchants/by-user/${user?.id}`);
+      if (!user?.id) throw new Error('No user ID available');
+      console.log('Fetching merchant data for user:', user.id);
+      const response = await fetch(`/api/merchants/by-user/${user.id}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to fetch merchant');
       }
       const data = await response.json();
+      console.log('Merchant data:', data);
       return data;
     },
     enabled: !!user?.id,
-    retry: 1,
+    retry: 2,
+    retryDelay: 1000,
   });
+
+  useEffect(() => {
+    if (error) {
+      console.error('Error fetching merchant:', error);
+    }
+  }, [error]);
 
   const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],

@@ -191,25 +191,16 @@ export function registerRoutes(app: Express): Server {
 
       if (isNaN(userId)) {
         console.log("[Merchant Lookup] Invalid userId provided:", req.params.userId);
-        console.log("[Merchant Lookup] Invalid user ID provided");
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
       console.log("[Merchant Lookup] Executing query for userId:", userId);
-      const merchantResults = await db
-        .select({
-          id: merchants.id,
-          userId: merchants.userId,
-          companyName: merchants.companyName,
-          ein: merchants.ein,
-          address: merchants.address,
-          website: merchants.website,
-          status: merchants.status,
-          reserveBalance: merchants.reserveBalance,
-          createdAt: merchants.createdAt
-        })
-        .from(merchants)
-        .where(eq(merchants.userId, userId));
+      const merchantResults = await db.query.merchants.findMany({
+        where: eq(merchants.userId, userId),
+        limit: 1
+      });
+
+      console.log("[Merchant Lookup] Query results:", merchantResults);
 
       console.log("[Merchant Lookup] Query results:", merchantResults);
 
