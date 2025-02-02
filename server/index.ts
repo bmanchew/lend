@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
+import { Server } from 'socket.io';
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -21,10 +22,10 @@ app.use((req, res, next) => {
   const requestId = Date.now().toString(36);
   const start = Date.now();
   const path = req.path;
-  
+
   // Monitor memory usage
   const memoryStart = process.memoryUsage();
-  
+
   console.log(`[API] ${req.method} ${path} started`, {
     requestId,
     query: req.query,
@@ -60,7 +61,24 @@ app.use((req, res, next) => {
 
 (async () => {
   // Register API routes first
-  const server = registerRoutes(app);
+  const httpServer = registerRoutes(app);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+
+    socket.on('join_merchant_room', (merchantId) => {
+      socket.join(`merchant_${merchantId}`);
+    });
+  });
+
+  export { io };
+
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -77,9 +95,9 @@ app.use((req, res, next) => {
         stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
       }
     };
-    
+
     console.error("[ERROR]", JSON.stringify(errorInfo));
-    
+
     if (!res.headersSent) {
       res.status(err.status || 500).json({
         status: "error",
@@ -91,13 +109,13 @@ app.use((req, res, next) => {
 
   // Setup Vite/static serving last
   if (app.get("env") === "development") {
-    await setupVite(app, server);
+    await setupVite(app, httpServer);
   } else {
     serveStatic(app);
   }
 
   const PORT = 5000;
-  server.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
   });
 })();

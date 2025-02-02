@@ -10,6 +10,7 @@ import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import NodeCache from 'node-cache';
 import morgan from 'morgan';
+import { Server as SocketIOServer } from 'socket.io'; // Import Socket.IO
 
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
 
@@ -836,18 +837,23 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    await db.insert(webhookEvents).values({
-      eventType: 'loan_application_attempt',
-      payload: JSON.stringify({
-        merchantId: req.params.id,
-        phone: req.body.phone,
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        amount: req.body.amount || req.body.fundingAmount,
-        requestId
-      }),
-      status: 'received'
-    });
+    const event = await db.insert(webhookEvents).values({
+        eventType: 'loan_application_attempt',
+        payload: JSON.stringify({
+          merchantId: req.params.id,
+          phone: req.body.phone,
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          amount: req.body.amount || req.body.fundingAmount,
+          requestId
+        }),
+        status: 'received'
+      }).returning();
+
+      io.to(`merchant_${req.params.id}`).emit('application_update', {
+        type: 'loan_application_attempt',
+        data: event[0]
+      });
 
     debugLog('Starting loan application process', {
       body: req.body,
@@ -974,7 +980,7 @@ export function registerRoutes(app: Express): Server {
       const normalizedPhone = phoneDigits.startsWith('1') ? 
         `+${phoneDigits}` : 
         `+1${phoneDigits.slice(-10)}`;
-      
+
       if (!normalizedPhone.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
         return res.status(400).json({ error: 'Invalid phone number format' });
@@ -1051,5 +1057,17 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
+  const io = new SocketIOServer(httpServer); // Initialize Socket.IO server
+
+  io.on('connection', (socket) => {
+    console.log('Socket.IO client connected:', socket.id);
+
+    socket.on('disconnect', () => {
+      console.log('Socket.IO client disconnected:', socket.id);
+    });
+    // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
+
+
+  });
   return httpServer;
 }
