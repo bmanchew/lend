@@ -54,25 +54,41 @@ class SMSService {
     }
   }
 
+  private formatPhoneNumber(phone: string): string {
+    // Remove all non-digits
+    let cleaned = (phone || '').toString().replace(/\D/g, '');
+    
+    // Handle numbers with country code
+    if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      cleaned = cleaned.substring(1);
+    }
+    
+    // Validate length
+    if (cleaned.length !== 10) {
+      console.error("[SMSService] Invalid phone length:", {
+        original: phone,
+        cleaned: cleaned,
+        length: cleaned.length,
+        timestamp: new Date().toISOString()
+      });
+      throw new Error('Phone number must be exactly 10 digits');
+    }
+    
+    // Add +1 prefix
+    return '+1' + cleaned;
+  }
+
   async sendLoanApplicationLink(
     toNumber: string,
     merchantName: string,
     applicationUrl: string
   ): Promise<{success: boolean; error?: string}> {
     try {
-      // Standardized phone number cleaning
-      let cleanPhone = (toNumber || '').toString()
-        .replace(/\D/g, '')  // Remove non-digits
-        .slice(-10);        // Take last 10 digits
+      const formattedPhone = this.formatPhoneNumber(toNumber);
 
-      // Handle missing country code
-      if (cleanPhone.length === 10) {
-        cleanPhone = '1' + cleanPhone;
-      }
-
-      console.log("[SMSService] Phone cleaning:", {
+      console.log("[SMSService] Phone formatting:", {
         input: toNumber,
-        cleaned: cleanPhone,
+        formatted: formattedPhone,
         timestamp: new Date().toISOString()
       });
 
@@ -227,22 +243,12 @@ class SMSService {
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
     try {
       const formattedPhone = this.formatPhoneNumber(phoneNumber);
-      console.log('[SMSService] Formatting phone for OTP:', {
+      
+      console.log('[SMSService] Sending OTP:', {
         original: phoneNumber,
-        formatted: formattedPhone
+        formatted: formattedPhone,
+        timestamp: new Date().toISOString()
       });
-
-      console.log('[SMSService] Phone number formatting:', {
-        original: phoneNumber,
-        cleaned: cleanPhone,
-        formatted: '+1' + cleanPhone
-      });
-
-      // Basic validation
-      if (!/^\+\d{10,15}$/.test(phoneNumber)) {
-        console.error("[SMSService] Invalid phone number format:", phoneNumber);
-        return false;
-      }
 
       console.log("[SMSService] Sending OTP:", {
         originalNumber: phoneNumber,
