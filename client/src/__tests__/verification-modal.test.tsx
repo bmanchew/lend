@@ -27,7 +27,6 @@ describe('KycVerificationModal Mobile Tests', () => {
     vi.clearAllMocks();
     localStorage.setItem('temp_user_id', '123');
     global.fetch = vi.fn();
-    global.window = Object.create(window);
     Object.defineProperty(window, 'location', {
       value: { href: '' },
       writable: true
@@ -35,7 +34,6 @@ describe('KycVerificationModal Mobile Tests', () => {
   });
 
   it('initiates KYC verification on mobile and handles successful flow', async () => {
-    // Mock API responses
     global.fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -65,26 +63,28 @@ describe('KycVerificationModal Mobile Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
     });
 
-    // Verify the correct API calls were made
+    // Verify API calls
     expect(global.fetch).toHaveBeenCalledTimes(2);
     
-    // Verify status check
+    // Check status API call
     const firstCall = global.fetch.mock.calls[0];
     expect(firstCall[0]).toBe('/api/kyc/status?userId=123');
     
-    // Verify initialization call
+    // Check start verification API call
     const secondCall = global.fetch.mock.calls[1];
     expect(secondCall[0]).toBe('/api/kyc/start');
-    expect(JSON.parse(secondCall[1].body)).toEqual({
+    const requestBody = JSON.parse(secondCall[1].body);
+    expect(requestBody).toEqual({
       userId: '123',
       platform: 'mobile',
       userAgent: navigator.userAgent
     });
+    expect(secondCall[1].headers['X-Mobile-Client']).toBe('true');
 
-    // Verify redirect happens
+    // Check redirect
     expect(window.location.href).toBe('https://verification.url');
 
-    // Verify loading state shows correctly
+    // Verify UI elements
     expect(screen.getByText(/Starting verification process/i)).toBeTruthy();
   });
 
