@@ -56,6 +56,9 @@ export default function MerchantDashboard() {
     enabled: !!merchant,
   });
 
+  // Connect to socket for real-time updates
+  const socket = useSocket(merchant?.id);
+
   // Listen for real-time contract updates
   useEffect(() => {
     if (socket && merchant?.id) {
@@ -70,19 +73,13 @@ export default function MerchantDashboard() {
           refetchContracts();
         }
       });
+
+      return () => {
+        socket.off('contract_update');
+        socket.off('application_update');
+      };
     }
   }, [socket, merchant?.id, refetchContracts]);
-
-  // Connect to socket for real-time updates
-  const socket = useSocket(merchant?.id);
-
-  useEffect(() => {
-    if (socket) {
-      socket.on('contract_update', () => {
-        refetchContracts();
-      });
-    }
-  }, [socket, refetchContracts]);
 
   useEffect(() => {
     if (contracts) {
