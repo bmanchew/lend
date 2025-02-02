@@ -48,9 +48,7 @@ describe('Borrower Flow Tests', () => {
   });
 
   it('completes full borrower flow from OTP to KYC initiation', async () => {
-    vi.useFakeTimers({
-      shouldAdvanceTime: true
-    });
+    vi.useFakeTimers();
     
     // Mock successful OTP send
     mockFetch

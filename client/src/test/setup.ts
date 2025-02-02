@@ -1,9 +1,7 @@
+
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
-
-// Mock fetch globally
-global.fetch = vi.fn();
 
 // Create query client for tests
 export const queryClient = new QueryClient({
@@ -13,6 +11,18 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Mock fetch globally
+global.fetch = vi.fn();
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
 // Mock window features
 Object.defineProperty(window, 'matchMedia', {
@@ -29,15 +39,6 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-Object.defineProperty(window, 'localStorage', { value: localStorageMock });
-
 // Mock ResizeObserver
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
@@ -48,13 +49,10 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.clearAllTimers();
-  vi.useRealTimers();
-  if (global.fetch.mockClear) {
-    global.fetch.mockClear();
-  }
-
-  // Reset localStorage mocks
+  
+  // Reset mocks
   Object.values(localStorageMock).forEach(mockFn => mockFn.mockClear());
+  global.fetch.mockClear?.();
 
   // Reset window.location
   Object.defineProperty(window, 'location', {
@@ -71,6 +69,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.clearAllTimers();
+  vi.clearAllMocks();
   vi.useRealTimers();
 });
