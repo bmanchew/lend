@@ -9,7 +9,7 @@ import { users, insertUserSchema } from "@db/schema";
 import { db, pool } from "@db";
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
-import { smsService } from "./services/sms"; // Added import for sms service
+import SMSService from "./services/sms"; // Added import for sms service
 
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
@@ -446,7 +446,7 @@ export function setupAuth(app: Express) {
       expiry.setMinutes(expiry.getMinutes() + 5); // OTP expires in 5 minutes
 
       console.log('[AUTH] Attempting to send OTP');
-      const sent = await smsService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
+      const sent = await SMSService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
 
       if (!sent) {
         console.error('[AUTH] SMS service failed to send OTP');
