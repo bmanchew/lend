@@ -1,0 +1,315 @@
+Below is a consolidated Markdown document that aggregates the available resources from GitHub, Didit’s online documentation, and related community posts. It focuses on achieving a seamless mobile web KYC experience in your app—initiating the process automatically upon login. You can share or adapt this document with your development team.
+
+---
+
+```markdown
+# Seamless Mobile Web KYC Integration with Didit
+
+This document consolidates resources, code examples, and best practices gathered from Didit’s official documentation, the didit-full-demo GitHub repository, and community posts. It describes how to integrate Didit’s Identity Verification into your mobile web app so that the KYC process is initiated automatically when a user logs in, providing a seamless and fully branded experience.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Key Resources and References](#key-resources-and-references)
+3. [System Architecture and Workflow](#system-architecture-and-workflow)
+4. [Mobile-First Automatic Initiation of KYC](#mobile-first-automatic-initiation-of-kyc)
+   - [Detecting Mobile Devices and Auto-Triggering Capture](#detecting-mobile-devices-and-auto-triggering-capture)
+   - [Capturing a Driver’s License Image with HTML5](#capturing-a-drivers-license-image-with-html5)
+5. [Uploading the Document and Integrating with Didit](#uploading-the-document-and-integrating-with-didit)
+6. [Backend Integration and Didit API Calls](#backend-integration-and-didit-api-calls)
+7. [Complete Example Implementation](#complete-example-implementation)
+8. [Testing, Debugging, and Next Steps](#testing-debugging-and-next-steps)
+
+---
+
+## 1. Overview
+
+The goal is to create a mobile web experience that automatically initiates the KYC process immediately after a user logs in. In our context, this means:
+- Detecting that the user is on a mobile device.
+- Automatically launching the camera (via HTML5 file input with capture attributes) to capture a driver’s license photo.
+- Uploading the captured image to your backend.
+- Forwarding the image to Didit’s API for verification.
+- Handling the verification status (via polling and webhooks) so the user’s verification state is updated seamlessly.
+
+---
+
+## 2. Key Resources and References
+
+- **Didit Documentation and Full Demo:**  
+  - Didit’s official documentation and integration guides (see [Didit Docs – NextAuth.js Integration](https://docs.didit.me/auth-and-data/engines/next-auth) ).
+  - The [didit-full-demo](https://github.com/didit-protocol/didit-full-demo) repository provides a Next.js demo implementation of Didit Identity Verification. This repository shows how to configure environment variables, implement API routes, and manage verification sessions. ()
+
+- **Mobile API Integration Videos and Community Discussions:**  
+  - Videos covering mobile API integration concepts (e.g., [Mobile API Integration Video](https://youtu.be/n10bgkeH5Tk?si=MSdOQIgVna9a7a6w) ) explain best practices for handling authentication, API calls, and responsive design on mobile devices.
+  - Various GitHub issues and community posts provide insights into auto-triggering mobile-specific workflows and troubleshooting common problems.
+
+---
+
+## 3. System Architecture and Workflow
+
+1. **User Login and Session Initialization:**  
+   When a user logs in, the app establishes their session (e.g., via NextAuth.js) and then immediately initiates the KYC process if the user is on a mobile device.
+
+2. **Automatic KYC Initiation:**  
+   The app automatically triggers the camera capture to obtain a driver’s license photo. This uses HTML5’s file input with the `capture` attribute to open the device’s camera.
+
+3. **Document Upload and Didit Verification:**  
+   The captured image is uploaded to your backend, which then calls Didit’s document verification API to create a verification session. The backend stores the session and tracks its status.
+
+4. **Real-Time Feedback:**  
+   The app can poll for the verification status or use webhooks to update the user’s status (e.g., “In Progress,” “Approved,” or “Declined”).
+
+---
+
+## 4. Mobile-First Automatic Initiation of KYC
+
+### Detecting Mobile Devices and Auto-Triggering Capture
+
+Use JavaScript to check the user agent and trigger the capture process automatically upon page load after login.
+
+```javascript
+function isMobileDevice() {
+  return /Mobi|Android/i.test(navigator.userAgent);
+}
+
+function autoTriggerCapture() {
+  const fileInput = document.getElementById("driverLicenseInput");
+  if (fileInput && isMobileDevice()) {
+    // Delay to ensure the page is fully loaded
+    setTimeout(() => {
+      fileInput.click();
+    }, 500);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", autoTriggerCapture);
+```
+
+### Capturing a Driver’s License Image with HTML5
+
+Include a hidden file input in your HTML. The `capture="environment"` attribute requests the use of the rear camera.
+
+```html
+<input type="file" id="driverLicenseInput" accept="image/*" capture="environment" style="display:none;">
+```
+
+Optionally, provide a manual button for testing or fallback:
+
+```html
+<button id="manualCaptureBtn" onclick="document.getElementById('driverLicenseInput').click()">Capture License</button>
+```
+
+---
+
+## 5. Uploading the Document and Integrating with Didit
+
+Once a file is captured, handle the file input’s change event. Convert the file into a FormData object and send it via an AJAX call to your backend.
+
+```javascript
+document.getElementById("driverLicenseInput").addEventListener("change", function(event) {
+  const file = event.target.files[0];
+  if (file) {
+    console.log("Captured file:", file.name);
+    const formData = new FormData();
+    formData.append("document", file);
+    formData.append("documentType", "driver_license");
+
+    // Upload the file to your backend endpoint
+    fetch("/api/upload-driver-license", {
+      method: "POST",
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log("Didit response:", data);
+      // Optionally, update the UI or proceed based on Didit's verification session response
+    })
+    .catch(err => {
+      console.error("Error uploading document:", err);
+    });
+  }
+});
+```
+
+---
+
+## 6. Backend Integration and Didit API Calls
+
+Your backend should expose an endpoint (e.g., `/api/upload-driver-license`) that:
+- Receives the file upload.
+- Processes the file (optionally storing it temporarily or uploading to cloud storage).
+- Makes an API call to Didit (using your CLIENT_ID, CLIENT_SECRET, and other required credentials) to create a document verification session.
+
+Example using Node.js and Express:
+
+```javascript
+// backend/uploadDriverLicense.js
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const router = express.Router();
+
+// Configure multer for temporary file storage
+const upload = multer({ dest: 'uploads/' });
+
+router.post('/api/upload-driver-license', upload.single('document'), async (req, res) => {
+  try {
+    const { file } = req;
+    const { documentType } = req.body;
+    
+    // For example, upload the file to cloud storage and get a URL, or convert it to a base64 string.
+    const fileUrl = `https://your-storage-service.com/uploads/${file.filename}`;
+    
+    // Call Didit's API to create a verification session with the document
+    const diditResponse = await axios.post(
+      process.env.DIDIT_API_URL + '/create-verification-session',
+      {
+        documentType: documentType,
+        documentUrl: fileUrl
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.DIDIT_API_TOKEN}`
+        }
+      }
+    );
+    
+    res.status(200).json(diditResponse.data);
+  } catch (error) {
+    console.error("Error uploading driver's license:", error.response ? error.response.data : error);
+    res.status(500).json({ error: "Document upload failed" });
+  }
+});
+
+module.exports = router;
+```
+
+*Note:* Adjust the endpoint URL, payload fields, and authentication headers based on the latest Didit API documentation.
+
+---
+
+## 7. Complete Example Implementation
+
+Below is a complete simplified example that ties together the auto-triggering of the camera and the file upload workflow:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automatic Mobile KYC</title>
+  <style>
+    /* Hide the file input */
+    #driverLicenseInput { display: none; }
+    /* Optional manual trigger button */
+    #manualCaptureBtn {
+      padding: 10px 20px;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Hidden file input for driver's license capture -->
+  <input type="file" id="driverLicenseInput" accept="image/*" capture="environment">
+  <!-- Optional manual trigger for testing -->
+  <button id="manualCaptureBtn" onclick="document.getElementById('driverLicenseInput').click()">Capture License</button>
+  
+  <script>
+    // Mobile detection
+    function isMobileDevice() {
+      return /Mobi|Android/i.test(navigator.userAgent);
+    }
+    
+    // Auto-trigger camera on mobile
+    function autoTriggerCapture() {
+      const fileInput = document.getElementById("driverLicenseInput");
+      if (fileInput && isMobileDevice()) {
+        setTimeout(() => {
+          fileInput.click();
+        }, 500);
+      }
+    }
+    
+    document.addEventListener("DOMContentLoaded", autoTriggerCapture);
+    
+    // Handle file capture and upload
+    document.getElementById("driverLicenseInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        console.log("Captured file:", file.name);
+        const formData = new FormData();
+        formData.append("document", file);
+        formData.append("documentType", "driver_license");
+        
+        fetch("/api/upload-driver-license", {
+          method: "POST",
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Didit response:", data);
+          // Proceed with updating UI or verifying status based on Didit's response
+        })
+        .catch(err => {
+          console.error("Error uploading document:", err);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+```
+
+---
+
+## 8. Testing, Debugging, and Next Steps
+
+- **Testing on Real Mobile Devices:**  
+  Test the flow on multiple devices (e.g., Chrome on Android, Safari on iOS) to ensure the camera auto-trigger works and the image uploads correctly.
+
+- **Remote Debugging:**  
+  Use tools like Chrome DevTools (with USB debugging) to monitor console logs and network activity.
+
+- **Backend Logging:**  
+  Verify that your backend receives the file and that the Didit API call is successful. Check for errors in logs.
+
+- **Review Didit Documentation and Demo:**  
+  Review the [didit-full-demo](https://github.com/didit-protocol/didit-full-demo) repository and Didit’s documentation to ensure your API calls and payloads conform to their requirements.
+
+- **User Experience Enhancements:**  
+  Once the image is captured and uploaded, display a loading indicator or feedback message to let users know that verification is in progress.
+
+---
+
+## 9. Next Steps
+
+1. **Integrate the Provided Code:**  
+   Insert the auto-trigger and file upload code into your mobile web app’s login/landing page.
+2. **Implement/Refine the Backend Endpoint:**  
+   Ensure your `/api/upload-driver-license` endpoint correctly forwards the document to Didit.
+3. **Customize the UI:**  
+   Adjust the UI to align with your brand and provide clear instructions and feedback.
+4. **Monitor the Process:**  
+   Use logging, remote debugging, and user feedback to iteratively improve the seamlessness of the mobile verification flow.
+5. **Stay Updated:**  
+   Monitor Didit’s documentation and the didit-full-demo repository for any changes or improvements that can enhance your integration.
+
+---
+
+*References:*
+- Didit Docs – NextAuth.js Integration: 
+- GitHub – didit-full-demo Repository: 
+- Mobile API Integration Video: [YouTube](https://youtu.be/n10bgkeH5Tk?si=MSdOQIgVna9a7a6w) 
+
+This document provides a focused guide to automatically initiating the KYC process on mobile devices upon login. It combines best practices from Didit’s documentation, community examples, and the full demo repository to help create a seamless mobile experience.
+
+Happy coding!
+```
+
+---
+
+This document should give your development team a clear, consolidated plan to integrate Didit into your mobile web app so that KYC begins automatically upon login, providing a seamless experience.
