@@ -1,4 +1,3 @@
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +18,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
-  const isMobile = useIsMobile();
+  const isMobile = useMobile(); // Using the improved mobile detection hook
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -40,7 +39,7 @@ export function KycVerificationModal({
       if (!userId) {
         throw new Error('User ID is required');
       }
-      
+
       console.log('[KYC Verification] Starting verification:', {
         userId,
         platform,
@@ -54,7 +53,7 @@ export function KycVerificationModal({
           platform: navigator.platform,
           vendor: navigator.vendor
         });
-        
+
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 
@@ -92,7 +91,8 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    if (isOpen && (!kycData?.status || kycData?.status === 'not_started')) {
+    // Auto-initialize verification on mobile
+    if (isMobile && isOpen && (!kycData?.status || kycData?.status === 'not_started')) {
       startVerification.mutate();
     } else if (kycData?.status === 'Approved') {
       toast({
@@ -101,7 +101,8 @@ export function KycVerificationModal({
       });
       onVerificationComplete?.();
     }
-  }, [isOpen, kycData?.status]);
+  }, [isOpen, kycData?.status, isMobile]); // Added isMobile to dependencies
+
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 p-4">
