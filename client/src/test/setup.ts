@@ -37,7 +37,32 @@ export const queryClient = new QueryClient({
 // Reset mocks between tests
 beforeEach(() => {
   vi.clearAllMocks();
-  global.fetch.mockClear();
+  if (global.fetch.mockClear) {
+    global.fetch.mockClear();
+  }
   window.localStorage.getItem.mockClear();
   window.localStorage.setItem.mockClear();
+  
+  // Mock ResizeObserver
+  global.ResizeObserver = vi.fn().mockImplementation(() => ({
+    observe: vi.fn(),
+    unobserve: vi.fn(),
+    disconnect: vi.fn(),
+  }));
+
+  // Mock window.location
+  Object.defineProperty(window, 'location', {
+    value: {
+      href: 'http://localhost',
+      pathname: '/',
+      assign: vi.fn(),
+      replace: vi.fn()
+    },
+    writable: true
+  });
+});
+
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
 });

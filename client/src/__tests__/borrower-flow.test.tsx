@@ -65,7 +65,17 @@ describe('Borrower Flow Tests', () => {
             id: 1,
             username: 'testuser',
             role: 'borrower',
-            kycStatus: 'pending'
+            kycStatus: 'pending',
+            phoneNumber: '+15555555555'
+          })
+        })
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ 
+            redirectUrl: 'https://verification.test.com',
+            sessionId: 'test-session'
           })
         })
       );
