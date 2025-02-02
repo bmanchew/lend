@@ -27,10 +27,10 @@ describe('KycVerificationModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('temp_user_id', '123');
-    // Reset window.location
-    const location = window.location;
-    delete (window as any).location;
-    window.location = { ...location, href: '' };
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true
+    });
   });
 
   it('initiates KYC verification on mobile automatically', async () => {
@@ -55,16 +55,24 @@ describe('KycVerificationModal', () => {
       </QueryClientProvider>
     );
 
+    // Wait for useEffect and API calls
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 0));
     });
 
-    // Verify API calls were made
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // Verify KYC status check
     expect(global.fetch).toHaveBeenCalledWith('/api/kyc/status?userId=123');
-    expect(global.fetch).toHaveBeenCalledWith('/api/kyc/start');
     
-    // Verify redirect happened
+    // Verify start verification call
+    const secondCall = (global.fetch as any).mock.calls[1];
+    expect(secondCall[0]).toBe('/api/kyc/start');
+    expect(JSON.parse(secondCall[1].body)).toEqual({
+      userId: '123',
+      platform: 'mobile',
+      userAgent: navigator.userAgent
+    });
+
+    // Verify redirect
     expect(window.location.href).toBe('https://verification.url');
   });
 });
