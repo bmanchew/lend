@@ -19,7 +19,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({

@@ -152,8 +152,9 @@ class DiditService {
         vendor_data: JSON.stringify({
           userId: user.id,
           username: user.username,
-          platform: 'mobile', // Always mobile
-          userAgent: user.userAgent
+          platform: 'mobile',
+          userAgent: user.userAgent,
+          sessionType: 'verification'
         }),
         redirect_url: completeReturnUrl,
         app_scheme: 'didit',
