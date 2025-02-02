@@ -82,7 +82,10 @@ class SMSService {
         rawPhone: toNumber?.rawPhone,
         cleaned: cleanPhone
       });
-      // Ensure it's exactly 10 digits
+      // Handle 10 or 11 digit numbers (with or without country code)
+      if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
+        cleanPhone = cleanPhone.substring(1);
+      }
       if (cleanPhone.length !== 10) {
         console.error("[SMSService] Invalid phone number length:", {
           original: toNumber,
