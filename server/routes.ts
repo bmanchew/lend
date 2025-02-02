@@ -425,25 +425,38 @@ export function registerRoutes(app: Express): Server {
         notes = ''
       } = req.body;
 
-      // Create or find customer
-      const [customer] = await db
-        .insert(users)
-        .values({
-          username: customerDetails.email,
-          password: Math.random().toString(36).slice(-8), // Temporary password
-          email: customerDetails.email,
-          name: `${customerDetails.firstName} ${customerDetails.lastName}`,
-          role: 'customer',
-          phoneNumber: customerDetails.phone,
-        })
-        .onConflictDoUpdate({
-          target: users.email,
-          set: {
+      // First try to find existing user by phone
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, customerDetails.phone))
+        .limit(1);
+
+      let customer;
+      if (existingUser) {
+        // Update existing user
+        [customer] = await db
+          .update(users)
+          .set({
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
+            email: customerDetails.email,
+          })
+          .where(eq(users.id, existingUser.id))
+          .returning();
+      } else {
+        // Create new user
+        [customer] = await db
+          .insert(users)
+          .values({
+            username: customerDetails.phone,
+            password: Math.random().toString(36).slice(-8), // Temporary password
+            email: customerDetails.email,
+            name: `${customerDetails.firstName} ${customerDetails.lastName}`,
+            role: 'customer',
             phoneNumber: customerDetails.phone,
-          },
-        })
-        .returning();
+          })
+          .returning();
+      }
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
