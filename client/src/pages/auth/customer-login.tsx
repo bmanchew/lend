@@ -116,10 +116,10 @@ export default function CustomerLogin() {
         code: data.code
       });
 
-      // Format phone number consistently
-      let phoneNumber = data.phoneNumber.replace(/\D/g, '');
-      phoneNumber = phoneNumber.replace(/^1/, '');
-      phoneNumber = '+1' + phoneNumber;
+      // Format phone number consistently 
+      let formattedPhone = data.phoneNumber.replace(/\D/g, '');
+      formattedPhone = formattedPhone.replace(/^1/, '');
+      formattedPhone = '+1' + formattedPhone;
 
       // Validate OTP format
       const otp = data.code.trim();
