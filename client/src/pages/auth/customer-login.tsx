@@ -74,21 +74,30 @@ export default function CustomerLogin() {
 
   const handleVerifyAndContinue = async (data) => {
     try {
-      const response = await axios.post("/api/verifyOTP", { username: data.phoneNumber, code: data.code });
+      // Format phone number consistently
+      let phoneNumber = data.phoneNumber.replace(/\D/g, '');
+      phoneNumber = phoneNumber.replace(/^1/, '');
+      phoneNumber = '+1' + phoneNumber;
+
+      const response = await axios.post("/api/login", { 
+        username: phoneNumber,
+        password: data.code,
+        loginType: 'customer'
+      });
+      
       const userData = response.data;
-      console.log("[CustomerLogin] Verification response:", userData);
+      console.log("[CustomerLogin] Login response:", userData);
 
       if (userData && userData.id) {
         localStorage.setItem('temp_user_id', userData.id.toString());
         setUser(userData);
-        initiateKYC(userData.id);
         setLocation('/apply?verification=true&from=login');
       } else {
-        toast({ title: "Error", description: "Invalid user data received", variant: "destructive" });
+        toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
       }
     } catch (error) {
       console.error("Verification error:", error);
-      toast({ title: "Error", description: "Verification failed", variant: "destructive" });
+      toast({ title: "Error", description: "Invalid verification code", variant: "destructive" });
     }
   };
 
