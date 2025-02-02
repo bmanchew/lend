@@ -810,17 +810,15 @@ export function registerRoutes(app: Express): Server {
         timestamp: new Date().toISOString()
       });
 
-      // Validate required fields
-      const requiredFields = ['phone', 'firstName', 'lastName', 'amount'];
-      const missingFields = requiredFields.filter(field => !req.body[field]);
-      
-      if (missingFields.length > 0) {
-        debugLog('Missing required fields:', missingFields);
-        return res.status(400).json({ error: `Missing required fields: ${missingFields.join(', ')}` });
+      // Initial validation
+      const { phone: borrowerPhone, firstName, lastName, amount, fundingAmount } = req.body;
+      const merchantId = parseInt(req.params.id);
+
+      if (!borrowerPhone || !firstName || !lastName || (!amount && !fundingAmount)) {
+        debugLog('Missing required fields:', { borrowerPhone, firstName, lastName, amount, fundingAmount });
+        return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      const { phone: borrowerPhone, firstName, lastName, amount } = req.body;
-      const merchantId = parseInt(req.params.id);
       if (isNaN(merchantId)) {
         debugLog('Invalid merchant ID:', req.params.id);
         return res.status(400).json({ error: 'Invalid merchant ID' });
@@ -844,27 +842,8 @@ export function registerRoutes(app: Express): Server {
         borrowerPhone,
         firstName,
         lastName,
-        amount
+        amount: amount || fundingAmount
       });
-
-      // Validate required fields
-      const requiredFields = ['phone', 'firstName', 'lastName', 'amount'];
-      const missingFields = requiredFields.filter(field => !req.body[field]);
-
-      if (missingFields.length > 0) {
-        console.error(`[LoanApplication][${requestId}] Missing required fields:`, missingFields);
-        return res.status(400).json({ 
-          error: `Missing required fields: ${missingFields.join(', ')}`,
-          requestId 
-        });
-      }
-
-      if (!req.body.amount && !req.body.fundingAmount) {
-        console.warn('[LoanApplication] Missing amount in request');
-        return res.status(400).json({ error: 'Loan amount is required' });
-      }
-      const { phone: borrowerPhone, firstName, lastName, amount } = req.body;
-      const merchantId = parseInt(req.params.id);
 
       if (!borrowerPhone || !merchantId || !firstName || !lastName) {
         return res.status(400).json({ 
@@ -873,15 +852,19 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Normalize phone number
-      // Normalize phone number
-      const rawPhone = borrowerPhone.toString().trim();
+      const rawPhone = (borrowerPhone || '').toString().trim();
       const normalizedPhone = rawPhone.replace(/^\+?1/, '').replace(/\D/g, '');
+      
       if (normalizedPhone.length !== 10) {
-        debugLog('Invalid phone number format:', rawPhone);
-        return res.status(400).json({ error: 'Invalid phone number format' });
+        debugLog('Invalid phone number format:', { raw: rawPhone, normalized: normalizedPhone });
+        return res.status(400).json({ 
+          error: 'Invalid phone number format. Please provide a 10-digit US phone number.',
+          requestId
+        });
       }
+      
       const fullPhone = '+1' + normalizedPhone;
-      debugLog('Normalized phone:', fullPhone);
+      debugLog('Normalized phone:', { original: rawPhone, normalized: fullPhone });
 
       // Validate amount
       const parsedAmount = parseFloat(amount);
