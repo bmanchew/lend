@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from 'react';
 import { io as socketIO, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
@@ -10,7 +9,7 @@ export function useSocket(merchantId: number) {
   useEffect(() => {
     if (!user || !merchantId) return;
 
-    socketRef.current = io();
+    socketRef.current = socketIO();
     socketRef.current.emit('join_merchant_room', merchantId);
 
     socketRef.current.on('application_update', (update) => {
