@@ -1,35 +1,40 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Mock useToast hook
+// Mock hooks
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({
     toast: vi.fn()
   })
 }));
 
-// Mock useMobile hook
 vi.mock('@/hooks/use-mobile', () => ({
   useMobile: () => true
 }));
 
 describe('KycVerificationModal', () => {
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('temp_user_id', '123');
+    // Reset window.location
+    const location = window.location;
+    delete (window as any).location;
+    window.location = { ...location, href: '' };
   });
 
   it('initiates KYC verification on mobile automatically', async () => {
-    const mockStartVerification = vi.fn();
-    const mockOnClose = vi.fn();
-    const mockOnVerificationComplete = vi.fn();
-
-    // Mock fetch response
+    // Mock fetch responses
     global.fetch = vi.fn()
       .mockImplementationOnce(() => Promise.resolve({
         ok: true,
@@ -44,21 +49,22 @@ describe('KycVerificationModal', () => {
       <QueryClientProvider client={queryClient}>
         <KycVerificationModal
           isOpen={true}
-          onClose={mockOnClose}
-          onVerificationComplete={mockOnVerificationComplete}
+          onClose={() => {}}
+          onVerificationComplete={() => {}}
         />
       </QueryClientProvider>
     );
 
-    // Wait for async operations
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
-    // Verify API calls
+    // Verify API calls were made
     expect(global.fetch).toHaveBeenCalledTimes(2);
-    const calls = (global.fetch as any).mock.calls;
-    expect(calls[0][0]).toContain('/api/kyc/status');
-    expect(calls[1][0]).toContain('/api/kyc/start');
+    expect(global.fetch).toHaveBeenCalledWith('/api/kyc/status?userId=123');
+    expect(global.fetch).toHaveBeenCalledWith('/api/kyc/start');
+    
+    // Verify redirect happened
+    expect(window.location.href).toBe('https://verification.url');
   });
 });
