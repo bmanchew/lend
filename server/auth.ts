@@ -215,24 +215,46 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "No active OTP found" });
         }
 
+        // Check if user has OTP data
+        if (!user.lastOtpCode || !user.otpExpiry) {
+          console.error('[AUTH] Missing OTP data:', {
+            userId: user.id,
+            phone: user.phoneNumber,
+            hasOtp: !!user.lastOtpCode,
+            hasExpiry: !!user.otpExpiry
+          });
+          return done(null, false, { message: "No active verification code" });
+        }
+
         // Check if OTP is expired
         const now = new Date();
-        if (now > new Date(user.otpExpiry)) {
+        const expiry = new Date(user.otpExpiry);
+        if (now > expiry) {
           console.error('[AUTH] OTP expired:', {
-            expiry: user.otpExpiry,
+            userId: user.id,
+            phone: user.phoneNumber,
+            expiry: expiry.toISOString(),
             now: now.toISOString()
           });
-          return done(null, false, { message: "OTP has expired" });
+          return done(null, false, { message: "Verification code has expired" });
         }
 
         // Compare OTP with stored value
         if (user.lastOtpCode !== password) {
-          console.error('[AUTH] Invalid OTP provided:', {
+          console.error('[AUTH] Invalid OTP:', {
+            userId: user.id,
+            phone: user.phoneNumber,
             expected: user.lastOtpCode,
             received: password
           });
           return done(null, false, { message: "Invalid verification code" });
         }
+
+        console.log('[AUTH] OTP validation successful:', {
+          userId: user.id,
+          phone: user.phoneNumber,
+          otpMatched: true
+        });
 
 
         // Clear used OTP
