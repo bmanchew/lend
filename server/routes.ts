@@ -825,18 +825,19 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Verify merchant exists
-      const [merchant] = await db
+      const merchantRecord = await db
         .select()
         .from(merchants)
         .where(eq(merchants.id, merchantId))
-        .limit(1);
+        .limit(1)
+        .then(rows => rows[0]);
 
-      if (!merchant) {
+      if (!merchantRecord) {
         debugLog('Merchant not found:', merchantId);
         return res.status(404).json({ error: 'Merchant not found' });
       }
 
-      debugLog('Found merchant:', merchant);
+      debugLog('Found merchant:', merchantRecord);
       debugLog('Parsed request data:', {
         merchantId,
         borrowerPhone,
@@ -938,7 +939,7 @@ export function registerRoutes(app: Express): Server {
       // Send the SMS invitation
       const sent = await smsService.sendLoanApplicationLink(
         formattedPhone,
-        merchant.companyName,
+        merchantRecord.companyName,
         applicationUrl
       );
 
