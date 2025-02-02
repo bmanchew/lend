@@ -961,7 +961,7 @@ export function registerRoutes(app: Express): Server {
         new URL(applicationUrl); // Validate URL format
 
         debugLog('Sending SMS with:', {
-          phone: formattedPhone2,
+          phone: formattedPhone,
           merchant: merchantRecord.companyName,
           url: applicationUrl
         });
