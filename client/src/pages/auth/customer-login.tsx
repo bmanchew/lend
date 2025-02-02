@@ -79,6 +79,13 @@ export default function CustomerLogin() {
       phoneNumber = phoneNumber.replace(/^1/, '');
       phoneNumber = '+1' + phoneNumber;
 
+      // Validate OTP format
+      const otp = data.code.trim();
+      if (!/^\d{6}$/.test(otp)) {
+        toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
+        return;
+      }
+
       const response = await axios.post("/api/login", { 
         username: phoneNumber,
         password: data.code,

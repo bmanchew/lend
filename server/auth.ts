@@ -239,13 +239,18 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Verification code has expired" });
         }
 
+        // Normalize OTP input
+        const normalizedInputOTP = password.trim();
+        const normalizedStoredOTP = user.lastOtpCode?.trim();
+
         // Compare OTP with stored value
-        if (user.lastOtpCode !== password) {
+        if (!normalizedStoredOTP || normalizedStoredOTP !== normalizedInputOTP) {
           console.error('[AUTH] Invalid OTP:', {
             userId: user.id,
             phone: user.phoneNumber,
-            expected: user.lastOtpCode,
-            received: password
+            expected: normalizedStoredOTP,
+            received: normalizedInputOTP,
+            timestamp: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid verification code" });
         }
