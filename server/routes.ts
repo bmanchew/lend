@@ -456,7 +456,6 @@ export function registerRoutes(app: Express): Server {
             name: `${customerDetails.firstName} ${customerDetails.lastName}`,
             role: 'customer',
             phoneNumber: customerDetails.phone,
-            phoneNumber: customerDetails.phone,
           })
           .returning();
       }
