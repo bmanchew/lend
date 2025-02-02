@@ -21,8 +21,18 @@ export function KycVerificationModal({
   const isMobile = useMobile();
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
+  // Platform detection
+  const platform = isMobile ? 'mobile' : 'web';
+  console.log('[KYC Modal] Platform detection:', {
+    isMobile,
+    platform,
+    userAgent: navigator.userAgent,
+    vendor: navigator.vendor,
+    platform: navigator.platform
+  });
+
   const { data: kycData, refetch: refetchStatus } = useQuery({
-    queryKey: ['kyc-status', userId],
+    queryKey: ['/api/kyc/status', userId],
     queryFn: async () => {
       if (!userId) return null;
       const response = await fetch(`/api/kyc/status?userId=${userId}`);
@@ -35,15 +45,13 @@ export function KycVerificationModal({
     refetchInterval: 5000
   });
 
-  const platform = isMobile ? 'mobile' : 'web';
-
   const startVerification = useMutation({
     mutationFn: async () => {
       if (!userId) {
         throw new Error('User ID is required');
       }
 
-      console.log('[KYC Verification] Starting verification:', {
+      console.log('[KYC] Starting verification with platform details:', {
         userId,
         platform,
         isMobile,
@@ -51,12 +59,6 @@ export function KycVerificationModal({
       });
 
       try {
-        console.log('[KYC] Starting verification with platform details:', {
-          userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          vendor: navigator.vendor
-        });
-
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 
@@ -76,7 +78,7 @@ export function KycVerificationModal({
         }
 
         const data = await response.json();
-        console.log('[KYC] Received verification URL:', data.redirectUrl);
+        console.log('[KYC] Received verification URL:', data);
 
         if (!data.redirectUrl) {
           throw new Error('No redirect URL provided');
@@ -84,20 +86,25 @@ export function KycVerificationModal({
 
         // For mobile browsers, we need to handle the redirection differently
         if (isMobile) {
+          console.log('[KYC] Handling mobile redirection');
           // Try to use the app scheme first
-          window.location.href = data.redirectUrl.replace('https://', 'didit://');
+          const appUrl = data.redirectUrl.replace('https://', 'didit://');
+          console.log('[KYC] Attempting app URL:', appUrl);
+          window.location.href = appUrl;
 
           // Set a fallback timeout to use the HTTPS URL if the app scheme doesn't work
           setTimeout(() => {
+            console.log('[KYC] Fallback to web URL:', data.redirectUrl);
             window.location.href = data.redirectUrl;
           }, 1000);
         } else {
+          console.log('[KYC] Redirecting to web URL:', data.redirectUrl);
           window.location.href = data.redirectUrl;
         }
 
         return data;
       } catch (error: any) {
-        console.error('Verification error:', error);
+        console.error('[KYC] Verification error:', error);
         toast({
           title: "Verification Error",
           description: "Failed to start verification. Please try again.",
@@ -110,14 +117,18 @@ export function KycVerificationModal({
 
   useEffect(() => {
     if (isOpen) {
-      console.log('[KYC Modal] Auto-starting verification:', {
+      console.log('[KYC Modal] Modal opened:', {
         isMobile,
-        status: kycData?.status
+        platform,
+        status: kycData?.status,
+        userId
       });
 
       if (!kycData?.status || kycData?.status === 'not_started') {
+        console.log('[KYC Modal] Starting verification');
         startVerification.mutate();
       } else if (kycData?.status === 'Approved') {
+        console.log('[KYC Modal] User already verified');
         toast({
           title: "Verification Complete",
           description: "Your identity has been verified successfully."
@@ -125,23 +136,30 @@ export function KycVerificationModal({
         onVerificationComplete?.();
       }
     }
-  }, [isOpen, kycData?.status, isMobile]);
+  }, [isOpen, kycData?.status]);
 
   return (
-    <div className="flex flex-col items-center justify-center space-y-4 p-4">
-      <div className="text-center space-y-3">
-        {startVerification.isPending ? (
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Starting verification process...</span>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Identity Verification</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center justify-center space-y-4 p-4">
+          <div className="text-center space-y-3">
+            {startVerification.isPending ? (
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Starting verification process...</span>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Please wait while we initialize identity verification...
+              </p>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-gray-500">
-            Please wait while we initialize identity verification...
-          </p>
-        )}
-      </div>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

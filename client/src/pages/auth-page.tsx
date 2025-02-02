@@ -54,12 +54,14 @@ export default function AuthPage() {
     console.log('[Auth] User authenticated, redirecting:', {
       role: user.role,
       isMobile,
-      platform: navigator.platform
+      platform: navigator.platform,
+      userAgent: navigator.userAgent
     });
 
     // For customers, redirect to apply page with verification flag
     if (user.role === 'customer') {
-      const applyUrl = `/apply?verification=true&from=login&platform=${isMobile ? 'mobile' : 'web'}`;
+      const platform = isMobile ? 'mobile' : 'web';
+      const applyUrl = `/apply?verification=true&from=login&platform=${platform}`;
       console.log('[Auth] Redirecting to apply:', applyUrl);
       return <Redirect to={applyUrl} />;
     }
