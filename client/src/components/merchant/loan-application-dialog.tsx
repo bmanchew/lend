@@ -159,14 +159,45 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         <Button 
           size="lg" 
           className="gap-2 bg-primary text-white hover:bg-primary/90"
-          onClick={(e) => {
+          onClick={async (e) => {
             if (!merchantId) {
               e.preventDefault();
               console.error('[SendApplication] Button clicked without merchantId');
               toast({
-                title: "Error",
+                title: "Error", 
                 description: "Missing merchant information. Please refresh the page.",
                 variant: "destructive",
+              });
+              return;
+            }
+
+            try {
+              const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(form.getValues()),
+              });
+
+              if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to send application');
+              }
+
+              const result = await response.json();
+              console.log('[SendApplication] Success:', result);
+              toast({
+                title: "Success",
+                description: "Application sent successfully",
+              });
+              setOpen(false);
+            } catch (err) {
+              console.error('[SendApplication] Error:', err);
+              toast({
+                title: "Error",
+                description: err.message || "Failed to send application",
+                variant: "destructive", 
               });
             }
           }}

@@ -810,6 +810,12 @@ export function registerRoutes(app: Express): Server {
       merchantId: req.params.id,
       timestamp: new Date().toISOString()
     });
+
+    debugLog('Starting loan application process', {
+      body: req.body,
+      merchantId: req.params.id,
+      timestamp: new Date().toISOString()
+    });
     try {
       const requestId = Date.now().toString(36);
       const debugLog = (message: string, data?: any) => {
