@@ -943,13 +943,10 @@ export function registerRoutes(app: Express): Server {
       const applicationToken = smsService.generateOTP();
 
       // Format and validate phone number
-      const cleanPhone2 = (borrowerPhone || '').replace(/\D/g, '');
-      const formattedPhone2 = cleanPhone2.startsWith('1') ? 
-        `+${cleanPhone2}` : 
-        `+1${cleanPhone2}`;
-
-      const cleanPhone = formattedPhone2.replace(/\D/g, '').slice(-10);
-      const standardizedPhone = `+1${cleanPhone}`;
+      const formattedPhone = (borrowerPhone || '').replace(/\D/g, '');
+      const standardizedPhone = formattedPhone.startsWith('1') ? 
+        `+${formattedPhone}` : 
+        `+1${formattedPhone.slice(-10)}`;
       
       if (!standardizedPhone.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
