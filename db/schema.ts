@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, timestamp, text, boolean, integer, decimal, real } from 'drizzle-orm/pg-core';
+import { relations, pgTable, text, timestamp, integer, decimal, boolean } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 
 export const insertUserSchema = z.object({
@@ -50,23 +50,35 @@ export const programs = pgTable('programs', {
 });
 
 export const contracts = pgTable('contracts', {
-  id: serial('id').primaryKey(),
-  merchantId: integer('merchant_id').references(() => merchants.id).notNull(),
-  customerId: integer('customer_id').references(() => users.id).notNull(),
-  contractNumber: varchar('contract_number', { length: 255 }),
-  amount: decimal('amount', { precision: 10, scale: 2 }),
-  term: integer('term'),
-  interestRate: decimal('interest_rate', { precision: 5, scale: 2 }),
+  id: integer('id').primaryKey(),
+  merchantId: integer('merchant_id').notNull(),
+  customerId: integer('customer_id').notNull(),
+  contractNumber: text('contract_number'),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  term: integer('term').notNull(),
+  interestRate: decimal('interest_rate', { precision: 5, scale: 2 }).notNull(),
   downPayment: decimal('down_payment', { precision: 10, scale: 2 }),
   monthlyPayment: decimal('monthly_payment', { precision: 10, scale: 2 }),
   totalInterest: decimal('total_interest', { precision: 10, scale: 2 }),
-  status: varchar('status', { length: 50 }),
+  status: text('status').notNull(),
   notes: text('notes'),
-  underwritingStatus: varchar('underwriting_status', { length: 50 }),
-  borrowerEmail: varchar('borrower_email', { length: 255 }),
-  borrowerPhone: varchar('borrower_phone', { length: 50 }),
-  createdAt: timestamp('created_at').defaultNow()
+  underwritingStatus: text('underwriting_status'),
+  borrowerEmail: text('borrower_email'),
+  borrowerPhone: text('borrower_phone'),
+  createdAt: timestamp('created_at').defaultNow(),
+  active: boolean('active').default(true)
 });
+
+export const contractRelations = relations(contracts, ({ one }) => ({
+  merchant: one(merchants, {
+    fields: [contracts.merchantId],
+    references: [merchants.id],
+  }),
+  customer: one(users, {
+    fields: [contracts.customerId], 
+    references: [users.id],
+  }),
+}));
 
 export const verificationSessions = pgTable('verification_sessions', {
   id: serial('id').primaryKey(),
