@@ -153,7 +153,11 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
-        const fullPhone = username.startsWith('+1') ? username : `+1${username.replace(/\D/g, '')}`;
+        let fullPhone = username.replace(/\D/g, '');
+        // Remove leading 1 if present
+        fullPhone = fullPhone.replace(/^1/, '');
+        // Add +1 prefix
+        fullPhone = '+1' + fullPhone;
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
         // Find user by phone number

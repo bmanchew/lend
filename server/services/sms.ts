@@ -1,4 +1,3 @@
-
 import twilio from 'twilio';
 import crypto from 'crypto';
 
@@ -26,7 +25,7 @@ class SMSService {
     };
 
     this.client = twilio(this.config.accountSid, this.config.authToken);
-    
+
     console.log("[SMSService] Initialized with configuration", {
       fromNumber: this.config.fromNumber,
       accountSid: this.config.accountSid.substring(0, 4) + '***'
@@ -65,7 +64,7 @@ class SMSService {
       let cleanPhone = (toNumber || '').toString()
         .replace(/\D/g, '')  // Remove non-digits
         .slice(-10);        // Take last 10 digits
-      
+
       // Handle missing country code
       if (cleanPhone.length === 10) {
         cleanPhone = '1' + cleanPhone;
@@ -200,9 +199,15 @@ class SMSService {
       let cleanPhone = phoneNumber.replace(/\D/g, '');
       // Remove leading 1 if present
       cleanPhone = cleanPhone.replace(/^1/, '');
-      // Add +1 prefix for E.164 format
+      // Add +1 prefix
       phoneNumber = '+1' + cleanPhone;
-      
+
+      console.log('[SMSService] Phone number formatting:', {
+        original: phoneNumber,
+        cleaned: cleanPhone,
+        formatted: '+1' + cleanPhone
+      });
+
       // Basic validation
       if (!/^\+\d{10,15}$/.test(phoneNumber)) {
         console.error("[SMSService] Invalid phone number format:", phoneNumber);
