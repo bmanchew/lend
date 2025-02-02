@@ -62,12 +62,11 @@ class SMSService {
   ): Promise<{success: boolean; error?: string}> {
     try {
       // Clean and validate phone number
-      const cleanPhone = toNumber.replace(/\D/g, '');
-      const formattedPhone = cleanPhone.startsWith('1') ? 
-        `+${cleanPhone}` : 
-        `+1${cleanPhone}`;
+      // Standardize phone number format
+      const cleanPhone = toNumber.replace(/\D/g, '').slice(-10);
+      const formattedPhone = `+1${cleanPhone}`;
 
-      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
+      if (cleanPhone.length !== 10 || !formattedPhone.match(/^\+1[0-9]{10}$/)) {
         console.error("[SMSService] Invalid phone format:", {
           original: toNumber,
           cleaned: cleanPhone,

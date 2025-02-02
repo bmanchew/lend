@@ -801,9 +801,14 @@ export function registerRoutes(app: Express): Server {
 
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
-    console.log(`[LoanApplication][${requestId}] Starting loan application process`, {
+    const debugLog = (message: string, data?: any) => {
+      console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
+    };
+
+    debugLog('Starting loan application process', {
       body: req.body,
-      merchantId: req.params.id
+      merchantId: req.params.id,
+      timestamp: new Date().toISOString()
     });
     try {
       const requestId = Date.now().toString(36);

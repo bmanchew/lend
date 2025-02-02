@@ -90,7 +90,17 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         console.error('[LoanDialog] Missing merchantId');
         throw new Error('Missing merchant ID');
       }
+
+      // Validate phone format
+      const phone = data.phone?.replace(/\D/g, '');
+      if (!phone || phone.length !== 10) {
+        throw new Error('Invalid phone number format');
+      }
+
       const fundingAmount = parseFloat(data.fundingAmount);
+      if (isNaN(fundingAmount) || fundingAmount <= 0) {
+        throw new Error('Invalid funding amount');
+      }
       console.log('[LoanDialog] Parsed funding amount:', {
         raw: data.fundingAmount,
         parsed: fundingAmount,
