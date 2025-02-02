@@ -16,6 +16,17 @@ export default function MerchantLogin() {
     },
   });
 
+  const onSubmit = async (data: any) => {
+    try {
+      await loginMutation.mutateAsync({
+        ...data,
+        loginType: "merchant"
+      });
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
+  };
+
   return (
     <div className="container flex min-h-screen items-center justify-center">
       <div className="mx-auto w-full max-w-sm space-y-6">
@@ -25,7 +36,7 @@ export default function MerchantLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="username"
@@ -53,7 +64,7 @@ export default function MerchantLogin() {
               )}
             />
             <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-              Login
+              {loginMutation.isPending ? "Logging in..." : "Login"}
             </Button>
           </form>
         </Form>
