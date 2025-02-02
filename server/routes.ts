@@ -977,7 +977,7 @@ export function registerRoutes(app: Express): Server {
           .returning();
       }
 
-      console.log('Created/Updated user account:, user);
+      console.log('Created/Updated user account:', user);
 
       // Fetch merchant details to include in the SMS
       const [merchant] = await db
