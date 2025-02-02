@@ -9,3 +9,5 @@ vite.config.ts.*
 .replit
 replit.nix
 .config
+.vercel
+*.log
