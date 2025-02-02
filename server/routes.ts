@@ -8,6 +8,30 @@ import { authService } from "./auth";
 import { testSendGridConnection, sendVerificationEmail, generateVerificationToken } from "./services/email";
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
+import NodeCache from 'node-cache';
+
+const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
+
+function cacheMiddleware(duration: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET') return next();
+    
+    const key = `__express__${req.originalUrl}`;
+    const cachedResponse = apiCache.get(key);
+
+    if (cachedResponse) {
+      res.send(cachedResponse);
+      return;
+    }
+
+    const originalSend = res.send;
+    res.send = function(body: any): any {
+      apiCache.set(key, body, duration);
+      return originalSend.call(this, body);
+    };
+    next();
+  };
+}
 import { diditService } from "./services/didit";
 import axios from 'axios';
 import { smsService } from "./services/sms";
