@@ -4,9 +4,10 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useMutation } from "@tanstack/react-query";
 
 export default function MerchantLogin() {
-  const { loginMutation } = useAuth();
+  const { login } = useAuth();
   
   const form = useForm({
     defaultValues: {
@@ -15,12 +16,13 @@ export default function MerchantLogin() {
     },
   });
 
+  const loginMutation = useMutation({
+    mutationFn: (data: any) => login({ ...data, loginType: "merchant" }),
+  });
+
   const onSubmit = async (data: any) => {
     try {
-      await loginMutation.mutateAsync({
-        ...data,
-        loginType: "merchant"
-      });
+      await loginMutation.mutateAsync(data);
     } catch (error) {
       console.error("Login failed:", error);
     }
