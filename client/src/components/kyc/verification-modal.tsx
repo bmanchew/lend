@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMobile } from "@/hooks/use-mobile";
@@ -17,8 +18,7 @@ export function KycVerificationModal({
   onVerificationComplete
 }: VerificationModalProps) {
   const { toast } = useToast();
-  import { useAuth } from '../../hooks/use-auth';
-const { user } = useAuth();
+  const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
 
