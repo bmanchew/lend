@@ -11,9 +11,9 @@ export class SMSService {
     this.client = twilio(config.accountSid, config.authToken);
   }
 
-  async sendLoanApplicationLink(toNumber: { phone: string, rawPhone?: string }, merchantName: string, applicationUrl: string): Promise<{ success: boolean, error?: string }> {
+  async sendLoanApplicationLink(toNumber: string, merchantName: string, applicationUrl: string): Promise<{ success: boolean, error?: string }> {
     try {
-      const formattedPhone = this.formatPhoneNumber(toNumber.rawPhone || toNumber.phone);
+      const formattedPhone = this.formatPhoneNumber(toNumber);
 
       console.log("[SMSService] Sending loan application link:", {
         originalNumber: toNumber,
@@ -58,26 +58,25 @@ export class SMSService {
   }
 
   private formatPhoneNumber(phone: string): string {
-    // Remove all non-digits
-    let cleaned = (phone || '').toString().replace(/\D/g, '');
-
-    // Handle numbers with country code
+    // Remove all non-digits and any leading/trailing whitespace
+    const cleaned = phone.trim().replace(/\D/g, '');
+    
+    // Handle already formatted numbers with country code
     if (cleaned.length === 11 && cleaned.startsWith('1')) {
-      cleaned = cleaned.substring(1);
+      return '+' + cleaned;
+    }
+    
+    // Handle 10-digit numbers
+    if (cleaned.length === 10) {
+      return '+1' + cleaned;
     }
 
-    // Validate length
-    if (cleaned.length !== 10) {
-      console.error("[SMSService] Invalid phone length:", {
-        original: phone,
-        cleaned: cleaned,
-        length: cleaned.length
-      });
-      throw new Error('Phone number must be exactly 10 digits');
-    }
-
-    // Add +1 prefix
-    return '+1' + cleaned;
+    console.error("[SMSService] Invalid phone format:", {
+      original: phone,
+      cleaned: cleaned,
+      length: cleaned.length
+    });
+    throw new Error('Invalid phone number format');
   }
 
   async sendOTP(phoneNumber: string, code: string): Promise<boolean> {
