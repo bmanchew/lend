@@ -27,8 +27,10 @@ export default function MerchantLogin() {
         ...data,
         loginType: "merchant"
       });
+      console.log("Login successful");
     } catch (error) {
       console.error("Login failed:", error);
+      throw error; // Re-throw to trigger form error handling
     }
   };
 
