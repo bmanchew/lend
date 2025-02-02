@@ -13,13 +13,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 const applicationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  lastName: z.string().min(1, "Last name is required"), 
   email: z.string().email("Valid email is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   program: z.string().min(1, "Program is required"),
-  fundingAmount: z.string().min(1, "Funding amount is required"),
+  fundingAmount: z.string().min(1, "Funding amount is required").transform(val => parseFloat(val)),
   salesRepEmail: z.string().email("Valid sales rep email is required")
-});
+}).required();
 
 type ApplicationFormData = z.infer<typeof applicationSchema>;
 
