@@ -1,0 +1,44 @@
+Below is a prompt you can share with your developer to guide them on cleaning up and refactoring the code for efficiency, scalability, and optimal performance:
+
+---
+
+**Developer Prompt: Code Cleanup and Refactoring for Efficiency & Scalability**
+
+Hi Team,
+
+We need to refactor the current codebase—especially within our SMS service (server/services/sms.ts)—to improve efficiency, readability, and scalability. Please use this prompt as a guide to perform the following tasks:
+
+1. **Eliminate Redundant Declarations:**  
+   - Identify and remove any duplicate variable declarations (e.g., the “formattedPhone” variable) that cause runtime errors.  
+   - Ensure that variables are declared only once per scope and reuse them by reassigning values when necessary.
+
+2. **Refactor Phone Number Formatting:**  
+   - Modularize the phone number formatting logic into a dedicated utility function (e.g., `formatPhoneNumber(input: string): string`).  
+   - This function should handle various input formats (e.g., with dashes, spaces, or parentheses) and consistently convert them to the standard +1 format.  
+   - Include proper error handling and logging for inputs that do not match expected patterns.
+
+3. **Optimize Code Efficiency:**  
+   - Review the overall code structure in the SMS service and any related modules. Look for opportunities to simplify logic, reduce unnecessary computations, and improve clarity.  
+   - Ensure that asynchronous calls (e.g., API requests) are handled using efficient patterns (such as async/await) and that errors are caught and logged appropriately.
+
+4. **Scalability and Best Practices:**  
+   - Make sure the code is modular and maintainable, with clear separation of concerns (e.g., utility functions, service logic, API integration).  
+   - Follow industry best practices (e.g., proper use of TypeScript types, clean error handling, logging, and documentation) to ensure the codebase is scalable as the project grows.
+   - Consider performance optimizations where applicable, such as caching repeated operations or validating inputs before processing.
+
+5. **Testing and Documentation:**  
+   - Write unit tests for the new phone number formatting function with various input cases to ensure robust performance.  
+   - Update documentation (comments within code and external docs) to reflect the new structure and logic changes.
+   - Ensure that any refactoring does not break existing functionality and that the application continues to successfully send OTPs.
+
+6. **Performance Profiling:**  
+   - Run performance profiling to identify any bottlenecks in the code and optimize accordingly.
+   - Verify that the code is efficient in terms of memory usage and execution time, especially when handling high volumes of requests.
+
+Please review these requirements, refactor the relevant modules, and commit the changes with clear documentation. Once the changes are deployed, we will retest the OTP delivery process to confirm that phone numbers are being formatted correctly and that the system is operating efficiently and scalably.
+
+Thanks for your attention to this, and let’s aim to build a clean, efficient, and scalable codebase!
+
+---
+
+Feel free to adjust this prompt based on any additional context or project-specific requirements.
