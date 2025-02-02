@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 export default function MerchantLogin() {
-  const { loginMutation } = useAuth();
+  const { login } = useAuth();
   
   const form = useForm({
     defaultValues: {
@@ -14,6 +14,10 @@ export default function MerchantLogin() {
       password: "",
       loginType: "merchant"
     },
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: (data: any) => login(data)
   });
 
   return (
