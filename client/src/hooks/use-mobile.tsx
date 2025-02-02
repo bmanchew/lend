@@ -20,10 +20,11 @@ export function useIsMobile() {
 }
 
 export function useMobile() {
-  const [isMobile, setIsMobile] = React.useState(false)
+  const [isMobile, setIsMobile] = React.useState(true) // Default to true for initial state
 
   React.useEffect(() => {
     const checkMobile = () => {
+      console.log('[useMobile] Starting mobile detection');
       // User agent detection
       const ua = navigator.userAgent.toLowerCase()
       const isMobileUA = /iphone|ipad|ipod|android|blackberry|windows phone|opera mini|silk/i.test(ua)

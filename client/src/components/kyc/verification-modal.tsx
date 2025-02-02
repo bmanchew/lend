@@ -49,6 +49,12 @@ export function KycVerificationModal({
       });
 
       try {
+        console.log('[KYC] Starting verification with platform details:', {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          vendor: navigator.vendor
+        });
+        
         const response = await fetch('/api/kyc/start', {
           method: 'POST',
           headers: { 

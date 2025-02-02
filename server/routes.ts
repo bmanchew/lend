@@ -222,7 +222,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       const { companyName, email, phoneNumber, address, website } = req.body;
-      
+
       // Validate required fields
       if (!email || !companyName) {
         console.error("[Merchant Creation] Missing required fields");
@@ -506,7 +506,9 @@ export function registerRoutes(app: Express): Server {
   apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.body;
-      const platform = 'mobile'; // Force mobile for new users
+      console.log('[KYC] Starting verification with headers:', req.headers);
+      // Force mobile flow for all KYC sessions
+      const platform = 'mobile';
       const isMobileClient = true;
 
       if (!userId) {
@@ -777,7 +779,7 @@ export function registerRoutes(app: Express): Server {
       // Validate required fields
       const requiredFields = ['phone', 'firstName', 'lastName', 'amount'];
       const missingFields = requiredFields.filter(field => !req.body[field]);
-      
+
       if (missingFields.length > 0) {
         console.error(`[LoanApplication][${requestId}] Missing required fields:`, missingFields);
         return res.status(400).json({ 
@@ -861,7 +863,7 @@ export function registerRoutes(app: Express): Server {
 
       // Format phone number consistently
       const formattedPhone = borrowerPhone.startsWith('+1') ? borrowerPhone : `+1${borrowerPhone}`;
-      
+
       // Send the SMS invitation
       const sent = await smsService.sendLoanApplicationLink(
         formattedPhone,
