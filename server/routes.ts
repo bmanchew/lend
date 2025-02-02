@@ -822,6 +822,13 @@ export function registerRoutes(app: Express): Server {
       console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
     };
 
+    console.log("[LoanApplication] Received new application:", {
+      merchantId: req.params.id,
+      phone: req.body.phone,
+      timestamp: new Date().toISOString(),
+      requestId
+    });
+
     debugLog('Starting loan application process', {
       body: req.body,
       merchantId: req.params.id,
