@@ -121,7 +121,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
           merchantName,
           amount: fundingAmount,
           fundingAmount: data.fundingAmount,
-          phone: data.phone?.replace(/\D/g, '')  // Clean phone number
+          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)  // Clean and format phone number
         }),
       });
       if (!response.ok) {
