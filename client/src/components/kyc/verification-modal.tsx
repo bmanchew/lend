@@ -91,17 +91,22 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    // Auto-initialize verification on mobile
-    if (isMobile && isOpen && (!kycData?.status || kycData?.status === 'not_started')) {
-      startVerification.mutate();
-    } else if (kycData?.status === 'Approved') {
-      toast({
-        title: "Verification Complete",
-        description: "Your identity has been verified successfully."
-      });
-      onVerificationComplete?.();
+    if (isOpen) {
+      if ((!kycData?.status || kycData?.status === 'not_started')) {
+        console.log('[KYC Modal] Auto-starting verification:', {
+          isMobile,
+          status: kycData?.status
+        });
+        startVerification.mutate();
+      } else if (kycData?.status === 'Approved') {
+        toast({
+          title: "Verification Complete", 
+          description: "Your identity has been verified successfully."
+        });
+        onVerificationComplete?.();
+      }
     }
-  }, [isOpen, kycData?.status, isMobile]); // Added isMobile to dependencies
+  }, [isOpen, kycData?.status, isMobile, startVerification, toast, onVerificationComplete]);
 
 
   return (
