@@ -109,8 +109,10 @@ export default function CustomerLogin() {
         return;
       }
 
+      // Prevent form from being cleared during verification
+      const phoneNumber = data.phoneNumber;
       console.log('[CustomerLogin] Verifying OTP:', { 
-        phoneNumber: data.phoneNumber,
+        phoneNumber: phoneNumber,
         code: data.code
       });
 
@@ -138,9 +140,8 @@ export default function CustomerLogin() {
       if (userData && userData.id) {
         localStorage.setItem('temp_user_id', userData.id.toString());
         setUser(userData);
-        setIsOtpSent(false); // Reset OTP sent state
-        form.reset(); // Clear form
-        setLocation(`/apply/${userData.id}?verification=true&from=login`);
+        // Don't reset form state until after navigation
+        window.location.href = `/apply/${userData.id}?verification=true&from=login`;
       } else {
         toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
       }
