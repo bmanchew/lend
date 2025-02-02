@@ -19,7 +19,7 @@ export function KycVerificationModal({
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
   const isMobile = useMobile();
-  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [verificationStarted, setVerificationStarted] = useState(false);
 
   // Platform detection
   const platform = isMobile ? 'mobile' : 'web';
@@ -27,31 +27,37 @@ export function KycVerificationModal({
     isMobile,
     platform,
     userAgent: navigator.userAgent,
-    vendor: navigator.vendor,
-    platform: navigator.platform
+    vendor: navigator.vendor
   });
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
     queryKey: ['/api/kyc/status', userId],
     queryFn: async () => {
-      if (!userId) return null;
+      if (!userId) {
+        console.error('[KYC Modal] No user ID found');
+        return null;
+      }
+      console.log('[KYC Modal] Checking status for user:', userId);
       const response = await fetch(`/api/kyc/status?userId=${userId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch KYC status');
       }
-      return response.json();
+      const data = await response.json();
+      console.log('[KYC Modal] Status response:', data);
+      return data;
     },
-    enabled: !!userId,
+    enabled: !!userId && isOpen,
     refetchInterval: 5000
   });
 
   const startVerification = useMutation({
     mutationFn: async () => {
       if (!userId) {
+        console.error('[KYC Modal] Cannot start verification - no user ID');
         throw new Error('User ID is required');
       }
 
-      console.log('[KYC] Starting verification with platform details:', {
+      console.log('[KYC Modal] Starting verification:', {
         userId,
         platform,
         isMobile,
@@ -78,7 +84,7 @@ export function KycVerificationModal({
         }
 
         const data = await response.json();
-        console.log('[KYC] Received verification URL:', data);
+        console.log('[KYC Modal] Received verification URL:', data);
 
         if (!data.redirectUrl) {
           throw new Error('No redirect URL provided');
@@ -86,25 +92,25 @@ export function KycVerificationModal({
 
         // For mobile browsers, we need to handle the redirection differently
         if (isMobile) {
-          console.log('[KYC] Handling mobile redirection');
+          console.log('[KYC Modal] Handling mobile redirection');
           // Try to use the app scheme first
           const appUrl = data.redirectUrl.replace('https://', 'didit://');
-          console.log('[KYC] Attempting app URL:', appUrl);
+          console.log('[KYC Modal] Attempting app URL:', appUrl);
           window.location.href = appUrl;
 
           // Set a fallback timeout to use the HTTPS URL if the app scheme doesn't work
           setTimeout(() => {
-            console.log('[KYC] Fallback to web URL:', data.redirectUrl);
+            console.log('[KYC Modal] Fallback to web URL:', data.redirectUrl);
             window.location.href = data.redirectUrl;
           }, 1000);
         } else {
-          console.log('[KYC] Redirecting to web URL:', data.redirectUrl);
+          console.log('[KYC Modal] Redirecting to web URL:', data.redirectUrl);
           window.location.href = data.redirectUrl;
         }
 
         return data;
       } catch (error: any) {
-        console.error('[KYC] Verification error:', error);
+        console.error('[KYC Modal] Verification error:', error);
         toast({
           title: "Verification Error",
           description: "Failed to start verification. Please try again.",
@@ -116,17 +122,23 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    if (isOpen) {
-      console.log('[KYC Modal] Modal opened:', {
-        isMobile,
-        platform,
-        status: kycData?.status,
-        userId
-      });
+    if (!isOpen || !userId) return;
+
+    console.log('[KYC Modal] Modal opened:', {
+      isMobile,
+      platform,
+      status: kycData?.status,
+      userId,
+      verificationStarted
+    });
+
+    const initializeVerification = async () => {
+      if (verificationStarted) return;
 
       if (!kycData?.status || kycData?.status === 'not_started') {
-        console.log('[KYC Modal] Starting verification');
-        startVerification.mutate();
+        console.log('[KYC Modal] Starting new verification');
+        setVerificationStarted(true);
+        await startVerification.mutateAsync();
       } else if (kycData?.status === 'Approved') {
         console.log('[KYC Modal] User already verified');
         toast({
@@ -135,8 +147,12 @@ export function KycVerificationModal({
         });
         onVerificationComplete?.();
       }
-    }
-  }, [isOpen, kycData?.status]);
+    };
+
+    initializeVerification().catch(error => {
+      console.error('[KYC Modal] Failed to initialize verification:', error);
+    });
+  }, [isOpen, kycData?.status, userId]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -146,7 +162,11 @@ export function KycVerificationModal({
         </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 p-4">
           <div className="text-center space-y-3">
-            {startVerification.isPending ? (
+            {!userId ? (
+              <p className="text-sm text-red-500">
+                User ID not found. Please try logging in again.
+              </p>
+            ) : startVerification.isPending ? (
               <div className="flex items-center space-x-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Starting verification process...</span>
