@@ -16,8 +16,11 @@ import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 import ApplyPage from "@/pages/apply"; // Placeholder component
 
 
+import { Router as BrowserRouter } from "wouter";
+
 function Router() {
   return (
+    <BrowserRouter>
     <Switch>
       <Route path="/">
         <Redirect to="/login/customer" />
@@ -37,6 +40,7 @@ function Router() {
       <Route path="/apply/:token" component={ApplyPage} />
       <Route component={NotFound} />
     </Switch>
+    </BrowserRouter>
   );
 }
 

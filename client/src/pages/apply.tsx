@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation } from "wouter";
 import { KycVerificationModal } from "../components/kyc/verification-modal";
 import { Button } from "@/components/ui/button";
 
 export default function Apply() {
-  const [searchParams] = useSearchParams();
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(window.location.search);
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
