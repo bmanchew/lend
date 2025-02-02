@@ -943,19 +943,19 @@ export function registerRoutes(app: Express): Server {
       const applicationToken = smsService.generateOTP();
 
       // Format and validate phone number
-      const formattedPhone = (borrowerPhone || '').replace(/\D/g, '');
-      const standardizedPhone = formattedPhone.startsWith('1') ? 
-        `+${formattedPhone}` : 
-        `+1${formattedPhone.slice(-10)}`;
+      const phoneDigits = (borrowerPhone || '').replace(/\D/g, '');
+      const formattedPhone = phoneDigits.startsWith('1') ? 
+        `+${phoneDigits}` : 
+        `+1${phoneDigits.slice(-10)}`;
       
-      if (!standardizedPhone.match(/^\+1[0-9]{10}$/)) {
+      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
         return res.status(400).json({ error: 'Invalid phone number format' });
       }
 
       // Construct and validate application URL
       const baseUrl = process.env.APP_URL || 'https://shi-fi-lend-brandon263.replit.app';
-      const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(formattedPhone2)}`;
+      const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(phoneDigits)}`;
 
       try {
         new URL(applicationUrl); // Validate URL format
@@ -968,7 +968,7 @@ export function registerRoutes(app: Express): Server {
 
         // Send the SMS invitation
         const result = await smsService.sendLoanApplicationLink(
-          formattedPhone2,
+          formattedPhone,
           merchantRecord.companyName,
           applicationUrl
         );
