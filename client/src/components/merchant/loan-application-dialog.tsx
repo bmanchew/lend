@@ -147,65 +147,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         <Button 
           size="lg" 
           className="gap-2 bg-primary text-white hover:bg-primary/90"
-          onClick={async (e) => {
-            if (!merchantId) {
-              e.preventDefault();
-              console.error('[SendApplication] Button clicked without merchantId');
-              toast({
-                title: "Error", 
-                description: "Missing merchant information. Please refresh the page.",
-                variant: "destructive",
-              });
-              return;
-            }
-
-            try {
-              const values = form.getValues();
-              
-              // Validate required fields
-              if (!values.firstName || !values.lastName || !values.phone || !values.fundingAmount) {
-                throw new Error('Please fill in all required fields');
-              }
-
-              // Format phone number
-              const cleanPhone = values.phone.replace(/\D/g, '').slice(-10);
-              if (cleanPhone.length !== 10) {
-                throw new Error('Please enter a valid 10-digit phone number');
-              }
-
-              const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',  
-                },
-                body: JSON.stringify({
-                  ...values,
-                  phone: cleanPhone,
-                  fundingAmount: parseFloat(values.fundingAmount),
-                }),
-              });
-
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to send application');
-              }
-
-              const result = await response.json();
-              console.log('[SendApplication] Success:', result);
-              toast({
-                title: "Success",
-                description: "Application sent successfully",
-              });
-              setOpen(false);
-            } catch (err) {
-              console.error('[SendApplication] Error:', err);
-              toast({
-                title: "Error",
-                description: err.message || "Failed to send application",
-                variant: "destructive",
-              });
-            }
-          }}
+          onClick={() => setOpen(true)}
         >
           <span>Send Loan Application</span>
         </Button>
