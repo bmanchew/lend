@@ -176,7 +176,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
                 method: 'POST',
                 headers: {
-                  'Content-Type': 'application/json',
+                  'Content-Type': 'application/json',  
                 },
                 body: JSON.stringify({
                   ...values,
@@ -189,9 +189,22 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to send application');
               }
-                const error = await response.json();
-                throw new Error(error.message || 'Failed to send application');
-              }
+
+              const result = await response.json();
+              console.log('[SendApplication] Success:', result);
+              toast({
+                title: "Success",
+                description: "Application sent successfully", 
+              });
+              setOpen(false);
+            } catch (err) {
+              console.error('[SendApplication] Error:', err);
+              toast({
+                title: "Error",
+                description: err.message || "Failed to send application",
+                variant: "destructive",
+              });
+            }
 
               const result = await response.json();
               console.log('[SendApplication] Success:', result);
