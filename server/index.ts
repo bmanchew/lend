@@ -77,7 +77,8 @@ app.use((req, res, next) => {
     });
   });
 
-  export { io };
+  // Make io available to other modules
+  module.exports = { io };
 
 
   // Enterprise error handling middleware
