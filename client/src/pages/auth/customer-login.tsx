@@ -75,16 +75,12 @@ export default function CustomerLogin() {
   const handleVerifyAndContinue = async (data) => {
     try {
       const response = await axios.post("/api/verifyOTP", { username: data.phoneNumber, code: data.code });
-      if (response.ok) {
-        const userData = await response.json();
-        localStorage.setItem('temp_user_id', userData.id.toString());
-        setUser(userData);
-        //Initiate KYC here.  Replace with your actual KYC initiation function.
-        initiateKYC(userData.id);
-        setLocation('/apply?verification=true&from=login');
-      } else {
-        toast({ title: "Error", description: "Invalid OTP", variant: "destructive" });
-      }
+      const userData = response.data;
+      console.log('[CustomerLogin] User verified:', userData);
+      localStorage.setItem('temp_user_id', userData.id.toString());
+      setUser(userData);
+      initiateKYC(userData.id);
+      setLocation('/apply?verification=true&from=login');
     } catch (error) {
       console.error("Verification error:", error);
       toast({ title: "Error", description: "Verification failed", variant: "destructive" });
