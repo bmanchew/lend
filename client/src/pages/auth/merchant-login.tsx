@@ -34,6 +34,7 @@ export default function MerchantLogin() {
         loginType: "merchant"
       });
       console.log('[MerchantLogin] Login successful:', response);
+      window.location.href = '/merchant/dashboard';
     } catch (error) {
       console.error("[MerchantLogin] Login failed:", {
         error,
