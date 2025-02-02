@@ -4,67 +4,61 @@ import { render, screen, act } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Mock hooks
-vi.mock('../hooks/use-mobile', () => ({
-  useMobile: () => true
-}));
-
-vi.mock('../hooks/use-toast', () => ({
+// Mock useToast hook
+vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({
     toast: vi.fn()
   })
 }));
 
+// Mock useMobile hook
+vi.mock('@/hooks/use-mobile', () => ({
+  useMobile: () => true
+}));
+
 describe('KycVerificationModal', () => {
   const queryClient = new QueryClient();
-  const mockStartVerification = vi.fn();
 
   beforeEach(() => {
-    // Reset mocks
     vi.clearAllMocks();
     localStorage.setItem('temp_user_id', '123');
   });
 
-  it('automatically initiates KYC verification on mobile', async () => {
-    // Mock fetch for KYC status
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('/api/kyc/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ status: 'not_started' })
-        });
-      }
-      return Promise.resolve({
+  it('initiates KYC verification on mobile automatically', async () => {
+    const mockStartVerification = vi.fn();
+    const mockOnClose = vi.fn();
+    const mockOnVerificationComplete = vi.fn();
+
+    // Mock fetch response
+    global.fetch = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ status: 'not_started' })
+      }))
+      .mockImplementationOnce(() => Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ redirectUrl: 'https://verification.url' })
-      });
-    });
-
-    // Mock window.location
-    const mockLocation = new URL('https://test.com');
-    delete window.location;
-    window.location = mockLocation;
+      }));
 
     render(
       <QueryClientProvider client={queryClient}>
         <KycVerificationModal
           isOpen={true}
-          onClose={() => {}}
-          onVerificationComplete={() => {}}
+          onClose={mockOnClose}
+          onVerificationComplete={mockOnVerificationComplete}
         />
       </QueryClientProvider>
     );
 
-    // Wait for effects to run
+    // Wait for async operations
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 100));
     });
 
-    // Verify KYC was initiated
-    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/kyc/status'));
-    expect(window.location).toBeDefined();
-
-    // Clean up
-    vi.restoreAllMocks();
+    // Verify API calls
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const calls = (global.fetch as any).mock.calls;
+    expect(calls[0][0]).toContain('/api/kyc/status');
+    expect(calls[1][0]).toContain('/api/kyc/start');
   });
 });
