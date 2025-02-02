@@ -799,12 +799,52 @@ export function registerRoutes(app: Express): Server {
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const requestId = Date.now().toString(36);
-      console.log(`[LoanApplication][${requestId}] Received request:`, {
+      const debugLog = (message: string, data?: any) => {
+        console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
+      };
+
+      debugLog('Request received', {
         body: req.body,
         params: req.params,
-        headers: req.headers,
         url: req.url,
         timestamp: new Date().toISOString()
+      });
+
+      // Validate required fields
+      const requiredFields = ['phone', 'firstName', 'lastName', 'amount'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
+      
+      if (missingFields.length > 0) {
+        debugLog('Missing required fields:', missingFields);
+        return res.status(400).json({ error: `Missing required fields: ${missingFields.join(', ')}` });
+      }
+
+      const { phone: borrowerPhone, firstName, lastName, amount } = req.body;
+      const merchantId = parseInt(req.params.id);
+      if (isNaN(merchantId)) {
+        debugLog('Invalid merchant ID:', req.params.id);
+        return res.status(400).json({ error: 'Invalid merchant ID' });
+      }
+
+      // Verify merchant exists
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId))
+        .limit(1);
+
+      if (!merchant) {
+        debugLog('Merchant not found:', merchantId);
+        return res.status(404).json({ error: 'Merchant not found' });
+      }
+
+      debugLog('Found merchant:', merchant);
+      debugLog('Parsed request data:', {
+        merchantId,
+        borrowerPhone,
+        firstName,
+        lastName,
+        amount
       });
 
       // Validate required fields
@@ -833,15 +873,32 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Normalize phone number
-      const normalizedPhone = borrowerPhone.replace(/^\+?1/, '').replace(/\D/g, '');
+      // Normalize phone number
+      const rawPhone = borrowerPhone.toString().trim();
+      const normalizedPhone = rawPhone.replace(/^\+?1/, '').replace(/\D/g, '');
+      if (normalizedPhone.length !== 10) {
+        debugLog('Invalid phone number format:', rawPhone);
+        return res.status(400).json({ error: 'Invalid phone number format' });
+      }
       const fullPhone = '+1' + normalizedPhone;
+      debugLog('Normalized phone:', fullPhone);
+
+      // Validate amount
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        debugLog('Invalid amount:', amount);
+        return res.status(400).json({ error: 'Invalid amount' });
+      }
 
       // First check if user exists
+      debugLog('Looking up existing user with phone:', fullPhone);
       const [existingUser] = await db
         .select()
         .from(users)
         .where(eq(users.phoneNumber, fullPhone))
         .limit(1);
+      
+      debugLog('User lookup result:', existingUser || 'Not found');
 
       // Always use existing user if found
       let user;

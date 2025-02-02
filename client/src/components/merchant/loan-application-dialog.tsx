@@ -75,7 +75,11 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
-      console.log('[LoanDialog] Starting mutation with data:', {
+      const debugLog = (message: string, data?: any) => {
+        console.log(`[LoanDialog][${Date.now().toString(36)}] ${message}`, data || '');
+      };
+
+      debugLog('Starting mutation', {
         ...data,
         merchantId,
         merchantName,
