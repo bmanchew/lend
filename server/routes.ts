@@ -819,7 +819,7 @@ export function registerRoutes(app: Express): Server {
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
-      console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
+      console.log(`[LoanApplication][${requestId}] ${message}`, data || "");
     };
 
     // Log the full application details
