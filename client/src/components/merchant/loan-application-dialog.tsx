@@ -194,22 +194,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               console.log('[SendApplication] Success:', result);
               toast({
                 title: "Success",
-                description: "Application sent successfully", 
-              });
-              setOpen(false);
-            } catch (err) {
-              console.error('[SendApplication] Error:', err);
-              toast({
-                title: "Error",
-                description: err.message || "Failed to send application",
-                variant: "destructive",
-              });
-            }
-
-              const result = await response.json();
-              console.log('[SendApplication] Success:', result);
-              toast({
-                title: "Success",
                 description: "Application sent successfully",
               });
               setOpen(false);
@@ -218,7 +202,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               toast({
                 title: "Error",
                 description: err.message || "Failed to send application",
-                variant: "destructive", 
+                variant: "destructive",
               });
             }
           }}
