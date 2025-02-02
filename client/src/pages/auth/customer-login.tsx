@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
+  const [user, setUser] = useState(null); // Added state to store user data
   const { toast } = useToast();
 
   const [location] = useLocation();
@@ -71,6 +72,40 @@ export default function CustomerLogin() {
     }
   }, [location]);
 
+  const handleVerifyAndContinue = async (data) => {
+    try {
+      const response = await axios.post("/api/verifyOTP", { username: data.phoneNumber, code: data.code });
+      if (response.ok) {
+        const userData = await response.json();
+        localStorage.setItem('temp_user_id', userData.id.toString());
+        setUser(userData);
+        //Initiate KYC here.  Replace with your actual KYC initiation function.
+        initiateKYC(userData.id);
+        setLocation('/apply?verification=true&from=login');
+      } else {
+        toast({ title: "Error", description: "Invalid OTP", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Verification error:", error);
+      toast({ title: "Error", description: "Verification failed", variant: "destructive" });
+    }
+  };
+
+
+  const initiateKYC = (userId) => {
+    // Replace this with your actual KYC initiation logic.  This is a placeholder.
+    console.log(`Initiating KYC for user ID: ${userId}`);
+    //Example using axios:
+    // axios.post('/api/initiateKYC', { userId })
+    //   .then(res => {
+    //     //Handle success
+    //   })
+    //   .catch(err => {
+    //     //Handle error
+    //   })
+  };
+
+
   return (
     <div className="container flex min-h-screen items-center justify-center">
       <div className="mx-auto w-full max-w-sm space-y-6">
@@ -80,13 +115,7 @@ export default function CustomerLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit((data) => {
-            loginMutation.mutate({
-              username: data.phoneNumber,
-              password: data.code,
-              loginType: 'customer'
-            });
-          })} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleVerifyAndContinue)} className="space-y-4"> {/* Changed onSubmit handler */}
             <FormField
               control={form.control}
               name="phoneNumber"
@@ -109,9 +138,9 @@ export default function CustomerLogin() {
                     <FormLabel className="text-center block">Enter Verification Code</FormLabel>
                     <FormControl>
                       <div className="flex flex-col items-center gap-4">
-                        <InputOTP 
-                          maxLength={6} 
-                          value={field.value} 
+                        <InputOTP
+                          maxLength={6}
+                          value={field.value}
                           onChange={field.onChange}
                           className="gap-2"
                         >
@@ -124,9 +153,9 @@ export default function CustomerLogin() {
                             <InputOTPSlot className="w-12 h-12 text-lg" index={5} />
                           </InputOTPGroup>
                         </InputOTP>
-                        <Button 
-                          type="button" 
-                          variant="link" 
+                        <Button
+                          type="button"
+                          variant="link"
                           className="text-sm text-muted-foreground"
                           onClick={handleSendOTP}
                         >
@@ -139,7 +168,7 @@ export default function CustomerLogin() {
                 )}
               />
             ) : (
-              <Button 
+              <Button
                 type="button"
                 onClick={handleSendOTP}
                 className="w-full"
@@ -148,7 +177,7 @@ export default function CustomerLogin() {
               </Button>
             )}
             {isOtpSent && (
-              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+              <Button type="submit" className="w-full" >
                 Verify & Continue
               </Button>
             )}

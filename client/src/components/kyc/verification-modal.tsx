@@ -17,7 +17,8 @@ export function KycVerificationModal({
   onVerificationComplete
 }: VerificationModalProps) {
   const { toast } = useToast();
-  const userId = localStorage.getItem('temp_user_id');
+  const { user } = useAuth();
+  const userId = user?.id;
   const isMobile = useMobile();
   const [verificationStarted, setVerificationStarted] = useState(false);
 
