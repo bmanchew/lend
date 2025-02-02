@@ -20,7 +20,6 @@ import { Router as BrowserRouter } from "wouter";
 
 function Router() {
   return (
-    <BrowserRouter>
     <Switch>
       <Route path="/">
         <Redirect to="/login/customer" />
@@ -40,7 +39,6 @@ function Router() {
       <Route path="/apply/:token" component={ApplyPage} />
       <Route component={NotFound} />
     </Switch>
-    </BrowserRouter>
   );
 }
 
@@ -48,8 +46,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
-        <Toaster />
+        <BrowserRouter>
+          <Router />
+          <Toaster />
+        </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
   );
