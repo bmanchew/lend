@@ -98,15 +98,9 @@ export const webhookEvents = pgTable('webhook_events', {
   sessionId: varchar('session_id', { length: 255 }),
   status: varchar('status', { length: 50 }).default('pending'),
   payload: json('payload'),
+  error: text('error'),
   retryCount: integer('retry_count').default(0),
   nextRetryAt: timestamp('next_retry_at'),
-  processedAt: timestamp('processed_at'),
-  createdAt: timestamp('created_at').defaultNow(),
-  id: serial('id').primaryKey(),
-  eventType: varchar('event_type', { length: 255 }).notNull(),
-  payload: text('payload'),
-  status: varchar('status', { length: 50 }),
-  error: text('error'),
   processedAt: timestamp('processed_at'),
   createdAt: timestamp('created_at').defaultNow()
 });
