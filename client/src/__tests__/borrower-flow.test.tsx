@@ -48,13 +48,27 @@ describe('Borrower Flow Tests', () => {
   });
 
   it('completes full borrower flow from OTP to KYC initiation', async () => {
+    vi.useFakeTimers();
+    
     // Mock successful OTP send
-    mockFetch.mockImplementationOnce(() => 
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ message: 'OTP sent successfully' })
-      })
-    );
+    mockFetch
+      .mockImplementationOnce(() => 
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: 'OTP sent successfully' })
+        })
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 1,
+            username: 'testuser',
+            role: 'borrower',
+            kycStatus: 'pending'
+          })
+        })
+      );
 
     // Mock successful login
     mockFetch.mockImplementationOnce(() => 

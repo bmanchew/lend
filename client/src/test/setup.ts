@@ -3,7 +3,7 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 
-// Mock fetch
+// Mock fetch globally
 global.fetch = vi.fn();
 
 // Mock localStorage
@@ -15,15 +15,6 @@ const localStorageMock = {
 };
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
-// Mock QueryClient
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: false,
-    },
-  },
-});
-
 // Mock window.location
 Object.defineProperty(window, 'location', {
   value: {
@@ -32,4 +23,21 @@ Object.defineProperty(window, 'location', {
     replace: vi.fn()
   },
   writable: true
+});
+
+// QueryClient for tests
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
+
+// Reset mocks between tests
+beforeEach(() => {
+  vi.clearAllMocks();
+  global.fetch.mockClear();
+  window.localStorage.getItem.mockClear();
+  window.localStorage.setItem.mockClear();
 });
