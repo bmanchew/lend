@@ -138,6 +138,8 @@ export default function CustomerLogin() {
       if (userData && userData.id) {
         localStorage.setItem('temp_user_id', userData.id.toString());
         setUser(userData);
+        setIsOtpSent(false); // Reset OTP sent state
+        form.reset(); // Clear form
         setLocation(`/apply/${userData.id}?verification=true&from=login`);
       } else {
         toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
