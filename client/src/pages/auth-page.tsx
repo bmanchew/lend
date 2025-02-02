@@ -51,11 +51,20 @@ export default function AuthPage() {
   });
 
   if (user) {
-    console.log('[Auth] User authenticated, redirecting:', {
+    // Enhanced logging for device detection
+    console.log('[Auth] User authenticated, detailed device info:', {
       role: user.role,
-      isMobile,
-      platform: navigator.platform,
-      userAgent: navigator.userAgent
+      phoneNumber: user.phoneNumber,
+      deviceInfo: {
+        isMobile,
+        platform: navigator.platform,
+        userAgent: navigator.userAgent,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        touchPoints: navigator.maxTouchPoints,
+        hasTouch: 'ontouchstart' in window,
+        orientation: window.screen?.orientation?.type || 'unknown'
+      }
     });
 
     // For customers, redirect to apply page with verification flag
