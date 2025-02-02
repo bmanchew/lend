@@ -625,11 +625,11 @@ export function registerRoutes(app: Express): Server {
         user = await db
           .insert(users)
           .values({
-            username: phoneNumber,
+            username: phoneNumber.replace(/\D/g, ''),
             password: Math.random().toString(36).slice(-8), // temporary password
             email: `${phoneNumber.replace(/\D/g, '')}@temp.shifi.com`,
             name: '',
-            role: 'customer',
+            role: 'borrower',
             phoneNumber: phoneNumber,
             lastOtpCode: otp,
             otpExpiry: otpExpiry,
@@ -979,7 +979,7 @@ export function registerRoutes(app: Express): Server {
             status: 'success',
             message: 'Loanapplication invitation sent successfully',
             applicationUrl
-          });
+                  });
         } else {
           debugLog('SMS failed to send:', result.error);
           res.status(400).json({ 

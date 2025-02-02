@@ -140,6 +140,9 @@ export function KycVerificationModal({
       verificationStarted
     });
 
+    // Reset verification state on modal open
+    setVerificationStarted(false);
+
     if (!userId) {
       console.error('[KYC Modal] No user ID available');
       toast({
