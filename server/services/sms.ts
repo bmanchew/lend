@@ -61,9 +61,18 @@ class SMSService {
     applicationUrl: string
   ): Promise<{success: boolean; error?: string}> {
     try {
-      // Validate phone number format
-      if (!toNumber.match(/^\+1[0-9]{10}$/)) {
-        console.error("[SMSService] Invalid phone format:", toNumber);
+      // Clean and validate phone number
+      const cleanPhone = toNumber.replace(/\D/g, '');
+      const formattedPhone = cleanPhone.startsWith('1') ? 
+        `+${cleanPhone}` : 
+        `+1${cleanPhone}`;
+
+      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
+        console.error("[SMSService] Invalid phone format:", {
+          original: toNumber,
+          cleaned: cleanPhone,
+          formatted: formattedPhone
+        });
         return {success: false, error: 'Invalid phone number format'};
       }
 

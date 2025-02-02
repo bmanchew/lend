@@ -938,15 +938,23 @@ export function registerRoutes(app: Express): Server {
       // Generate a unique application token
       const applicationToken = smsService.generateApplicationToken();
 
-      // Construct the application URL
-      const applicationUrl = `https://shi-fi-lend-brandon263.replit.app/login/customer?phone=${borrowerPhone}`;
+      // Format and validate phone number
+      const cleanPhone = (borrowerPhone || '').replace(/\D/g, '');
+      const formattedPhone = cleanPhone.startsWith('1') ? 
+        `+${cleanPhone}` : 
+        `+1${cleanPhone}`;
+
+      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
+        debugLog('Invalid phone number format');
+        return res.status(400).json({ error: 'Invalid phone number format' });
+      }
+
+      // Construct and validate application URL
+      const baseUrl = process.env.APP_URL || 'https://shi-fi-lend-brandon263.replit.app';
+      const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(formattedPhone)}`;
 
       try {
-        // Format phone number consistently
-        const cleanPhone = (borrowerPhone || '').replace(/\D/g, '');
-        const formattedPhone = cleanPhone.startsWith('1') ? 
-          `+${cleanPhone}` : 
-          `+1${cleanPhone}`;
+        new URL(applicationUrl); // Validate URL format
 
         debugLog('Sending SMS with:', {
           phone: formattedPhone,
