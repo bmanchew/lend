@@ -139,9 +139,11 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
     },
     onError: (error: any) => {
+      console.error('[LoanDialog] Error:', error);
+      const errorMessage = error.response?.data?.error || error.message || "Failed to send loan application invitation";
       toast({
         title: "Error",
-        description: error.message || "Failed to send loan application invitation",
+        description: errorMessage,
         variant: "destructive",
       });
     },

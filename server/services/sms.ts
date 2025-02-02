@@ -96,8 +96,15 @@ class SMSService {
       const message = await this.client.messages.create({
         body: `${merchantName} has invited you to complete a loan application. Click here to start: ${applicationUrl}`,
         from: this.config.fromNumber,
-        to: toNumber,
+        to: formattedPhone,
         statusCallback: process.env.TWILIO_STATUS_CALLBACK
+      });
+
+      console.log("[SMSService] Message details:", {
+        messageId: message.sid,
+        status: message.status,
+        to: formattedPhone,
+        timestamp: new Date().toISOString()
       });
 
       if (message.status === 'failed' || message.errorCode) {
