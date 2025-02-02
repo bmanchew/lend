@@ -106,7 +106,7 @@ class SMSService {
         status: message.status
       });
 
-      return true;
+      return {success: true};
     } catch (error: any) {
       console.error("[SMSService] Error sending message:", {
         toNumber,
@@ -115,7 +115,10 @@ class SMSService {
         twilioCode: error.code,
         moreInfo: error.moreInfo
       });
-      return false;
+      return {
+        success: false, 
+        error: error.message || 'Failed to send message'
+      };
     }
   }
 

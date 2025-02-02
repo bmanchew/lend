@@ -13,8 +13,7 @@ import morgan from 'morgan';
 
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
 
-// Configure request logging
-app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
+// Morgan logging will be configured in the main Express app setup
 
 function cacheMiddleware(duration: number) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -801,6 +800,11 @@ export function registerRoutes(app: Express): Server {
   });
 
     apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
+    const requestId = Date.now().toString(36);
+    console.log(`[LoanApplication][${requestId}] Starting loan application process`, {
+      body: req.body,
+      merchantId: req.params.id
+    });
     try {
       const requestId = Date.now().toString(36);
       const debugLog = (message: string, data?: any) => {
