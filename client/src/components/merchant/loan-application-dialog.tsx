@@ -161,6 +161,18 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
             try {
               const values = form.getValues();
+              
+              // Validate required fields
+              if (!values.firstName || !values.lastName || !values.phone || !values.fundingAmount) {
+                throw new Error('Please fill in all required fields');
+              }
+
+              // Format phone number
+              const cleanPhone = values.phone.replace(/\D/g, '').slice(-10);
+              if (cleanPhone.length !== 10) {
+                throw new Error('Please enter a valid 10-digit phone number');
+              }
+
               const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
                 method: 'POST',
                 headers: {
@@ -168,11 +180,15 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                 },
                 body: JSON.stringify({
                   ...values,
+                  phone: cleanPhone,
                   fundingAmount: parseFloat(values.fundingAmount),
                 }),
               });
 
               if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to send application');
+              }
                 const error = await response.json();
                 throw new Error(error.message || 'Failed to send application');
               }
