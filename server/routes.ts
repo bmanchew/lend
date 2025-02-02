@@ -888,12 +888,16 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Normalize phone number
-      const rawPhone = (borrowerPhone || '').toString().trim();
-      const normalizedPhone = rawPhone.replace(/^\+?1/, '').replace(/\D/g, '');
+      // Normalize phone number - use rawPhone if available, otherwise clean borrowerPhone
+      const phoneToNormalize = (borrowerPhone?.rawPhone || borrowerPhone || '').toString().trim();
+      const normalizedPhone = phoneToNormalize.replace(/^\+?1/, '').replace(/\D/g, '');
       
       if (normalizedPhone.length !== 10) {
-        debugLog('Invalid phone number format:', { raw: rawPhone, normalized: normalizedPhone });
+        debugLog('Invalid phone number format:', { 
+          original: borrowerPhone,
+          normalized: normalizedPhone,
+          requestId 
+        });
         return res.status(400).json({ 
           error: 'Invalid phone number format. Please provide a 10-digit US phone number.',
           requestId

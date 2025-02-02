@@ -84,13 +84,17 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
             placeholder="(555) 000-0000"
             value={formData.phone}
             onChange={e => {
-              // Remove all non-digits
+              // Clean the phone number to only digits
               let phone = e.target.value.replace(/\D/g, '');
               // Remove leading 1 if present
               phone = phone.replace(/^1/, '');
               // Only take first 10 digits
               phone = phone.slice(0, 10);
-              // Format as (XXX) XXX-XXXX
+              
+              // Store raw digits for submission
+              const rawPhone = phone;
+              
+              // Format for display as (XXX) XXX-XXXX
               if (phone.length >= 6) {
                 phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
               } else if (phone.length >= 3) {
@@ -98,7 +102,9 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
               } else if (phone.length > 0) {
                 phone = `(${phone}`;
               }
-              setFormData({...formData, phone});
+              
+              // Store both formatted display value and raw digits
+              setFormData({...formData, phone, rawPhone});
             }}
             maxLength={14}
             required
