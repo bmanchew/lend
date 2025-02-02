@@ -101,16 +101,29 @@ export function KycVerificationModal({
         // For mobile browsers, we need to handle the redirection differently
         if (isMobile) {
           console.log('[KYC Modal] Handling mobile redirection');
-          // Try to use the app scheme first
-          const appUrl = data.redirectUrl.replace('https://', 'didit://');
-          console.log('[KYC Modal] Attempting app URL:', appUrl);
-          window.location.href = appUrl;
+          
+          // Try universal link first
+          const universalLink = data.redirectUrl;
+          console.log('[KYC Modal] Attempting universal link:', universalLink);
+          
+          // Create and use hidden anchor for better mobile handling
+          const link = document.createElement('a');
+          link.href = universalLink;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
 
-          // Set a fallback timeout to use the HTTPS URL if the app scheme doesn't work
+          // Fallback chain: app scheme -> web URL
           setTimeout(() => {
-            console.log('[KYC Modal] Fallback to web URL:', data.redirectUrl);
-            window.location.href = data.redirectUrl;
-          }, 1000);
+            const appUrl = data.redirectUrl.replace('https://', 'didit://');
+            console.log('[KYC Modal] Attempting app URL:', appUrl);
+            window.location.href = appUrl;
+
+            setTimeout(() => {
+              console.log('[KYC Modal] Final fallback to web URL:', data.redirectUrl);
+              window.location.href = data.redirectUrl;
+            }, 1500);
+          }, 1500);
         } else {
           console.log('[KYC Modal] Redirecting to web URL:', data.redirectUrl);
           window.location.href = data.redirectUrl;

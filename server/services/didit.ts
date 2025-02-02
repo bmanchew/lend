@@ -218,6 +218,11 @@ class DiditService {
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     console.log("[DiditService] Verifying webhook signature");
     try {
+      if (!signatureHeader || !timestampHeader) {
+        console.error('[DiditService] Missing webhook headers');
+        return false;
+      }
+      
       const timestamp = parseInt(timestampHeader);
       const currentTime = Math.floor(Date.now() / 1000);
 
