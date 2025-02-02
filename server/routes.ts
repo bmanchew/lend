@@ -880,8 +880,12 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid amount' });
       }
 
+      // Normalize phone number
+      const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
+      const formattedPhone = '+1' + cleanPhone;
+
       // First check if user exists
-      debugLog('Looking up existing user with phone:', borrowerPhone);
+      debugLog('Looking up existing user with phone:', formattedPhone);
       const [existingUser] = await db
         .select()
         .from(users)
@@ -939,32 +943,32 @@ export function registerRoutes(app: Express): Server {
       const applicationToken = smsService.generateApplicationToken();
 
       // Format and validate phone number
-      const cleanPhone = (borrowerPhone || '').replace(/\D/g, '');
-      const formattedPhone = cleanPhone.startsWith('1') ? 
-        `+${cleanPhone}` : 
-        `+1${cleanPhone}`;
+      const cleanPhone2 = (borrowerPhone || '').replace(/\D/g, '');
+      const formattedPhone2 = cleanPhone2.startsWith('1') ? 
+        `+${cleanPhone2}` : 
+        `+1${cleanPhone2}`;
 
-      if (!formattedPhone.match(/^\+1[0-9]{10}$/)) {
+      if (!formattedPhone2.match(/^\+1[0-9]{10}$/)) {
         debugLog('Invalid phone number format');
         return res.status(400).json({ error: 'Invalid phone number format' });
       }
 
       // Construct and validate application URL
       const baseUrl = process.env.APP_URL || 'https://shi-fi-lend-brandon263.replit.app';
-      const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(formattedPhone)}`;
+      const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(formattedPhone2)}`;
 
       try {
         new URL(applicationUrl); // Validate URL format
 
         debugLog('Sending SMS with:', {
-          phone: formattedPhone,
+          phone: formattedPhone2,
           merchant: merchantRecord.companyName,
           url: applicationUrl
         });
 
         // Send the SMS invitation
         const result = await smsService.sendLoanApplicationLink(
-          formattedPhone,
+          formattedPhone2,
           merchantRecord.companyName,
           applicationUrl
         );
@@ -973,7 +977,7 @@ export function registerRoutes(app: Express): Server {
           debugLog('SMS sent successfully');
           res.json({ 
             status: 'success',
-            message: 'Loan application invitation sent successfully',
+            message: 'Loanapplication invitation sent successfully',
             applicationUrl
           });
         } else {
