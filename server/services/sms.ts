@@ -61,13 +61,17 @@ class SMSService {
     applicationUrl: string
   ): Promise<{success: boolean; error?: string}> {
     try {
-      // Clean and validate phone number
-      // Clean and format phone number
-      let cleanPhone = (toNumber?.rawPhone || toNumber || '').toString().replace(/\D/g, '');
-      // Remove leading 1 if present
-      cleanPhone = cleanPhone.replace(/^1/, '');
-      // Take last 10 digits
-      cleanPhone = cleanPhone.slice(-10);
+      // Standardized phone number cleaning
+      const cleanPhone = (toNumber || '').toString()
+        .replace(/\D/g, '')  // Remove non-digits
+        .replace(/^1/, '')   // Remove leading 1
+        .slice(-10);        // Take last 10 digits
+
+      console.log("[SMSService] Phone cleaning:", {
+        input: toNumber,
+        cleaned: cleanPhone,
+        timestamp: new Date().toISOString()
+      });
 
       console.log("[SMSService] Phone number cleaning:", {
         original: toNumber,

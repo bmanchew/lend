@@ -888,14 +888,13 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Normalize phone number - use rawPhone if available, otherwise clean borrowerPhone
-      const phoneToNormalize = (borrowerPhone?.rawPhone || borrowerPhone || '').toString().trim();
-      const normalizedPhone = phoneToNormalize.replace(/^\+?1/, '').replace(/\D/g, '');
+      // Normalize phone number handling
+      const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
       
-      if (normalizedPhone.length !== 10) {
+      if (cleanPhone.length !== 10) {
         debugLog('Invalid phone number format:', { 
           original: borrowerPhone,
-          normalized: normalizedPhone,
+          cleaned: cleanPhone,
           requestId 
         });
         return res.status(400).json({ 
@@ -904,8 +903,8 @@ export function registerRoutes(app: Express): Server {
         });
       }
       
-      const fullPhone = '+1' + normalizedPhone;
-      debugLog('Normalized phone:', { original: rawPhone, normalized: fullPhone });
+      const formattedPhone = '+1' + cleanPhone;
+      debugLog('Normalized phone:', { original: borrowerPhone, formatted: formattedPhone });
 
       // Validate amount
       const parsedAmount = parseFloat(amount);
