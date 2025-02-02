@@ -63,11 +63,17 @@ class SMSService {
     try {
       // Clean and validate phone number
       // Clean and format phone number
-      let cleanPhone = toNumber.replace(/\D/g, '');
+      let cleanPhone = (toNumber?.rawPhone || toNumber || '').toString().replace(/\D/g, '');
       // Remove leading 1 if present
       cleanPhone = cleanPhone.replace(/^1/, '');
       // Take last 10 digits
       cleanPhone = cleanPhone.slice(-10);
+
+      console.log("[SMSService] Phone number cleaning:", {
+        original: toNumber,
+        rawPhone: toNumber?.rawPhone,
+        cleaned: cleanPhone
+      });
       // Ensure it's exactly 10 digits
       if (cleanPhone.length !== 10) {
         console.error("[SMSService] Invalid phone number length:", {

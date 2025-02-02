@@ -109,7 +109,8 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
           merchantName,
           amount: fundingAmount,
           fundingAmount: data.fundingAmount,
-          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)  // Clean and format phone number
+          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),  // Clean and format phone number
+          rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10) // Add raw phone for consistency
         }),
       });
       if (!response.ok) {
