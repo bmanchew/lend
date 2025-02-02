@@ -11,6 +11,13 @@ interface DiditConfig {
   webhookSecret: string;
 }
 
+interface DiditSessionConfig {
+  userId: number;
+  platform: 'mobile' | 'web';
+  userAgent?: string;
+  returnUrl?: string;
+}
+
 interface DiditAuthResponse {
   access_token: string;
   expires_in: number;
@@ -98,7 +105,7 @@ class DiditService {
     }
   }
 
-  async initializeKycSession(userId: number, returnUrl?: string): Promise<string> {
+  async initializeKycSession({ userId, platform, userAgent, returnUrl }: DiditSessionConfig): Promise<string> {
     const startTime = Date.now();
     console.log("[DiditService] Initializing KYC session for user", userId);
 
@@ -115,35 +122,24 @@ class DiditService {
       }
 
       const accessToken = await this.getAccessToken();
-
       const replitDomain = process.env.DEPLOYMENT_URL || 'https://shi-fi-lend-brandon263.replit.app';
-
       const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
+
       console.log("[DiditService] Using webhook URL:", callbackUrl.toString());
+
       // Ensure return URL is absolute and includes domain
       const completeReturnUrl = returnUrl?.startsWith('http') 
         ? returnUrl 
         : new URL(returnUrl || '/', replitDomain).toString();
 
+      const isMobile = platform === 'mobile' || (userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent));
+
       console.log("[DiditService] Session configuration:", {
         userId,
-        callback: callbackUrl.toString(),
-        baseUrl: replitDomain,
-        returnUrl: completeReturnUrl
-      });
-
-      const isMobile = Boolean(user.platform === 'mobile' || (user.userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(user.userAgent)));
-      console.log("[DiditService] Initializing session with platform:", { 
-        platform: user.platform, 
         isMobile,
-        userAgent: user.userAgent,
-        detectedFromUA: /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(user.userAgent || '')
-      });
-
-      console.log("[DiditService] Creating session with config:", {
-        userId: user.id,
-        platform: 'mobile',
-        callback: callbackUrl.toString()
+        platform,
+        userAgent: userAgent?.substring(0, 50),
+        returnUrl: completeReturnUrl
       });
 
       const sessionData = {
@@ -152,28 +148,21 @@ class DiditService {
         vendor_data: JSON.stringify({
           userId: user.id,
           username: user.username,
-          platform: 'mobile',
-          userAgent: user.userAgent,
+          platform,
+          userAgent,
           sessionType: 'verification'
         }),
         redirect_url: completeReturnUrl,
         app_scheme: 'didit',
-        mobile_flow: true, // Force mobile flow for all users
+        mobile_flow: isMobile,
         mobile_settings: {
           allow_app: true,
           fallback_to_web: true,
           app_timeout: 10000,
-          force_mobile_flow: true,
+          force_mobile_flow: isMobile,
           universal_link_enabled: true
         }
       };
-
-      console.log("[DiditService] Session configuration:", {
-        userId: user.id,
-        isMobile,
-        mobileFlow: sessionData.mobile_flow,
-        redirectUrl: sessionData.redirect_url
-      });
 
       const response = await axios.post(
         'https://verification.didit.me/v1/session/', 
@@ -194,14 +183,9 @@ class DiditService {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24);
 
-      console.log("[DiditService] Creating verification session record", {
-        sessionId: response.data.session_id,
-        userId
-      });
-
       await db.insert(verificationSessions).values({
-        userId,
         sessionId: response.data.session_id,
+        userId,
         status: 'initialized',
         features: sessionData.features,
         returnUrl: completeReturnUrl,
@@ -213,11 +197,6 @@ class DiditService {
       await this.updateUserKycStatus(userId, 'pending');
 
       this.logAPICall('POST', '/v1/session', startTime);
-      console.log("[DiditService] KYC session initialized successfully", {
-        sessionId: response.data.session_id,
-        duration: Date.now() - startTime
-      });
-
       return response.data.url;
 
     } catch (error: any) {

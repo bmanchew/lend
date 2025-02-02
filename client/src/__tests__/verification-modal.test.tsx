@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, act, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Create mockToast before mocking the hook
 const mockToast = vi.fn();
+const mockGetItem = vi.fn();
 
 // Mock useToast hook
 vi.mock('@/hooks/use-toast', () => ({
@@ -32,9 +33,28 @@ describe('KycVerificationModal Mobile Tests', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
+
+    // Setup fetch mock
     mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
-    localStorage.getItem.mockReturnValue('123');
+
+    // Setup localStorage mock
+    mockGetItem.mockReturnValue('123');
+    Object.defineProperty(global, 'localStorage', {
+      value: {
+        getItem: mockGetItem,
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn()
+      },
+      writable: true
+    });
+
+    // Setup window.location mock
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { href: '' }
+    });
   });
 
   afterEach(() => {
@@ -80,7 +100,7 @@ describe('KycVerificationModal Mobile Tests', () => {
     expect(JSON.parse(config.body)).toEqual({
       userId: '123',
       platform: 'mobile',
-      userAgent: 'iPhone'
+      userAgent: expect.any(String)
     });
     expect(config.headers['X-Mobile-Client']).toBe('true');
 

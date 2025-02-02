@@ -18,7 +18,7 @@ export function KycVerificationModal({
 }: VerificationModalProps) {
   const { toast } = useToast();
   const userId = localStorage.getItem('temp_user_id');
-  const isMobile = useMobile(); // Using the improved mobile detection hook
+  const isMobile = useMobile();
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -26,6 +26,9 @@ export function KycVerificationModal({
     queryFn: async () => {
       if (!userId) return null;
       const response = await fetch(`/api/kyc/status?userId=${userId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch KYC status');
+      }
       return response.json();
     },
     enabled: !!userId,
@@ -73,11 +76,25 @@ export function KycVerificationModal({
         }
 
         const data = await response.json();
+        console.log('[KYC] Received verification URL:', data.redirectUrl);
+
         if (!data.redirectUrl) {
           throw new Error('No redirect URL provided');
         }
 
-        window.location.href = data.redirectUrl;
+        // For mobile browsers, we need to handle the redirection differently
+        if (isMobile) {
+          // Try to use the app scheme first
+          window.location.href = data.redirectUrl.replace('https://', 'didit://');
+
+          // Set a fallback timeout to use the HTTPS URL if the app scheme doesn't work
+          setTimeout(() => {
+            window.location.href = data.redirectUrl;
+          }, 1000);
+        } else {
+          window.location.href = data.redirectUrl;
+        }
+
         return data;
       } catch (error: any) {
         console.error('Verification error:', error);
@@ -86,17 +103,19 @@ export function KycVerificationModal({
           description: "Failed to start verification. Please try again.",
           variant: "destructive"
         });
+        throw error;
       }
     }
   });
 
   useEffect(() => {
     if (isOpen) {
+      console.log('[KYC Modal] Auto-starting verification:', {
+        isMobile,
+        status: kycData?.status
+      });
+
       if (!kycData?.status || kycData?.status === 'not_started') {
-        console.log('[KYC Modal] Auto-starting verification:', {
-          isMobile,
-          status: kycData?.status
-        });
         startVerification.mutate();
       } else if (kycData?.status === 'Approved') {
         toast({
@@ -106,7 +125,7 @@ export function KycVerificationModal({
         onVerificationComplete?.();
       }
     }
-  }, [isOpen, kycData?.status, isMobile, startVerification, toast, onVerificationComplete]);
+  }, [isOpen, kycData?.status, isMobile]);
 
   return (
     <div className="flex flex-col items-center justify-center space-y-4 p-4">
