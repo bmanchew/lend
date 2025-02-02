@@ -9,8 +9,12 @@ import { testSendGridConnection, sendVerificationEmail, generateVerificationToke
 import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import NodeCache from 'node-cache';
+import morgan from 'morgan';
 
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
+
+// Configure request logging
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 
 function cacheMiddleware(duration: number) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -947,13 +951,13 @@ export function registerRoutes(app: Express): Server {
         });
 
         // Send the SMS invitation
-        const sent = await smsService.sendLoanApplicationLink(
+        const result = await smsService.sendLoanApplicationLink(
           formattedPhone,
           merchantRecord.companyName,
           applicationUrl
         );
 
-        if (sent) {
+        if (result.success) {
           debugLog('SMS sent successfully');
           res.json({ 
             status: 'success',
@@ -961,10 +965,10 @@ export function registerRoutes(app: Express): Server {
             applicationUrl
           });
         } else {
-          debugLog('SMS failed to send');
-          res.status(500).json({ 
+          debugLog('SMS failed to send:', result.error);
+          res.status(400).json({ 
             error: 'Failed to send loan application invitation',
-            details: 'SMS service returned failure'
+            details: result.error || 'SMS service returned failure'
           });
         }
       } catch (err) {

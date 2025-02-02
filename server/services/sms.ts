@@ -59,24 +59,45 @@ class SMSService {
     toNumber: string,
     merchantName: string,
     applicationUrl: string
-  ): Promise<boolean> {
+  ): Promise<{success: boolean; error?: string}> {
     try {
-      console.log("[SMSService] Sending loan application link to:", toNumber);
+      // Validate phone number format
+      if (!toNumber.match(/^\+1[0-9]{10}$/)) {
+        console.error("[SMSService] Invalid phone format:", toNumber);
+        return {success: false, error: 'Invalid phone number format'};
+      }
+
+      // Validate URL
+      try {
+        new URL(applicationUrl);
+      } catch {
+        console.error("[SMSService] Invalid URL:", applicationUrl);
+        return {success: false, error: 'Invalid application URL'};
+      }
+
+      console.log("[SMSService] Sending loan application link:", {
+        to: toNumber,
+        merchant: merchantName,
+        url: applicationUrl
+      });
 
       const message = await this.client.messages.create({
         body: `${merchantName} has invited you to complete a loan application. Click here to start: ${applicationUrl}`,
         from: this.config.fromNumber,
-        to: toNumber
+        to: toNumber,
+        statusCallback: process.env.TWILIO_STATUS_CALLBACK
       });
 
       if (message.status === 'failed' || message.errorCode) {
+        const error = `Message failed: ${message.errorMessage || message.errorCode}`;
         console.error("[SMSService] Message failed:", {
           toNumber,
           messageId: message.sid,
           status: message.status,
-          errorCode: message.errorCode
+          errorCode: message.errorCode,
+          error: message.errorMessage
         });
-        return false;
+        return {success: false, error};
       }
 
       console.log("[SMSService] Successfully sent message:", {
