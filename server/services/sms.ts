@@ -254,7 +254,9 @@ class SMSService {
         code: error.code,
         statusCode: error.status,
         moreInfo: error.moreInfo,
-        details: error.details
+        details: error.details,
+        timestamp: new Date().toISOString(),
+        stack: error.stack
       });
       return false;
     }
