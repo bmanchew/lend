@@ -20,14 +20,20 @@ export default function MerchantLogin() {
     },
   });
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: FormData) => {
     try {
       await loginMutation.mutateAsync({
-        ...data,
+        username: data.username,
+        password: data.password,
         loginType: "merchant"
       });
     } catch (error) {
       console.error("Login failed:", error);
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive"
+      });
     }
   };
 
