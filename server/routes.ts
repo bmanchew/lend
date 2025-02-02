@@ -822,11 +822,31 @@ export function registerRoutes(app: Express): Server {
       console.log(`[LoanApplication][${requestId}] ${message}`, data || '');
     };
 
+    // Log the full application details
     console.log("[LoanApplication] Received new application:", {
       merchantId: req.params.id,
       phone: req.body.phone,
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      amount: req.body.amount || req.body.fundingAmount,
       timestamp: new Date().toISOString(),
-      requestId
+      requestId,
+      url: req.url,
+      userAgent: req.headers['user-agent']
+    });
+
+    // Store application attempt in webhook_events table
+    await db.insert(webhookEvents).values({
+      eventType: 'loan_application_attempt',
+      payload: JSON.stringify({
+        merchantId: req.params.id,
+        phone: req.body.phone,
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        amount: req.body.amount || req.body.fundingAmount,
+        requestId
+      }),
+      status: 'received'
     });
 
     debugLog('Starting loan application process', {
