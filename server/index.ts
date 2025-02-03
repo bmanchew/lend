@@ -109,17 +109,25 @@ app.use((req, res, next) => {
   }
 
   process.env.NODE_ENV = 'production';
-  const PORT = process.env.PORT || 3001;
+  const PORT = parseInt(process.env.PORT || '3001', 10);
+  const MAX_PORT_ATTEMPTS = 5;
 
-  const startServer = async () => {
+  const startServer = async (attempt = 0) => {
     try {
-      const server = httpServer.listen(PORT, '0.0.0.0', () => {
-        log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
+      const port = PORT + attempt;
+      const server = httpServer.listen(port, '0.0.0.0', () => {
+        log(`Server running on port ${port} (http://0.0.0.0:${port})`);
       });
 
-      server.on('error', (err) => {
-        console.error('Server error:', err);
-        process.exit(1);
+      server.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
+          console.log(`Port ${port} in use, trying ${port + 1}`);
+          server.close();
+          startServer(attempt + 1);
+        } else {
+          console.error('Server error:', err);
+          process.exit(1);
+        }
       });
     } catch (err) {
       console.error('Failed to start server:', err);
