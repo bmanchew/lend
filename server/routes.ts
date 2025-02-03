@@ -171,6 +171,7 @@ apiRouter.post("/code-review", async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+      console.error('[OpenAI] Missing API key configuration');
 
   apiRouter.post("/analyze-code", async (req: Request, res: Response) => {
     try {
@@ -219,6 +220,7 @@ apiRouter.post("/code-review", async (req: Request, res: Response) => {
   }
 });
 
+  interface RouteConfig {
   path: string;
   method: 'get' | 'post' | 'put' | 'delete';
   handler: RouteHandler;
