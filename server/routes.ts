@@ -115,6 +115,34 @@ interface RouteConfig {
     }
   });
 
+  apiRouter.post("/review-websocket", async (req:Request, res:Response) => {
+    try {
+      const wsConfig = `
+        const io = new SocketIOServer(httpServer, {
+          cors: {
+            origin: "*",
+            methods: ["GET", "POST"],
+            credentials: true
+          },
+          path: "/socket.io/",
+          transports: ['polling', 'websocket'],
+          pingTimeout: 30000,
+          pingInterval: 10000,
+          upgradeTimeout: 15000,
+          maxHttpBufferSize: 1e6,
+          connectTimeout: 30000,
+          allowUpgrades: true
+        });
+      `;
+      
+      const review = await CodeReviewService.reviewCode(wsConfig, 'javascript');
+      res.json(review);
+    } catch (err) {
+      console.error('WebSocket config review error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   apiRouter.get("/verify-openai", async (req:Request, res:Response) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
