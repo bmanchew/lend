@@ -30,12 +30,12 @@ export function useSocket(merchantId: number) {
         transports: ['websocket'],
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 45000,
+        timeout: 60000,
         upgrade: true,
         rememberUpgrade: true,
         forceNew: false,
         autoConnect: true,
-        autoConnect: true,
+        secure: true,
         rejectUnauthorized: false,
         withCredentials: true
       });
