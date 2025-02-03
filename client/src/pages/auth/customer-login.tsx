@@ -42,8 +42,7 @@ export default function CustomerLogin() {
         return;
       }
 
-      try {
-        const phoneNumber = sanitizePhone(rawPhone);
+      const phoneNumber = sanitizePhone(rawPhone);
 
       console.log('[CustomerLogin] Formatted phone:', {
         original: form.getValues("phoneNumber"),
