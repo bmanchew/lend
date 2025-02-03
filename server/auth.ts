@@ -142,6 +142,11 @@ const loginSchema = z.object({
 
 export function setupAuth(app: Express) {
   app.post('/api/auth/login', async (req, res) => {
+  console.log('[Auth] Login request received:', {
+    body: req.body,
+    path: req.path,
+    headers: req.headers
+  });
     try {
       const { username, password } = req.body;
       const [user] = await db

@@ -397,15 +397,11 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  // Use consistent port configuration
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-    // Log successful startup
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+  const port = process.env.PORT || 3000;
+  const server = registerRoutes(app);
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`Server running at http://0.0.0.0:${port}`);
     console.log('Environment:', process.env.NODE_ENV);
-    console.log('WebSocket status: enabled');
   });
-
-  //Improve error handling - already added above.
 
 })();
