@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { db } from "@db";
+import { db, checkConnection } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
