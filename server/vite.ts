@@ -23,6 +23,16 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  const viteConfig = {
+    server: {
+      host: '0.0.0.0',
+      strictPort: true,
+      hmr: {
+        clientPort: 443,
+        port: 3001
+      }
+    }
+  };
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
@@ -36,7 +46,7 @@ export async function setupVite(app: Express, server: Server) {
     server: {
       middlewareMode: true,
       hmr: {
-        port: 3000,
+        port: 3001, // Adjusted port to match viteConfig
         host: '0.0.0.0',
         protocol: 'wss',
         clientPort: 443,
