@@ -374,8 +374,7 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
-      const dbClient = await db();
-      const merchantPrograms = await dbClient
+      const merchantPrograms = await db
         .select()
         .from(programs)
         .where(eq(programs.merchantId, merchantId));
@@ -1117,9 +1116,8 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  const io = new SocketIOServer(httpServer); // Initialize Socket.IO server
-
-  io.on('connection', (socket) => {
+  // Socket.IO is initialized in index.ts
+  global.io.on('connection', (socket) => {
     console.log('Socket.IO client connected:', socket.id);
 
     socket.on('disconnect', () => {
