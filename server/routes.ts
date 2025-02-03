@@ -999,9 +999,6 @@ export function registerRoutes(app: Express): Server {
           .where(eq(users.id, existingUser.id))
           .returning();
       } else {
-        user = existingUser;
-      }
-      } else {
         // Create new user with unique email based on phone
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
         const fullPhone = '+1' + normalizedPhone.slice(-10);
