@@ -1097,6 +1097,27 @@ export function registerRoutes(app: Express): Server {
           res.json({ 
             status: 'success',
             message: 'Loan application invitation sent successfully',
+            contract: newContract
+          });
+        } else {
+          debugLog('SMS failed to send:', result.error);
+          res.status(400).json({ 
+            error: 'Failed to send loan application invitation',
+            details: result.error || 'SMS service returned failure'
+          });
+        }
+      } catch (err) {
+        console.error('Error in send-loan-application:', err);
+        res.status(500).json({
+          error: 'Failed to send loan application invitation',
+          details: err.message
+        });
+      }
+    } catch (err) {
+      console.error('Error sending loan application invitation:', err);
+      next(err);
+    }
+  });
 
   apiRouter.post("/contracts/:id/verify", async (req: Request, res: Response, next: NextFunction) => {
     try {
