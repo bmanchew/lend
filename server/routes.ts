@@ -82,6 +82,9 @@ class APIError extends Error {
 // Route type definitions with improved typing
 type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 
+// Initialize Express Router
+const apiRouter = express.Router();
+
 interface RouteConfig {
   path: string;
   element: JSX.Element;
