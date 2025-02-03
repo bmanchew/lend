@@ -852,8 +852,8 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const dbClient = await db.query;
-    const event = await dbClient
+    const dbInstance = await db;
+    const [event] = await dbInstance
       .insert(webhookEvents)
       .values({
         eventType: 'loan_application_attempt',
