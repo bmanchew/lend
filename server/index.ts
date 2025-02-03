@@ -130,15 +130,25 @@ app.use((req, res, next) => {
     try {
       const port = PORT + attempt;
       console.log(`Attempting to start server on port ${port}...`);
+      
+      // Close any existing connections
+      if (httpServer.listening) {
+        await new Promise(resolve => httpServer.close(resolve));
+      }
+
       const server = httpServer.listen(port, '0.0.0.0', () => {
         console.log(`Server running on port ${port} (http://0.0.0.0:${port})`);
       });
 
-      server.on('error', (err) => {
+      server.on('error', async (err) => {
         console.error('Server error:', err);
         if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
           console.log(`Port ${port} in use, trying ${port + 1}`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
           startServer(attempt + 1);
+        } else {
+          console.error('Could not start server:', err);
+          process.exit(1);
         }
       });
 
