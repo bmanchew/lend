@@ -56,7 +56,7 @@ export default function AdminDashboard() {
     {
       accessorKey: "amount",
       header: "Amount",
-      cell: ({ row }) => `$${Number(row.getValue("amount")).toFixed(2)}`,
+      cell: ({ row }) => `$${(parseFloat(row.getValue("amount")) || 0).toFixed(2)}`,
     },
     {
       accessorKey: "status",
