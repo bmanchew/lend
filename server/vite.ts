@@ -8,7 +8,8 @@ export async function setupVite(app: express.Application, httpServer: Server) {
       middlewareMode: true,
       hmr: {
         server: httpServer,
-        port: parseInt(process.env.VITE_PORT || '3000'), // Use standard Vite port
+        port: parseInt(process.env.VITE_PORT || '3000'),
+        host: '0.0.0.0', // Use standard Vite port
         protocol: 'ws',
         host: '0.0.0.0',
         timeout: 60000,
