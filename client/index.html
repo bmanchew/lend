@@ -12,7 +12,8 @@
       window.global = window;
       window.process = { env: { NODE_ENV: 'development' } };
       window.__vite_is_modern_browser = true;
-      window.__vite_is_secure = window.location.protocol === 'https:';
+      window.__vite_is_secure = true;
+      window.__vite_ws_protocol = 'wss';
     </script>
     <script type="module">
       import RefreshRuntime from "/@react-refresh";
