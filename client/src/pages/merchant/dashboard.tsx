@@ -153,7 +153,7 @@ export default function MerchantDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts?.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
+                ${contracts?.filter(c => c.status === 'active').reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
               </p>
             </CardContent>
           </Card>

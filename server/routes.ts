@@ -99,7 +99,7 @@ interface RouteGroup {
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
   const apiRouter = express.Router();
-  
+
   // Structured route groups
   const routeGroups: Record<string, RouteGroup> = {
     auth: {
@@ -520,6 +520,23 @@ export function registerRoutes(app: Express): Server {
         amount,
         fundingAmount: req.body.fundingAmount
       });
+
+      // Check if user already has an active contract with this merchant
+      const existingActiveContract = await db
+        .select()
+        .from(contracts)
+        .where(and(
+          eq(contracts.merchantId, merchantId),
+          eq(contracts.customerId, customer.id),
+          eq(contracts.status, 'active')
+        ))
+        .limit(1);
+
+      if (existingActiveContract.length > 0) {
+        return res.status(400).json({ 
+          error: 'User already has an active contract with this merchant'
+        });
+      }
 
       // Create contract record first
       const [newContract] = await db
@@ -1184,7 +1201,7 @@ export function registerRoutes(app: Express): Server {
   app.use((req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     req.headers['x-request-id'] = requestId;
-    
+
     // Log incoming request
     console.log(`[API] ${req.method} ${req.path}`, {
       requestId,
@@ -1217,7 +1234,7 @@ export function registerRoutes(app: Express): Server {
       }
       return originalNext.apply(null, arguments);
     };
-    
+
     next();
   });
 
