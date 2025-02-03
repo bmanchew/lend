@@ -143,6 +143,16 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Add header validation middleware
+  app.use((req, res, next) => {
+    if (req.user && !req.headers['x-replit-user-id']) {
+      req.headers['x-replit-user-id'] = req.user.id.toString();
+      req.headers['x-replit-user-name'] = req.user.username;
+      req.headers['x-replit-user-roles'] = req.user.role;
+    }
+    next();
+  });
+
   passport.use(
     new LocalStrategy({
       usernameField: 'username',
