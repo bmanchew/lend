@@ -251,7 +251,7 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        const [user] = await dbInstance
+        let [userRecord] = await dbInstance
           .select()
           .from(users)
           .where(eq(users.phoneNumber, fullPhone))
@@ -259,9 +259,9 @@ export function setupAuth(app: Express) {
 
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
-          found: !!user,
-          userId: user?.id,
-          role: user?.role,
+          found: !!userRecord,
+          userId: userRecord?.id,
+          role: userRecord?.role,
           hasValidSession: !!req.session,
           timestamp: new Date().toISOString()
         });
@@ -272,9 +272,9 @@ export function setupAuth(app: Express) {
           return done(new Error('Invalid session state'));
         }
 
-        if (!user?.id) {
+        if (!userRecord?.id) {
           console.error('[AUTH] Invalid user data:', {
-            user,
+            userRecord,
             phone: fullPhone,
             timestamp: new Date().toISOString()
           });
@@ -283,33 +283,33 @@ export function setupAuth(app: Express) {
 
         console.log('[AUTH] User lookup with role check:', {
           phone: fullPhone,
-          found: !!user,
-          role: user?.role,
-          userId: user?.id,
+          found: !!userRecord,
+          role: userRecord?.role,
+          userId: userRecord?.id,
           timestamp: new Date().toISOString()
         });
 
         // Double check role to prevent any SQL query issues
-        if (user && user.role !== 'customer') {
+        if (userRecord && userRecord.role !== 'customer') {
           console.error('[AUTH] Invalid role found:', {
-            userId: user.id,
-            role: user.role,
+            userId: userRecord.id,
+            role: userRecord.role,
             phone: fullPhone
           });
-          user = null;
+          userRecord = null;
         }
 
         console.log('[AUTH] Customer lookup result:', {
           phone: fullPhone,
-          found: !!user,
-          userId: user?.id,
-          role: user?.role,
+          found: !!userRecord,
+          userId: userRecord?.id,
+          role: userRecord?.role,
           timestamp: new Date().toISOString()
         });
 
         // Create customer account if doesn't exist
-        if (!user) {
-          [user] = await dbInstance
+        if (!userRecord) {
+          [userRecord] = await dbInstance
             .insert(users)
             .values({
               username: fullPhone.replace(/\D/g, ''),
@@ -322,14 +322,14 @@ export function setupAuth(app: Express) {
             .returning();
 
           console.log('[AUTH] Created new customer account:', {
-            userId: user.id,
+            userId: userRecord.id,
             phone: fullPhone,
             timestamp: new Date().toISOString()
           });
-        } else if (user.role !== 'customer') {
+        } else if (userRecord.role !== 'customer') {
           console.error('[AUTH] Non-customer attempting OTP login:', {
-            userId: user.id,
-            role: user.role,
+            userId: userRecord.id,
+            role: userRecord.role,
             phone: fullPhone
           });
           return done(null, false, { message: "Invalid account type for OTP login" });
@@ -337,29 +337,29 @@ export function setupAuth(app: Express) {
 
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
-          found: !!user,
-          userId: user?.id,
-          role: user?.role,
+          found: !!userRecord,
+          userId: userRecord?.id,
+          role: userRecord?.role,
           timestamp: new Date().toISOString()
         });
 
 
-        if (!user.lastOtpCode || !user.otpExpiry) {
+        if (!userRecord.lastOtpCode || !userRecord.otpExpiry) {
           console.error('[AUTH] Missing OTP or expiry:', {
-            hasOtp: !!user.lastOtpCode,
-            hasExpiry: !!user.otpExpiry
+            hasOtp: !!userRecord.lastOtpCode,
+            hasExpiry: !!userRecord.otpExpiry
           });
           return done(null, false, { message: "No active OTP found" });
         }
 
         // Check if user has OTP data
-        if (!user.lastOtpCode || !user.otpExpiry || user.role !== 'customer') {
+        if (!userRecord.lastOtpCode || !userRecord.otpExpiry || userRecord.role !== 'customer') {
           console.error('[AUTH] Invalid OTP attempt:', {
-            userId: user.id,
-            phone: user.phoneNumber,
-            role: user.role,
-            hasOtp: !!user.lastOtpCode,
-            hasExpiry: !!user.otpExpiry,
+            userId: userRecord.id,
+            phone: userRecord.phoneNumber,
+            role: userRecord.role,
+            hasOtp: !!userRecord.lastOtpCode,
+            hasExpiry: !!userRecord.otpExpiry,
             timestamp: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid verification attempt" });
@@ -367,11 +367,11 @@ export function setupAuth(app: Express) {
 
         // Check if OTP is expired
         const now = new Date();
-        const expiry = new Date(user.otpExpiry);
+        const expiry = new Date(userRecord.otpExpiry);
         if (now > expiry) {
           console.error('[AUTH] OTP expired:', {
-            userId: user.id,
-            phone: user.phoneNumber,
+            userId: userRecord.id,
+            phone: userRecord.phoneNumber,
             expiry: expiry.toISOString(),
             now: now.toISOString()
           });
@@ -380,13 +380,13 @@ export function setupAuth(app: Express) {
 
         // Normalize OTP input
         const normalizedInputOTP = password.trim();
-        const normalizedStoredOTP = user.lastOtpCode?.trim();
+        const normalizedStoredOTP = userRecord.lastOtpCode?.trim();
 
         // Enhanced OTP validation
         if (!normalizedStoredOTP || !normalizedInputOTP) {
           console.error('[AUTH] Missing OTP:', {
-            userId: user.id,
-            phone: user.phoneNumber,
+            userId: userRecord.id,
+            phone: userRecord.phoneNumber,
             hasStoredOTP: !!normalizedStoredOTP,
             hasInputOTP: !!normalizedInputOTP,
             timestamp: new Date().toISOString()
@@ -397,8 +397,8 @@ export function setupAuth(app: Express) {
         // Enhanced OTP validation with session check
         if (normalizedStoredOTP !== normalizedInputOTP) {
           console.error('[AUTH] Invalid OTP:', {
-            userId: user.id,
-            phone: user.phoneNumber,
+            userId: userRecord.id,
+            phone: userRecord.phoneNumber,
             hasSession: !!req.session,
             timestamp: new Date().toISOString()
           });
@@ -412,20 +412,20 @@ export function setupAuth(app: Express) {
         }
 
         // Set essential session data
-        req.session.userId = user.id;
-        req.session.userRole = user.role;
-        req.session.phoneNumber = user.phoneNumber;
+        req.session.userId = userRecord.id;
+        req.session.userRole = userRecord.role;
+        req.session.phoneNumber = userRecord.phoneNumber;
 
         console.log('[AUTH] OTP validation successful:', {
-          userId: user.id,
-          phone: user.phoneNumber,
+          userId: userRecord.id,
+          phone: userRecord.phoneNumber,
           otpMatched: true,
           timestamp: new Date().toISOString()
         });
 
         console.log('[AUTH] OTP validation successful:', {
-          userId: user.id,
-          phone: user.phoneNumber,
+          userId: userRecord.id,
+          phone: userRecord.phoneNumber,
           otpMatched: true
         });
 
@@ -434,9 +434,9 @@ export function setupAuth(app: Express) {
         await dbInstance // Use dbInstance here
           .update(users)
           .set({ lastOtpCode: null, otpExpiry: null })
-          .where(eq(users.id, user.id));
+          .where(eq(users.id, userRecord.id));
 
-        return done(null, user);
+        return done(null, userRecord);
       } catch (err) {
         console.error('Auth error:', err);
         return done(err);
