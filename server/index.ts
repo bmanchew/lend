@@ -209,34 +209,19 @@ app.use(requestLogger);
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: true,
-      credentials: true,
-      methods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["*"]
+      origin: process.env.CLIENT_URL || "http://0.0.0.0:3000",
+      methods: ["GET", "POST"],
+      credentials: true
     },
-    allowUpgrades: true,
-    transports: ['polling', 'websocket'],
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    connectTimeout: 45000,
+    path: "/socket.io/",
+    transports: ['websocket', 'polling'],
+    pingTimeout: 30000,
+    pingInterval: 10000,
     upgradeTimeout: 30000,
-    allowUpgrades: true,
-    rememberUpgrade: true,
-    perMessageDeflate: {
-      threshold: 2048
-    },
     maxHttpBufferSize: 1e6,
-    cookie: {
-      name: "io",
-      httpOnly: true,
-      sameSite: "lax"
-    },
-    debug: true,
-    logger: {
-      debug: (...args) => console.log('[Socket.IO Debug]', ...args),
-      info: (...args) => console.log('[Socket.IO Info]', ...args),
-      error: (...args) => console.error('[Socket.IO Error]', ...args)
-    }
+    connectTimeout: 30000,
+    allowUpgrades: true,
+    allowEIO3: true
   });
 
   // Enhanced error logging
