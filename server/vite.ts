@@ -11,16 +11,27 @@ export async function setupVite(app: express.Application, httpServer: Server) {
         port: 3000,
         protocol: 'ws',
         host: '0.0.0.0',
-        overlay: true,
-        timeout: 30000,
-        path: '/hmr/',
+        clientPort: 3000,
+        timeout: 60000,
+        overlay: {
+          errors: true,
+          warnings: false
+        },
+        path: '/__vite_hmr',
+        reconnect: true
       },
       watch: {
         usePolling: true,
-        interval: 1000,
+        interval: 500,
+        followSymlinks: false,
+        ignored: ['**/node_modules/**', '**/dist/**']
       },
     },
+    optimizeDeps: {
+      force: true
+    },
     appType: 'spa',
+    clearScreen: false
   });
 
   app.use(vite.middlewares);
