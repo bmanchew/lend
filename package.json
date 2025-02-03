@@ -113,6 +113,7 @@
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
+    "timing-safe-equal": "^1.0.0",
     "ts-jest": "^29.2.5",
     "twilio": "^5.4.3",
     "vaul": "^1.1.0",

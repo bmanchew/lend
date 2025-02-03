@@ -374,7 +374,21 @@ export function setupAuth(app: Express) {
         const normalizedInputOTP = password.trim();
         const normalizedStoredOTP = userRecord.lastOtpCode?.trim();
 
-        // Enhanced OTP validation
+        // Enhanced OTP validation with rate limiting
+        const otpAttempts = (req.session.otpAttempts || 0) + 1;
+        req.session.otpAttempts = otpAttempts;
+
+        if (otpAttempts > 5) {
+          console.error('[AUTH] Too many OTP attempts:', {
+            userId: userRecord.id,
+            phone: userRecord.phoneNumber,
+            attempts: otpAttempts,
+            timestamp: new Date().toISOString()
+          });
+          return done(null, false, { message: "Too many attempts. Please request a new code." });
+        }
+
+        // Enhanced OTP validation with timing-safe comparison
         if (!normalizedStoredOTP || !normalizedInputOTP) {
           console.error('[AUTH] Missing OTP:', {
             userId: userRecord.id,
@@ -386,8 +400,13 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Missing verification code" });
         }
 
-        // Enhanced OTP validation with session check
-        if (normalizedStoredOTP !== normalizedInputOTP) {
+        // Use timing-safe comparison
+        const validOTP = timingSafeEqual(
+          Buffer.from(normalizedStoredOTP),
+          Buffer.from(normalizedInputOTP)
+        );
+
+        if (!validOTP) {
           console.error('[AUTH] Invalid OTP:', {
             userId: userRecord.id,
             phone: userRecord.phoneNumber,
