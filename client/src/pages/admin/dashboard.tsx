@@ -70,7 +70,10 @@ export default function AdminDashboard() {
     {
       accessorKey: "createdAt",
       header: "Created",
-      cell: ({ getValue }) => format(new Date(getValue()), "MMM d, yyyy"),
+      cell: ({ getValue }) => {
+        const value = getValue();
+        return value ? format(new Date(value), "MMM d, yyyy") : "N/A";
+      },
     },
   ];
 
