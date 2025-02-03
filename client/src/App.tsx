@@ -35,10 +35,6 @@ export class ErrorBoundary extends React.Component<{children: React.ReactNode}, 
     return { hasError: true, error };
   }
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary] Caught error:', error, errorInfo);
   }
