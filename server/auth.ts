@@ -175,22 +175,22 @@ export function setupAuth(app: Express) {
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
-          let [user] = await dbInstance // Use dbInstance here
+          let [userRecord] = await dbInstance // Use dbInstance here
             .select()
             .from(users)
             .where(eq(users.username, username))
             .limit(1);
 
-          if (!user || user.role !== loginType) {
+          if (!userRecord || userRecord.role !== loginType) {
             return done(null, false, { message: "Invalid credentials" });
           }
 
-          const isValid = await comparePasswords(password, user.password);
+          const isValid = await comparePasswords(password, userRecord.password);
           if (!isValid) {
             return done(null, false, { message: "Invalid credentials" });
           }
 
-          return done(null, user);
+          return done(null, userRecord);
         }
 
         // For customers, use phone & OTP only
