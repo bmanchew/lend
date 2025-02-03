@@ -31,8 +31,9 @@ export function useSocket(merchantId: number) {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        timeout: 10000,
-        forceNew: true,
+        timeout: 20000,
+        forceNew: false,
+        rememberUpgrade: true,
         autoConnect: true,
         withCredentials: true
       });
