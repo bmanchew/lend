@@ -869,7 +869,6 @@ export function registerRoutes(app: Express): Server {
         eventType: 'loan_application_attempt',
         sessionId: `loan_app_${Date.now()}`, // Ensure unique session ID
         status: 'pending',
-        sessionId: 'loan_app_' + requestId,
         payload: JSON.stringify({
           merchantId: req.params.id,
           phone: req.body.phone,
