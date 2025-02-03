@@ -226,6 +226,12 @@ app.use(requestLogger);
       name: "io",
       httpOnly: true,
       sameSite: "lax"
+    },
+    debug: true,
+    logger: {
+      debug: (...args) => console.log('[Socket.IO Debug]', ...args),
+      info: (...args) => console.log('[Socket.IO Info]', ...args),
+      error: (...args) => console.error('[Socket.IO Error]', ...args)
     }
   });
 
