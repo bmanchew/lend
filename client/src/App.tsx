@@ -16,11 +16,18 @@ import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 import ApplyPage from "@/pages/apply"; // Placeholder component
 
 
+// Route configurations
+interface RouteConfig {
+  path: string;
+  element: JSX.Element;
+  roles?: string[];
+}
+
 function AppRouter() {
   console.log('[Router] Rendering AppRouter');
 
-  // Group routes by type for better organization
-  const authRoutes = [
+  // Route configurations grouped by feature
+  const authRoutes: RouteConfig[] = [
     { path: "/login/customer", element: <CustomerLogin /> },
     { path: "/auth/customer-login", element: <CustomerLogin /> },
     { path: "/login/merchant", element: <MerchantLogin /> },

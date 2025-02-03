@@ -66,9 +66,25 @@ interface DiditWebhookPayload {
   };
 }
 
+// Route type definitions
+type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+
+interface RouteConfig {
+  path: string;
+  method: 'get' | 'post';
+  handler: RouteHandler;
+  middleware?: any[];
+}
+
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
   const apiRouter = express.Router();
+  
+  // Group routes by domain
+  const authRoutes: RouteConfig[] = [];
+  const contractRoutes: RouteConfig[] = [];
+  const merchantRoutes: RouteConfig[] = [];
+  const kycRoutes: RouteConfig[] = [];
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {

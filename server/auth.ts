@@ -15,8 +15,17 @@ import SMSService from "./services/sms"; // Added import for sms service
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
+interface AuthResult {
+  success: boolean;
+  user?: User;
+  error?: string;
+}
+
 class AuthService {
-  async hashPassword(password: string) {
+  private readonly SALT_LENGTH = 16;
+  private readonly KEY_LENGTH = 32;
+  
+  async hashPassword(password: string): Promise<string> {
     console.log("[AuthService] Generating password hash");
     const salt = randomBytes(16).toString("hex");
     const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
