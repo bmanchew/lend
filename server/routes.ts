@@ -622,18 +622,23 @@ export function registerRoutes(app: Express): Server {
       const otpExpiry = new Date();
       otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // 5 minute expiry
 
-      // Check if user exists with role validation
+      // Check if user exists with strict role validation
       let user = await db
         .select()
         .from(users)
-        .where(
-          and(
-            eq(users.phoneNumber, phoneNumber),
-            eq(users.role, 'customer')
-          )
-        )
+        .where(eq(users.phoneNumber, phoneNumber))
         .limit(1)
         .then(rows => rows[0]);
+
+      // Validate user role before proceeding
+      if (user && user.role !== 'customer') {
+        logger.error('[Routes] Invalid role attempting OTP:', {
+          userId: user.id,
+          role: user.role,
+          phone: phoneNumber
+        });
+        return res.status(403).json({ error: 'Invalid account type for OTP login' });
+      }
 
       console.log('[Routes] User lookup for OTP:', {
         phone: phoneNumber,
@@ -980,8 +985,7 @@ export function registerRoutes(app: Express): Server {
         // Update existing user's name if it has changed
         if (existingUser.name !== `${firstName} ${lastName}`) {
           [user] = await db
-            .update(users)
-            .set({ 
+            .update(users)            .set({ 
               name: `${firstName} ${lastName}`,
               role: 'customer' // Ensure role is set
             })

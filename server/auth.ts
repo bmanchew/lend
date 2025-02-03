@@ -254,14 +254,16 @@ export function setupAuth(app: Express) {
         }
 
         // Check if user has OTP data
-        if (!user.lastOtpCode || !user.otpExpiry) {
-          console.error('[AUTH] Missing OTP data:', {
+        if (!user.lastOtpCode || !user.otpExpiry || user.role !== 'customer') {
+          console.error('[AUTH] Invalid OTP attempt:', {
             userId: user.id,
             phone: user.phoneNumber,
+            role: user.role,
             hasOtp: !!user.lastOtpCode,
-            hasExpiry: !!user.otpExpiry
+            hasExpiry: !!user.otpExpiry,
+            timestamp: new Date().toISOString()
           });
-          return done(null, false, { message: "No active verification code" });
+          return done(null, false, { message: "Invalid verification attempt" });
         }
 
         // Check if OTP is expired
