@@ -30,7 +30,10 @@ export function useSocket(merchantId: number) {
         transports: ['polling', 'websocket'],
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 30000
+        timeout: 60000,
+        upgrade: true,
+        rememberUpgrade: true,
+        forceNew: true
       });
 
       // Enhanced error tracking
