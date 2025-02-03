@@ -139,12 +139,22 @@ export default function CustomerLogin() {
 
       if (userData && userData.id) {
         const userId = userData.id.toString();
+        // Verify this is a customer account
+        if (userData.role !== 'customer') {
+          toast({ 
+            title: "Error", 
+            description: "Invalid account type", 
+            variant: "destructive" 
+          });
+          return;
+        }
         localStorage.setItem('temp_user_id', userId);
         sessionStorage.setItem('current_user_id', userId);
         setUser(userData);
         console.log('[CustomerLogin] Setting user ID and redirecting:', {
           userId,
-          userData
+          userData,
+          role: userData.role
         });
         window.location.href = `/apply/${userId}?verification=true&from=login`;
       } else {
