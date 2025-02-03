@@ -23,10 +23,12 @@ export function ProtectedRoute({ path, component: Component, allowedRoles }: Pro
   }
 
   if (!user) {
-    console.log('[ProtectedRoute] No user, redirecting to auth');
+    const redirectPath = allowedRoles?.includes('merchant') ? '/auth/merchant' 
+      : allowedRoles?.includes('admin') ? '/auth/admin'
+      : '/';
     return (
       <Route path={path}>
-        <Redirect to="/auth" />
+        <Redirect to={redirectPath} />
       </Route>
     );
   }
