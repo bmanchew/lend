@@ -39,7 +39,7 @@ class AuthService {
     error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta),
     debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta)
   };
-  
+
   async hashPassword(password: string): Promise<string> {
     this.logger.debug("Generating password hash");
     const salt = randomBytes(this.config.saltLength).toString("hex");
@@ -185,12 +185,22 @@ export function setupAuth(app: Express) {
 
         // For customers, use phone & OTP only
         const formatPhone = (phone: string): string => {
-          let clean = phone.replace(/\D/g, '');
+          // Remove all non-digits
+          let clean = phone.toString().replace(/\D/g, '');
+
+          // Remove leading 1 if present
           clean = clean.replace(/^1/, '');
+
+          // Validate length
           if (clean.length !== 10) {
+            console.error('[Auth] Invalid phone number format:', { phone, clean });
             throw new Error('Phone number must be 10 digits');
           }
-          return '+1' + clean;
+
+          // Add +1 prefix
+          const formatted = '+1' + clean;
+          console.log('[Auth] Formatted phone:', { original: phone, formatted });
+          return formatted;
         };
 
         // Format phone consistently
@@ -568,7 +578,7 @@ export function setupAuth(app: Express) {
         })
         .where(eq(users.phoneNumber, phoneNumber))
         .returning();
-      
+
       console.log('[AUTH] OTP Update result:', {
         phone: phoneNumber,
         otpSet: !!updateResult[0]?.lastOtpCode,

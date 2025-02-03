@@ -88,17 +88,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: SelectUser) => {
+      if (!user || !user.id) {
+        console.error('[Auth] Invalid user data received:', user);
+        return;
+      }
       console.log('[Auth] Login successful:', {
         userId: user.id,
         role: user.role,
         timestamp: new Date().toISOString()
       });
+      // Set user data in query client
       queryClient.setQueryData(["/api/user"], user);
+      // Store user ID in session
+      sessionStorage.setItem('current_user_id', user.id.toString());
+      // Redirect based on role
       const targetPath = user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`;
-      console.log('[Auth] Redirecting to:', {
-        path: targetPath,
-        timestamp: new Date().toISOString()
-      });
       setLocation(targetPath);
     },
     onError: (error: Error) => {
