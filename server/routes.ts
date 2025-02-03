@@ -852,10 +852,21 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const [event] = await db
+    console.log('[Webhook] Starting event insertion');
+    
+    const dbInstance = await db;
+    if (!dbInstance) {
+      console.error('[Webhook] Database instance not initialized');
+      throw new Error('Database connection failed');
+    }
+
+    console.log('[Webhook] Inserting event');
+    const [event] = await dbInstance
       .insert(webhookEvents)
       .values({
         eventType: 'loan_application_attempt',
+        sessionId: `loan_app_${Date.now()}`, // Ensure unique session ID
+        status: 'pending',
         sessionId: 'loan_app_' + requestId,
         payload: JSON.stringify({
           merchantId: req.params.id,
