@@ -195,7 +195,8 @@ export function registerRoutes(app: Express): Server {
       }
 
       console.log("[Merchant Lookup] Executing query for userId:", userId);
-      const merchantResults = await db
+      const dbClient = await db();
+      const merchantResults = await dbClient
         .select()
         .from(merchants)
         .where(eq(merchants.userId, userId))
