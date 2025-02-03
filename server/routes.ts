@@ -1296,14 +1296,17 @@ export function registerRoutes(app: Express): Server {
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ["websocket", "polling"],
-    pingTimeout: 30000,
+    transports: ["websocket"],
+    pingTimeout: 20000,
     pingInterval: 10000,
-    upgradeTimeout: 15000,
+    upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 20000,
+    connectTimeout: 15000,
     allowEIO3: true,
-    perMessageDeflate: false
+    perMessageDeflate: false,
+    allowUpgrades: true,
+    rememberUpgrade: true,
+    destroyUpgrade: false
   });
 
   // Enhanced WebSocket logging
