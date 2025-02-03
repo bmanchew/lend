@@ -407,8 +407,20 @@ export function setupAuth(app: Express) {
         const normalizedInputOTP = password.trim();
         const normalizedStoredOTP = user.lastOtpCode?.trim();
 
+        // Enhanced OTP validation
+        if (!normalizedStoredOTP || !normalizedInputOTP) {
+          console.error('[AUTH] Missing OTP:', {
+            userId: user.id,
+            phone: user.phoneNumber,
+            hasStoredOTP: !!normalizedStoredOTP,
+            hasInputOTP: !!normalizedInputOTP,
+            timestamp: new Date().toISOString()
+          });
+          return done(null, false, { message: "Missing verification code" });
+        }
+
         // Compare OTP with stored value
-        if (!normalizedStoredOTP || normalizedStoredOTP !== normalizedInputOTP) {
+        if (normalizedStoredOTP !== normalizedInputOTP) {
           console.error('[AUTH] Invalid OTP:', {
             userId: user.id,
             phone: user.phoneNumber,

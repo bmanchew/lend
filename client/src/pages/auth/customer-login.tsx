@@ -187,9 +187,15 @@ export default function CustomerLogin() {
       });
 
       try {
+        // Ensure user ID is valid and properly formatted
+        const normalizedUserId = userId.toString().trim();
+        if (!normalizedUserId || isNaN(Number(normalizedUserId))) {
+          throw new Error('Invalid user ID format');
+        }
+
         // Set storage with validation
-        localStorage.setItem('temp_user_id', userId);
-        sessionStorage.setItem('current_user_id', userId);
+        localStorage.setItem('temp_user_id', normalizedUserId);
+        sessionStorage.setItem('current_user_id', normalizedUserId);
         setUser(userData);
 
         // Verify storage was set correctly
