@@ -25,10 +25,24 @@ export default function CustomerLogin() {
     mode: "onChange"
   });
 
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-numeric characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Handle different formats
+    if (cleaned.length === 10) {
+      return `+1${cleaned}`;
+    } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      return `+${cleaned}`;
+    }
+    
+    throw new Error('Phone number must be 10 digits excluding country code');
+  };
+
   const handleSendOTP = async () => {
     try {
-      let phoneNumber = form.getValues("phoneNumber").replace(/\D/g, '');
-      if (!phoneNumber) {
+      const rawPhone = form.getValues("phoneNumber");
+      if (!rawPhone) {
         toast({
           title: "Error",
           description: "Please enter a phone number",
@@ -37,21 +51,8 @@ export default function CustomerLogin() {
         return;
       }
 
-      // Remove leading 1 if present
-      phoneNumber = phoneNumber.replace(/^1/, '');
-
-      // Validate length
-      if (phoneNumber.length !== 10) {
-        toast({
-          title: "Error", 
-          description: "Phone number must be 10 digits",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Add +1 prefix
-      phoneNumber = '+1' + phoneNumber;
+      try {
+        const phoneNumber = formatPhoneNumber(rawPhone);
 
       console.log('[CustomerLogin] Formatted phone:', {
         original: form.getValues("phoneNumber"),
