@@ -21,11 +21,14 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
-  const { data: contracts } = useQuery<SelectContract[]>({
+  const { data: contracts, error: contractsError, isLoading: contractsLoading } = useQuery<SelectContract[]>({
     queryKey: ["/api/contracts"],
+    onError: (error) => {
+      console.error("[AdminDashboard] Failed to fetch contracts:", error);
+    }
   });
 
-  const { data: merchants } = useQuery<SelectMerchant[]>({
+  const { data: merchants, error: merchantsError, isLoading: merchantsLoading } = useQuery<SelectMerchant[]>({
     queryKey: ["/api/merchants"],
     onSuccess: (data) => {
       console.log("[AdminDashboard] Merchants loaded:", {
@@ -92,6 +95,23 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
     },
   });
+
+  console.log("[AdminDashboard] Rendering with:", {
+    contractsLoading,
+    merchantsLoading,
+    contractsError,
+    merchantsError,
+    contractsCount: contracts?.length,
+    merchantsCount: merchants?.length
+  });
+
+  if (contractsLoading || merchantsLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (contractsError || merchantsError) {
+    return <div>Error loading data: {(contractsError || merchantsError)?.message}</div>;
+  }
 
   return (
     <PortalLayout>
