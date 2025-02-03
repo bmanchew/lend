@@ -1,4 +1,3 @@
-
 import { OpenAI } from 'openai';
 import { logger } from '../lib/logger';
 
@@ -34,7 +33,7 @@ class CodeReviewService {
       });
 
       const analysis = response.choices[0].message.content || '';
-      
+
       // Parse the analysis into structured format
       const issues: AnalysisResult['issues'] = [];
       const suggestions: string[] = [];
@@ -119,6 +118,60 @@ class CodeReviewService {
         success: false,
         error: err.message
       };
+    }
+  }
+  static async analyzeWebSocketConfig() {
+    try {
+      const socketConfig = `
+      // Server config
+      const io = new SocketIOServer(httpServer, {
+        cors: {
+          origin: "*",
+          methods: ["GET", "POST"],
+          credentials: true
+        },
+        path: "/socket.io/",
+        transports: ['polling', 'websocket'],
+        pingTimeout: 30000,
+        pingInterval: 10000,
+        upgradeTimeout: 15000,
+        maxHttpBufferSize: 1e6,
+        connectTimeout: 30000,
+        allowUpgrades: true
+      });
+
+      // Client config
+      const socket = io({
+        path: '/socket.io/',
+        transports: ['polling', 'websocket'],
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 60000,
+        upgrade: true,
+        rememberUpgrade: true,
+        forceNew: true
+      });`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "Analyze this WebSocket configuration for potential issues causing 'Upgrade Required' errors. Focus on transport settings, upgrade paths, and timeouts."
+          },
+          {
+            role: "user",
+            content: `Review this Socket.IO configuration:\n${socketConfig}`
+          }
+        ]
+      });
+
+      logger.info('WebSocket Analysis:', response.choices[0].message.content);
+      return response.choices[0].message.content;
+
+    } catch (error) {
+      logger.error('Error analyzing WebSocket config:', error);
+      throw error;
     }
   }
 }
