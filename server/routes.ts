@@ -1122,25 +1122,32 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  // Initialize Socket.IO only if not already initialized
-  if (!global.io) {
-    const io = new SocketIOServer(httpServer, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      }
+  // Initialize Socket.IO with proper configuration
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    },
+    path: "/socket.io/",
+    transports: ["websocket", "polling"],
+    allowEIO3: true,
+    serveClient: false
+  });
+
+  io.on('connection', (socket) => {
+    console.log('Socket.IO client connected:', socket.id);
+
+    socket.on('join_merchant_room', (merchantId) => {
+      socket.join(`merchant_${merchantId}`);
+      console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
     });
 
-    io.on('connection', (socket) => {
-      console.log('Socket.IO client connected:', socket.id);
-
-      socket.on('disconnect', () => {
-        console.log('Socket.IO client disconnected:', socket.id);
-      });
+    socket.on('disconnect', () => {
+      console.log('Socket.IO client disconnected:', socket.id);
     });
+  });
 
-    global.io = io;
-  }
+  global.io = io;
     // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
 
 
