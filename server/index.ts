@@ -140,6 +140,24 @@ app.use((req, res, next) => {
   process.env.NODE_ENV = 'production';
   const BIND_ADDRESS = '0.0.0.0';
   const PORT = process.env.PORT || 3000;
+  const MAX_PORT_ATTEMPTS = 5;
+  
+  const startServer = async (attempt = 0) => {
+    try {
+      httpServer.listen(PORT + attempt, '0.0.0.0', () => {
+        log(`Server running on port ${PORT + attempt} (http://0.0.0.0:${PORT + attempt})`);
+      });
+    } catch (err) {
+      if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
+        console.log(`Port ${PORT + attempt} in use, trying ${PORT + attempt + 1}`);
+        startServer(attempt + 1);
+      } else {
+        throw err;
+      }
+    }
+  };
+
+  startServer();
   
   // Enable trust proxy for secure cookies
   app.set('trust proxy', 1);
