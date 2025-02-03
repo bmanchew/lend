@@ -165,7 +165,7 @@ export function setupAuth(app: Express) {
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
-          const [user] = await dbInstance // Use dbInstance here
+          let [user] = await dbInstance // Use dbInstance here
             .select()
             .from(users)
             .where(eq(users.username, username))
