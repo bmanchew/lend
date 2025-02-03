@@ -8,7 +8,7 @@ import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db } from "@db";
 const dbInstance = db; // Use db object directly
-import { eq, or, sql } from "drizzle-orm";
+import { eq, or, sql, and } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms"; // Added import for sms service
 
@@ -177,16 +177,21 @@ export function setupAuth(app: Express) {
         });
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
-        // Find user by phone number
-        let [user] = await dbInstance // Use dbInstance here
+        // Find user by phone number and role
+        let [user] = await dbInstance
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, fullPhone));
+          .where(
+            and(
+              eq(users.phoneNumber, fullPhone),
+              eq(users.role, 'customer')
+            )
+          );
 
-        console.log('[AUTH] User lookup result:', { 
+        console.log('[AUTH] User lookup result:', {
+          phone: fullPhone,
           found: !!user,
-          phoneNumber: fullPhone,
-          providedOtp: password
+          role: user?.role
         });
 
         if (!user) {
