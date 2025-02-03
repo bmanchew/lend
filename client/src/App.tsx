@@ -24,10 +24,14 @@ interface RouteConfig {
   roles?: string[];
 }
 
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error?: Error}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
     this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
   }
 
   static getDerivedStateFromError() {

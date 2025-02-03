@@ -124,12 +124,13 @@ type User = {
 
 // Rate limiting configuration
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: 'Too many auth attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => req.headers['x-forwarded-for'] as string || req.ip
 });
 
 // Request validation schemas
