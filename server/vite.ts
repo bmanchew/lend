@@ -11,8 +11,9 @@ export async function setupVite(app: express.Application, httpServer: Server) {
         port: 3000,
         protocol: 'ws',
         host: '0.0.0.0',
-        clientPort: 3000,
-        timeout: 5000,
+        overlay: true,
+        timeout: 30000,
+        path: '/hmr/',
       },
       watch: {
         usePolling: true,
