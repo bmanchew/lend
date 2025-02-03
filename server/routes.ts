@@ -1291,22 +1291,17 @@ export function registerRoutes(app: Express): Server {
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST", "OPTIONS"],
+      methods: ["GET", "POST"],
       credentials: true,
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ["websocket"],
-    pingTimeout: 20000,
-    pingInterval: 10000,
+    transports: ["polling", "websocket"],
+    pingTimeout: 30000,
+    pingInterval: 25000,
     upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 15000,
-    allowEIO3: true,
-    perMessageDeflate: false,
-    allowUpgrades: true,
-    rememberUpgrade: true,
-    destroyUpgrade: false
+    connectTimeout: 45000
   });
 
   // Enhanced WebSocket logging

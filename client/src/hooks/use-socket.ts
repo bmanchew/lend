@@ -20,13 +20,12 @@ export function useSocket(merchantId: number) {
       socketRef.current = io({
         path: '/socket.io/',
         transports: ['polling', 'websocket'],
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 10000,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        timeout: 45000,
+        timeout: 30000,
         forceNew: true,
-        autoConnect: true,
-        upgrade: true
+        autoConnect: true
       });
 
       // Debug transport state
