@@ -30,8 +30,9 @@ toobusy.maxLag(100);
 toobusy.interval(500); // Check less frequently
 
 const app = express();
-const API_PORT = process.env.API_PORT || 3001;  // Main API server 
-const CLIENT_PORT = process.env.PORT || 5173;  // Client dev server
+const PORT = process.env.PORT || 3000;  // Main server port
+const API_PORT = process.env.API_PORT || PORT;  // API server fallback
+const CLIENT_PORT = process.env.CLIENT_PORT || 5173;  // Client dev server
 
 // Memory monitoring
 setInterval(() => {

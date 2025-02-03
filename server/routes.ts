@@ -1293,7 +1293,8 @@ export function registerRoutes(app: Express): Server {
     cors: {
       origin: "*",
       methods: ["GET", "POST"],
-      credentials: true
+      credentials: true,
+      allowedHeaders: ["*"]
     },
     path: "/socket.io/",
     transports: ["websocket"],
