@@ -96,6 +96,12 @@ app.use(requestLogger);
   const connectedClients = new Set();
 
   io.on('connection', (socket) => {
+    if (connectedClients.has(socket.id)) {
+      console.warn('Duplicate connection attempt:', socket.id);
+      socket.disconnect();
+      return;
+    }
+
     console.log('Client connected:', socket.id);
     connectedClients.add(socket.id);
 
@@ -113,6 +119,7 @@ app.use(requestLogger);
 
     socket.on('error', (error) => {
       console.error('Socket error:', error);
+      connectedClients.delete(socket.id);
     });
   });
 
