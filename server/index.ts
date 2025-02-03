@@ -144,7 +144,7 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  import portfinder from 'portfinder';
+  const portfinder = await import('portfinder');
 
   // Configure portfinder
   portfinder.basePort = process.env.PORT ? parseInt(process.env.PORT) : 3000;
