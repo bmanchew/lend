@@ -211,13 +211,15 @@ app.use(requestLogger);
     cors: {
       origin: true,
       credentials: true,
-      methods: ["GET", "POST"],
+      methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["*"]
     },
-    transports: ['websocket', 'polling'],
-    pingTimeout: 20000,
-    connectTimeout: 20000,
-    upgradeTimeout: 15000,
+    allowUpgrades: true,
+    transports: ['polling', 'websocket'],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    upgradeTimeout: 30000,
     allowUpgrades: true,
     rememberUpgrade: true,
     perMessageDeflate: {
