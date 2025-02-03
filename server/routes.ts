@@ -984,6 +984,15 @@ export function registerRoutes(app: Express): Server {
         if (existingUser.name !== `${firstName} ${lastName}`) {
           [user] = await db
             .update(users)
+            .set({ 
+              name: `${firstName} ${lastName}`,
+              role: 'borrower'
+            })
+            .where(eq(users.id, existingUser.id))
+            .returning();
+        } else {
+          user = existingUser;
+        }
             .set({ name: `${firstName} ${lastName}` })
             .where(eq(users.id, existingUser.id))
             .returning();
@@ -993,11 +1002,18 @@ export function registerRoutes(app: Express): Server {
       } else {
         // Create new user with unique email based on phone
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
-        const fullPhone = '+1' + normalizedPhone;
+        const fullPhone = '+1' + normalizedPhone.slice(-10);
         const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
+        
+        console.log('[User Creation] Creating new borrower:', {
+          phone: fullPhone,
+          name: `${firstName} ${lastName}`
+        });
+        
         [user] = await db
           .insert(users)
           .values({
+            username: normalizedPhone,
             username: normalizedPhone,
             password: Math.random().toString(36).slice(-8),
             email: uniqueEmail,
