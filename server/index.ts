@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
-import { Server } from 'socket.io';
+import { Server as SocketIOServer } from 'socket.io'; // Changed import to be explicit about Socket.IO Server
 import { createServer } from 'http'; // Added import for createServer
 
 const limiter = rateLimit({
@@ -30,20 +30,20 @@ toobusy.maxLag(100);
 toobusy.interval(500); // Check less frequently
 
 const app = express();
-import { createServer } from 'net';
+import { createServer as netCreateServer } from 'net';
 const getAvailablePort = async (startPort: number, maxAttempts = 10): Promise<number> => {
   if (maxAttempts <= 0) {
     throw new Error('Could not find an available port after maximum attempts');
   }
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = netCreateServer();
     server.unref();
     server.on('error', () => {
       console.log(`Port ${startPort} in use, trying ${startPort + 1}...`);
       resolve(getAvailablePort(startPort + 1, maxAttempts - 1));
     });
     server.listen(startPort, '0.0.0.0', () => {
-      const { port } = server.address();
+      const { port } = server.address() as any; // Type assertion needed here
       server.close(() => resolve(port));
     });
   });
@@ -111,7 +111,7 @@ app.use((req, res, next) => {
 // Enhanced error handling middleware
 app.use((err, req, res, next) => {
   const requestId = req.headers['x-request-id'] || Date.now().toString(36);
-  
+
   // Handle auth errors specifically
   if (err.name === 'UnauthorizedError' || err.status === 401) {
     logger.error(`[Auth][${requestId}] Unauthorized access:`, err);
@@ -199,13 +199,56 @@ app.use(requestLogger);
 
 (async () => {
   // Register API routes first
-  const httpServer = registerRoutes(app); // Assumed registerRoutes returns the httpServer
+  const httpServer = createServer(app); // Assuming registerRoutes modifies app in place.  If not, adjust.
 
   // Make io globally available
   declare global {
-    var io: Server;
+    var io: SocketIOServer;
   }
   // Global io will be initialized in routes.ts after server creation
+
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"],
+      credentials: true,
+      allowedHeaders: ["*"]
+    },
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    connectTimeout: 60000,
+    debug: true,
+  });
+
+  // Improved WebSocket error handling
+  io.engine.on("connection_error", (err) => {
+    console.error('[WebSocket] Connection error:', {
+      type: err.type,
+      description: err.description,
+      context: err.context,
+      timestamp: new Date().toISOString(),
+      headers: err.req?.headers,
+      url: err.req?.url,
+      method: err.req?.method
+    });
+  });
+
+  io.engine.on("upgrade_error", (err) => {
+    console.error('[WebSocket] Upgrade error:', {
+      error: err,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  io.engine.on("initial_headers", (headers, req) => {
+    console.log("[WebSocket] Initial headers:", {
+      headers,
+      url: req.url,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
+  });
+
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -234,9 +277,14 @@ app.use(requestLogger);
     }
   });
 
-  // Error handling for HTTP server
+  // Improved HTTP server error handling
   httpServer.on('error', (error) => {
-    console.error('Server error:', error);
+    console.error('[Server] Error:', {
+      error: error.message,
+      code: error.code,
+      syscall: error.syscall,
+      timestamp: new Date().toISOString()
+    });
     // Attempt recovery
     setTimeout(() => {
       httpServer.close(() => {
