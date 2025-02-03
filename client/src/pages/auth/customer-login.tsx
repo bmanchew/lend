@@ -233,9 +233,9 @@ export default function CustomerLogin() {
         title: "Error", 
         description: "Invalid verification code", 
         variant: "destructive" 
-    });
-  }
-};
+      });
+    }
+  };
 
 
   const initiateKYC = (userId) => {
