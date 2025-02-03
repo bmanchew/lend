@@ -854,14 +854,9 @@ export function registerRoutes(app: Express): Server {
     // Store application attempt in webhook_events table
     console.log('[Webhook] Starting event insertion');
     
-    const dbInstance = await db;
-    if (!dbInstance) {
-      console.error('[Webhook] Database instance not initialized');
-      throw new Error('Database connection failed');
-    }
-
+    const dbClient = await db();
     console.log('[Webhook] Inserting event');
-    const [event] = await dbInstance
+    const [event] = await dbClient
       .insert(webhookEvents)
       .values({
         eventType: 'loan_application_attempt',
