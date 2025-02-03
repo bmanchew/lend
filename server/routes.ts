@@ -1000,7 +1000,8 @@ export function registerRoutes(app: Express): Server {
       if (isNaN(merchantId)) {
         debugLog('Invalid merchant ID:', req.params.id);
         return res.status(400).json({ error: 'Invalid merchant ID' });
-      }<replit_final_file>
+      }
+
       const [merchantRecord] = await db
         .select()
         .from(merchants)
