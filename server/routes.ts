@@ -658,6 +658,19 @@ export function registerRoutes(app: Express): Server {
           .where(eq(users.id, user.id));
       }
 
+      // Check if user exists and verify role
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, phoneNumber))
+        .limit(1)
+        .then(rows => rows[0]);
+
+      if (existingUser && existingUser.role !== 'customer') {
+        console.error('[Routes] Attempted OTP send to non-customer account:', phoneNumber);
+        return res.status(403).json({ error: "Invalid authentication method for this account type" });
+      }
+
       // Send OTP via SMS
       const sent = await smsService.sendOTP(phoneNumber, otp);
 
