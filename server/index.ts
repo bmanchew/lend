@@ -18,12 +18,13 @@ const VITE_PORT = process.env.VITE_PORT || 3000;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: true,
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.CLIENT_URL || 'https://shi-fi-lend-brandon263.replit.app'
+      : 'https://0.0.0.0:3000',
     credentials: true
   },
   path: '/socket.io/',
-  transports: ['websocket', 'polling'],
-  allowEIO3: true,
+  transports: ['websocket'],
   cookie: {
     name: 'io',
     httpOnly: true,
