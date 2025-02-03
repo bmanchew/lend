@@ -84,7 +84,38 @@ type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise
 
 interface RouteConfig {
 
-apiRouter.get("/verify-openai", async (req:Request, res:Response) => {
+// Code Review endpoints
+  apiRouter.post("/code-review", async (req: Request, res: Response) => {
+    try {
+      const { code, language } = req.body;
+      if (!code || !language) {
+        return res.status(400).json({ error: 'Code and language are required' });
+      }
+
+      const result = await CodeReviewService.reviewCode(code, language);
+      res.json(result);
+    } catch (err: any) {
+      console.error('Code review endpoint error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  apiRouter.post("/analyze-repo", async (req: Request, res: Response) => {
+    try {
+      const { files } = req.body;
+      if (!Array.isArray(files)) {
+        return res.status(400).json({ error: 'Files array is required' });
+      }
+
+      const result = await CodeReviewService.analyzeRepository(files);
+      res.json(result);
+    } catch (err: any) {
+      console.error('Repository analysis error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  apiRouter.get("/verify-openai", async (req:Request, res:Response) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
