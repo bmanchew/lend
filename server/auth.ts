@@ -535,10 +535,22 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ error: 'Failed to send OTP' });
       }
 
-      await dbInstance // Use dbInstance here
+      // Update user with new OTP
+      const updateResult = await dbInstance
         .update(users)
-        .set({ lastOtpCode: otp, otpExpiry: expiry })
-        .where(eq(users.phoneNumber, phoneNumber));
+        .set({ 
+          lastOtpCode: otp, 
+          otpExpiry: expiry 
+        })
+        .where(eq(users.phoneNumber, phoneNumber))
+        .returning();
+      
+      console.log('[AUTH] OTP Update result:', {
+        phone: phoneNumber,
+        otpSet: !!updateResult[0]?.lastOtpCode,
+        timestamp: new Date().toISOString()
+      });
+
       res.json({ message: 'OTP sent successfully' });
     } catch (error) {
       console.error('Error sending OTP:', error);
