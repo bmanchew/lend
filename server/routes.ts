@@ -1125,17 +1125,5 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  const io = new SocketIOServer(httpServer); // Initialize Socket.IO server
-
-  io.on('connection', (socket) => {
-    console.log('Socket.IO client connected:', socket.id);
-
-    socket.on('disconnect', () => {
-      console.log('Socket.IO client disconnected:', socket.id);
-    });
-    // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
-
-
-  });
   return httpServer;
 }
