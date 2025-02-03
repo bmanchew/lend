@@ -13,11 +13,26 @@ const limiter = rateLimit({
 
 const app = express();
 
+// Global error handler for uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+});
+
 // Middleware
 app.use(cors({
   origin: true,
   credentials: true
 }));
+
+// Add request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -115,8 +130,17 @@ app.use((req, res, next) => {
   const startServer = async (attempt = 0) => {
     try {
       const port = PORT + attempt;
+      console.log(`Attempting to start server on port ${port}...`);
       const server = httpServer.listen(port, '0.0.0.0', () => {
-        log(`Server running on port ${port} (http://0.0.0.0:${port})`);
+        console.log(`Server running on port ${port} (http://0.0.0.0:${port})`);
+      });
+
+      server.on('error', (err) => {
+        console.error('Server error:', err);
+        if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
+          console.log(`Port ${port} in use, trying ${port + 1}`);
+          startServer(attempt + 1);
+        }
       });
 
       server.on('error', (err: any) => {
