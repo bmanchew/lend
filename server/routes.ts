@@ -870,8 +870,7 @@ export function registerRoutes(app: Express): Server {
       }).returning();
 
       // Track merchant activity
-      const dbClient = await db();
-      await dbClient.insert(webhookEvents).values({
+      await db.insert(webhookEvents).values({
         eventType: 'merchant_activity',
         payload: JSON.stringify({
           merchantId: req.params.id,
