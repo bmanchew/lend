@@ -120,6 +120,15 @@ app.use((req, res, next) => {
   process.env.NODE_ENV = 'production';
   const BIND_ADDRESS = '0.0.0.0';
   const PORT = process.env.PORT || 3000;
+  
+  // Enable trust proxy for secure cookies
+  app.set('trust proxy', 1);
+  
+  // Ensure all routes are properly handled
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   httpServer.listen(PORT, BIND_ADDRESS, () => {
     log(`Server running on ${BIND_ADDRESS}:${PORT} in production mode`);

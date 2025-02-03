@@ -11,6 +11,10 @@ export function useSocket(merchantId: number) {
 
     socketRef.current = io('/', {
       path: '/socket.io',
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      secure: true,
       transports: ['websocket', 'polling']
     });
     socketRef.current.emit('join_merchant_room', merchantId);
