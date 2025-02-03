@@ -130,7 +130,8 @@ app.use((req, res, next) => {
     next();
   });
 
-  httpServer.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-    log(`Server running on port ${process.env.PORT || 3000}`);
+  const PORT = process.env.PORT || 3000;
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
   });
 })();
