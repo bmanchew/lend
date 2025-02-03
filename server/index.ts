@@ -130,7 +130,7 @@ app.use((req, res, next) => {
     next();
   });
 
-  httpServer.listen(PORT, BIND_ADDRESS, () => {
-    log(`Server running on ${BIND_ADDRESS}:${PORT} in production mode`);
+  httpServer.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+    log(`Server running on port ${process.env.PORT || 3000}`);
   });
 })();
