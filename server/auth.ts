@@ -7,7 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db } from "@db";
-const { pool } = await db();
+const dbInstance = await db(); // Initialize dbInstance here
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms"; // Added import for sms service
@@ -97,7 +97,7 @@ type User = {
 export function setupAuth(app: Express) {
   // Session setup
   const store = new PostgresSessionStore({ 
-    pool, 
+    pool: dbInstance.pool, // Use dbInstance.pool here
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
@@ -135,7 +135,7 @@ export function setupAuth(app: Express) {
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
-          const [user] = await db
+          const [user] = await dbInstance // Use dbInstance here
             .select()
             .from(users)
             .where(eq(users.username, username))
@@ -172,7 +172,7 @@ export function setupAuth(app: Express) {
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
         // Find user by phone number
-        let [user] = await db
+        let [user] = await dbInstance // Use dbInstance here
           .select()
           .from(users)
           .where(eq(users.phoneNumber, fullPhone));
@@ -190,7 +190,7 @@ export function setupAuth(app: Express) {
 
         if (!user) {
           // Create new user if doesn't exist
-          const newUser = await db
+          const newUser = await dbInstance // Use dbInstance here
             .insert(users)
             .values({
               username: fullPhone,
@@ -287,7 +287,7 @@ export function setupAuth(app: Express) {
 
 
         // Clear used OTP
-        await db
+        await dbInstance // Use dbInstance here
           .update(users)
           .set({ lastOtpCode: null, otpExpiry: null })
           .where(eq(users.id, user.id));
@@ -306,7 +306,7 @@ export function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: number, done) => {
     try {
-      const [user] = await db
+      const [user] = await dbInstance // Use dbInstance here
         .select()
         .from(users)
         .where(eq(users.id, id))
@@ -327,7 +327,7 @@ export function setupAuth(app: Express) {
       }
 
       // First, check for existing username or email to prevent unnecessary admin checks
-      const [existingUser] = await db
+      const [existingUser] = await dbInstance // Use dbInstance here
         .select()
         .from(users)
         .where(
@@ -350,7 +350,7 @@ export function setupAuth(app: Express) {
       // If registering as admin, check if it's the first admin or if user has admin privileges
       if (parsed.data.role === "admin") {
         // Check for existing admins
-        const adminCount = await db
+        const adminCount = await dbInstance // Use dbInstance here
           .select({ count: sql`count(*)` })
           .from(users)
           .where(eq(users.role, "admin"));
@@ -365,7 +365,7 @@ export function setupAuth(app: Express) {
 
       // Hash password and create user
       const hashedPassword = await hashPassword(parsed.data.password);
-      const [user] = await db
+      const [user] = await dbInstance // Use dbInstance here
         .insert(users)
         .values({
           ...parsed.data,
@@ -454,7 +454,10 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ error: 'Failed to send OTP' });
       }
 
-      await db.update(users).set({ lastOtpCode: otp, otpExpiry: expiry }).where(eq(users.phoneNumber, phoneNumber));
+      await dbInstance // Use dbInstance here
+        .update(users)
+        .set({ lastOtpCode: otp, otpExpiry: expiry })
+        .where(eq(users.phoneNumber, phoneNumber));
       res.json({ message: 'OTP sent successfully' });
     } catch (error) {
       console.error('Error sending OTP:', error);
