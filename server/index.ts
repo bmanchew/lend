@@ -3,7 +3,6 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
-// Socket.io removed
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
