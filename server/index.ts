@@ -157,8 +157,6 @@ app.use((req, res, next) => {
     }
   };
 
-  startServer();
-  
   // Enable trust proxy for secure cookies
   app.set('trust proxy', 1);
   
@@ -168,7 +166,8 @@ app.use((req, res, next) => {
     next();
   });
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
   });
 })();
