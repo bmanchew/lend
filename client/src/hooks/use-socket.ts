@@ -33,7 +33,10 @@ export function useSocket(merchantId: number) {
         timeout: 60000,
         upgrade: true,
         rememberUpgrade: true,
-        forceNew: true
+        forceNew: true,
+        autoConnect: true,
+        rejectUnauthorized: false,
+        withCredentials: true
       });
 
       // Enhanced error tracking
