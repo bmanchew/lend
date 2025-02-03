@@ -469,8 +469,9 @@ export function registerRoutes(app: Express): Server {
         amount,
         fundingAmount: req.body.fundingAmount
       });
-      const dbClient = await db();
-      const [newContract] = await dbClient
+
+      // Create contract record first
+      const [contract] = await db
         .insert(contracts)
         .values({
           merchantId,
@@ -1057,7 +1058,7 @@ export function registerRoutes(app: Express): Server {
           // Emit contract update event to merchant's room
           global.io.to(`merchant_${merchantId}`).emit('contract_update', {
             type: 'new_application',
-            contractId: newContract[0].id,
+            contractId: contract.id,
             status: 'draft'
           });
           res.json({ 
