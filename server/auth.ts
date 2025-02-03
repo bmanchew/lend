@@ -3,6 +3,10 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { z } from 'zod';
+import { timingSafeEqual, randomBytes } from 'crypto';
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
@@ -118,8 +122,29 @@ type User = {
   otpExpiry: string | null;
 };
 
+// Rate limiting configuration
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per window
+  message: 'Too many auth attempts, please try again later'
+});
+
+// Request validation schemas
+const loginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+  loginType: z.enum(['customer', 'merchant', 'admin'])
+});
+
 export function setupAuth(app: Express) {
-  // Session setup
+  // Security headers
+  app.use(helmet());
+  
+  // Apply rate limiting to auth routes
+  app.use('/api/login', authLimiter);
+  app.use('/api/register', authLimiter);
+  
+  // Session setup with enhanced security
   const store = new PostgresSessionStore({ 
     pool: dbInstance.pool, // Use dbInstance.pool here
     createTableIfMissing: true,
@@ -132,12 +157,31 @@ export function setupAuth(app: Express) {
       secret: process.env.REPL_ID!,
       resave: false,
       saveUninitialized: false,
+      name: '_sid', // Custom session ID name
       cookie: {
         secure: app.get("env") === "production",
+        httpOnly: true,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        sameSite: 'strict'
       },
+      rolling: true, // Refresh session with activity
     })
   );
+
+  // Session security middleware
+  app.use((req, res, next) => {
+    if (req.session && req.session.userId) {
+      // Regenerate session ID periodically
+      if (!req.session.created || Date.now() - req.session.created > 3600000) {
+        req.session.regenerate(() => {
+          req.session.created = Date.now();
+          next();
+        });
+        return;
+      }
+    }
+    next();
+  });
 
   // Passport setup
   app.use(passport.initialize());
