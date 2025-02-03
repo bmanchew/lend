@@ -1293,18 +1293,18 @@ export function registerRoutes(app: Express): Server {
     cors: {
       origin: "*",
       methods: ["GET", "POST"],
-      credentials: true,
-      allowedHeaders: ["*"]
+      credentials: true
     },
     path: "/socket.io/",
-    transports: ["websocket", "polling"],
-    pingTimeout: 20000,
-    pingInterval: 10000,
-    upgradeTimeout: 10000,
-    maxHttpBufferSize: 1e6,
-    connectTimeout: 30000,
-    allowUpgrades: true,
-    perMessageDeflate: false
+    transports: ["websocket"],
+    pingTimeout: 10000,
+    pingInterval: 5000,
+    upgradeTimeout: 5000,
+    maxHttpBufferSize: 5e5,
+    connectTimeout: 15000,
+    perMessageDeflate: true,
+    httpCompression: true,
+    serveClient: false
   });
 
   // Enhanced WebSocket error handling
