@@ -122,7 +122,7 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  const PORT = parseInt(process.env.PORT || '3000', 10);
+  const PORT = parseInt(process.env.PORT || '3001', 10);
 
   const startServer = async (attempt = 0) => {
     try {
