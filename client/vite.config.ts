@@ -32,7 +32,8 @@ export default defineConfig({
       '@components': path.resolve(__dirname, 'src/components'),
       '@hooks': path.resolve(__dirname, 'src/hooks'),
       '@pages': path.resolve(__dirname, 'src/pages'),
-      '@lib': path.resolve(__dirname, 'src/lib')
+      '@lib': path.resolve(__dirname, 'src/lib'),
+      '@db': path.resolve(__dirname, '../db')
     }
   }
 });
