@@ -209,20 +209,35 @@ app.use(requestLogger);
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
+      origin: process.env.NODE_ENV === 'production' 
+        ? ["https://shi-fi-lend-brandon263.replit.app"]
+        : ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
       methods: ["GET", "POST"],
       credentials: true
     },
     path: "/socket.io/",
     transports: ['websocket', 'polling'],
-    pingTimeout: 30000,
+    pingTimeout: 20000,
     pingInterval: 10000,
     maxHttpBufferSize: 1e6,
     allowUpgrades: true,
     cookie: {
       secure: true,
       sameSite: 'none'
-    }
+    },
+    perMessageDeflate: false
+  });
+
+  // Enhanced error logging
+  io.engine.on("connection_error", (err) => {
+    console.error("[WebSocket] Connection error:", {
+      type: err.type,
+      description: err.description,
+      context: err.context,
+      transport: io.engine.transport?.name,
+      state: io.engine.state,
+      timestamp: new Date().toISOString()
+    });
   });
 
   // Enhanced error logging

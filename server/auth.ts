@@ -142,7 +142,7 @@ const loginSchema = z.object({
 
 export function setupAuth(app: Express) {
   // Merchant login endpoint
-  app.post('/api/auth/merchantLogin', async (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
       console.log('[Auth] Merchant login attempt:', req.body);
       const { username, password } = req.body;

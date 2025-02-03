@@ -123,21 +123,22 @@ class CodeReviewService {
   static async analyzeWebSocketConfig() {
     try {
       const socketConfig = `
-      // Server config
       const io = new SocketIOServer(httpServer, {
         cors: {
-          origin: "*",
+          origin: ["https://shi-fi-lend-brandon263.replit.app"],
           methods: ["GET", "POST"],
           credentials: true
         },
         path: "/socket.io/",
-        transports: ['polling', 'websocket'],
-        pingTimeout: 30000,
+        transports: ['websocket', 'polling'],
+        pingTimeout: 20000,
         pingInterval: 10000,
-        upgradeTimeout: 15000,
         maxHttpBufferSize: 1e6,
-        connectTimeout: 30000,
-        allowUpgrades: true
+        allowUpgrades: true,
+        cookie: {
+          secure: true,
+          sameSite: 'none'
+        }
       });
 
       // Client config
