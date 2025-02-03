@@ -42,6 +42,8 @@ export async function setupVite(app: Express, server: Server) {
         protocol: 'wss',
         clientPort: 443,
         host: '0.0.0.0',
+        path: '/__vite_hmr',
+        secure: true
       },
     },
     appType: "custom",
