@@ -8,30 +8,26 @@ export async function setupVite(app: express.Application, httpServer: Server) {
       middlewareMode: true,
       hmr: {
         server: httpServer,
-        port: 3000,
+        port: process.env.VITE_PORT || 3000,
         protocol: 'ws',
         host: '0.0.0.0',
-        clientPort: 3000,
-        timeout: 60000,
-        overlay: {
-          errors: true,
-          warnings: false
-        },
+        timeout: 120000,
+        overlay: true,
         path: '/__vite_hmr',
-        reconnect: true
+        clientPort: process.env.VITE_PORT || 3000
       },
       watch: {
-        usePolling: true,
-        interval: 500,
-        followSymlinks: false,
-        ignored: ['**/node_modules/**', '**/dist/**']
+        usePolling: false,
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**']
       },
     },
     optimizeDeps: {
-      force: true
+      force: true,
+      entries: ['./src/**/*.{ts,tsx}']
     },
     appType: 'spa',
-    clearScreen: false
+    clearScreen: false,
+    logLevel: 'info'
   });
 
   app.use(vite.middlewares);

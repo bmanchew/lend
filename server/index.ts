@@ -13,7 +13,8 @@ const limiter = rateLimit({
 });
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Different from Vite's port
+const PORT = process.env.PORT || 3001;
+const VITE_PORT = process.env.VITE_PORT || 3000;
 
 // Middleware
 app.use(cors({
