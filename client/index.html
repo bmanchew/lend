@@ -8,7 +8,10 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>var global = window;</script>
+    <script>
+      var global = window;
+      window.process = { env: { NODE_ENV: 'development' } };
+    </script>
     <script type="module">
       import RefreshRuntime from "/@react-refresh";
       RefreshRuntime.injectIntoGlobalHook(window);

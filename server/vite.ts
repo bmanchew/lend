@@ -38,12 +38,15 @@ export async function setupVite(app: Express, server: Server) {
       hmr: {
         server,
         port: 24678,
-        timeout: 12000,
+        host: '0.0.0.0',
         protocol: 'wss',
         clientPort: 443,
-        host: '0.0.0.0',
         path: '/__vite_hmr',
-        secure: true
+        timeout: 15000,
+      },
+      watch: {
+        usePolling: true,
+        interval: 1000,
       },
     },
     appType: "custom",
