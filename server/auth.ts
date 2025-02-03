@@ -191,12 +191,27 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Add header validation middleware
+  // Enhanced header validation middleware
   app.use((req, res, next) => {
-    if (req.user && !req.headers['x-replit-user-id']) {
+    // Check for session
+    if (!req.session) {
+      console.error('[Auth] Invalid session state');
+      return res.status(401).json({ error: 'Invalid session state' });
+    }
+
+    // If user exists in session, set headers
+    if (req.user) {
       req.headers['x-replit-user-id'] = req.user.id.toString();
       req.headers['x-replit-user-name'] = req.user.username;
       req.headers['x-replit-user-roles'] = req.user.role;
+      
+      // Regenerate session periodically
+      if (!req.session.created || Date.now() - req.session.created > 3600000) {
+        return req.session.regenerate(() => {
+          req.session.created = Date.now();
+          next();
+        });
+      }
     }
     next();
   });
