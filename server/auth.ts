@@ -187,9 +187,37 @@ export function setupAuth(app: Express) {
     next();
   });
 
-  // Passport setup
+  // Passport setup with enhanced security
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Enhanced auth middleware
+  app.use((req, res, next) => {
+    // Add request tracking
+    const requestId = req.headers['x-request-id'] || Date.now().toString(36);
+    
+    // Check session state
+    if (!req.session) {
+      console.error(`[Auth][${requestId}] Invalid session state`);
+      return res.status(401).json({ error: 'Invalid session state' });
+    }
+
+    // Set auth headers if user exists
+    if (req.user) {
+      req.headers['x-user-id'] = req.user.id.toString();
+      req.headers['x-user-role'] = req.user.role;
+      
+      // Regenerate session periodically for security
+      if (!req.session.created || Date.now() - req.session.created > 3600000) {
+        return req.session.regenerate(() => {
+          req.session.created = Date.now();
+          next();
+        });
+      }
+    }
+
+    next();
+  });
 
   // Enhanced header validation middleware
   app.use((req, res, next) => {

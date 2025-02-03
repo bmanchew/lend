@@ -41,10 +41,30 @@ app.use((req, res, next) => {
   }
 });
 
-// Error handling middleware
+// Enhanced error handling middleware
 app.use((err, req, res, next) => {
-  logger.error(err.stack);
-  res.status(500).send('Something broke!');
+  const requestId = req.headers['x-request-id'] || Date.now().toString(36);
+  
+  // Handle auth errors specifically
+  if (err.name === 'UnauthorizedError' || err.status === 401) {
+    logger.error(`[Auth][${requestId}] Unauthorized access:`, err);
+    return res.status(401).json({
+      error: 'Unauthorized access',
+      message: process.env.NODE_ENV === 'development' ? err.message : 'Authentication required'
+    });
+  }
+
+  // Log all errors
+  logger.error(`[Error][${requestId}]`, {
+    error: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path
+  });
+
+  res.status(err.status || 500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
 });
 
 process.on('uncaughtException', (err) => {
