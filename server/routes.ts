@@ -471,7 +471,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       // Create contract record first
-      const [contract] = await db
+      const [newContract] = await db
         .insert(contracts)
         .values({
           merchantId,
@@ -973,7 +973,7 @@ export function registerRoutes(app: Express): Server {
             })
             .where(eq(users.id, existingUser.id))
             .returning();
-          
+
           logger.info('Updated existing user:', {
             userId: user.id,
             phone: formattedPhone
@@ -986,7 +986,7 @@ export function registerRoutes(app: Express): Server {
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
         const fullPhone = '+1' + normalizedPhone;
         const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
-        
+
         [user] = await db
           .insert(users)
           .values({
