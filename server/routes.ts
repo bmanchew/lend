@@ -852,37 +852,43 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const event = await db.insert(webhookEvents).values({
-        eventType: 'loan_application_attempt',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          phone: req.body.phone,
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
-          amount: req.body.amount || req.body.fundingAmount,
-          timestamp: new Date().toISOString(),
-          userAgent: req.headers['user-agent'],
-          stage: 'initiation',
-          requestId
-        }),
-        status: 'received'
-      }).returning();
+    const dbClient = await db();
+      const event = await dbClient
+        .insert(webhookEvents)
+        .values({
+          eventType: 'loan_application_attempt',
+          payload: JSON.stringify({
+            merchantId: req.params.id,
+            phone: req.body.phone,
+            firstName: req.body.firstName,
+            lastName: req.body.lastName,
+            amount: req.body.amount || req.body.fundingAmount,
+            timestamp: new Date().toISOString(),
+            userAgent: req.headers['user-agent'],
+            stage: 'initiation',
+            requestId
+          }),
+          status: 'received'
+        })
+        .returning();
 
       // Track merchant activity
-      await db.insert(webhookEvents).values({
-        eventType: 'merchant_activity',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          action: 'send_application',
-          timestamp: new Date().toISOString(),
-          details: {
-            borrowerPhone: req.body.phone,
-            amount: req.body.amount || req.body.fundingAmount,
-            requestId
-          }
-        }),
-        status: 'recorded'
-      });
+      await dbClient
+        .insert(webhookEvents)
+        .values({
+          eventType: 'merchant_activity',
+          payload: JSON.stringify({
+            merchantId: req.params.id,
+            action: 'send_application',
+            timestamp: new Date().toISOString(),
+            details: {
+              borrowerPhone: req.body.phone,
+              amount: req.body.amount || req.body.fundingAmount,
+              requestId
+            }
+          }),
+          status: 'recorded'
+        });
 
       global.io.to(`merchant_${req.params.id}`).emit('application_update', {
         type: 'loan_application_attempt',
