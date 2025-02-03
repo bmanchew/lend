@@ -14,19 +14,18 @@ export function useSocket(merchantId: number) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
 
-    socketRef.current = io({
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.hostname}:${process.env.PORT || '3001'}`;
+    
+    socketRef.current = io(wsUrl, {
       path: '/socket.io/',
-      transports: ['websocket'],
-      secure: true,
+      transports: ['websocket', 'polling'],
+      secure: window.location.protocol === 'https:',
       rejectUnauthorized: false,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      withCredentials: true,
-      forceNew: true,
-      autoConnect: true,
-      protocol: protocol,
-      hostname: host
+      withCredentials: true
     });
 
     const socket = socketRef.current;

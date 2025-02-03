@@ -13,11 +13,13 @@ const limiter = rateLimit({
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: true,
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.CLIENT_URL 
+      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev:3002',
     credentials: true,
     methods: ['GET', 'POST']
   },
