@@ -484,7 +484,7 @@ export function registerRoutes(app: Express): Server {
           downPayment: amount * 0.05,
           monthlyPayment,
           totalInterest,
-          status: 'draft',
+          status: 'pending_review',
           notes,
           underwritingStatus: 'pending',
           borrowerEmail: customerDetails.email,
@@ -492,7 +492,14 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      res.json(newContract[0]);
+      // Emit contract update event
+      global.io.to(`merchant_${merchantId}`).emit('contract_update', {
+        type: 'new_application',
+        contractId: newContract.id,
+        status: 'pending_review'
+      });
+
+      res.json(newContract);
     } catch (err:any) {
       console.error("[Routes] Error creating contract:", err);
       next(err);
