@@ -181,7 +181,12 @@ export function setupAuth(app: Express) {
         let [user] = await dbInstance
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, fullPhone));
+          .where(
+            and(
+              eq(users.phoneNumber, fullPhone),
+              eq(users.role, 'customer')
+            )
+          );
 
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
