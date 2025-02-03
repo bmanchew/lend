@@ -12,9 +12,44 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later'
 });
 
+import winston from 'winston';
+import toobusy from 'toobusy-js';
+
+// Configure Winston
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'combined.log' })
+  ]
+});
+
+// Configure toobusy
+toobusy.maxLag(70);
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const VITE_PORT = process.env.VITE_PORT || 3000;
+
+// Middleware to prevent requests when server is too busy
+app.use((req, res, next) => {
+  if (toobusy()) {
+    res.status(503).send("Server too busy!");
+  } else {
+    next();
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.error(err.stack);
+  res.status(500).send('Something broke!');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', err);
+});
 
 // Middleware
 app.use(cors({
