@@ -852,7 +852,6 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const dbClient = await db();
     const event = await db
       .insert(webhookEvents)
       .values({
