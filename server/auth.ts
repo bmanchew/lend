@@ -278,12 +278,13 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // Strictly validate customer role
-        if (!user || user.role !== 'customer') {
-          console.error('[AUTH] Invalid role or user not found:', {
+        // Single consolidated role and user validation
+        if (!user || !user.id || user.role !== 'customer') {
+          console.error('[AUTH] Invalid user or role:', {
             phone: fullPhone,
             userId: user?.id,
-            role: user?.role
+            role: user?.role,
+            timestamp: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid account type for OTP login" });
         }
@@ -296,76 +297,6 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // Single consolidated role check
-        if (!user || user.role !== 'customer') {
-          console.error('[AUTH] Invalid user or role:', {
-            phone: fullPhone,
-            userId: user?.id,
-            role: user?.role,
-            timestamp: new Date().toISOString()
-          });
-          return done(null, false, { message: "Invalid account type for OTP login" });
-        }
-
-        if (!user || !user.id) {
-          console.error('[AUTH] Invalid user data:', {
-            phone: fullPhone,
-            user,
-            timestamp: new Date().toISOString()
-          });
-          return done(null, false, { message: "Invalid user data" });
-        }
-
-        // Additional validation
-        if (user.role !== 'customer') {
-          console.error('[AUTH] Invalid role for OTP login:', {
-            userId: user.id,
-            role: user.role,
-            phone: fullPhone
-          });
-          return done(null, false, { message: "Invalid account type for OTP login" });
-        }
-
-        console.log('[AUTH] User validated successfully:', {
-          userId: user.id,
-          phone: fullPhone,
-          role: user.role,
-          timestamp: new Date().toISOString()
-        });
-
-        if (!user) {
-          // Create new user if doesn't exist
-          const newUser = await dbInstance // Use dbInstance here
-            .insert(users)
-            .values({
-              username: fullPhone,
-              password: Math.random().toString(36).slice(-8),
-              email: `${fullPhone.replace(/\D/g, '')}@temp.shifi.com`,
-              name: '',
-              role: 'customer',
-              phoneNumber: fullPhone,
-            })
-            .returning()
-            .then(rows => rows[0]);
-          user = newUser;
-        }
-
-        console.log('[AUTH] OTP Validation Details:', {
-          storedOtp: user.lastOtpCode,
-          providedOtp: password,
-          otpExpiry: user.otpExpiry,
-          currentTime: new Date().toISOString(),
-          expiryValid: user.otpExpiry ? new Date(user.otpExpiry) > new Date() : false,
-          phoneNumber: fullPhone,
-          userId: user.id,
-          role: user.role
-        });
-
-        console.log('Verifying OTP:', {
-          storedOtp: user.lastOtpCode,
-          providedOtp: password,
-          otpExpiry: user.otpExpiry
-        });
 
         if (!user.lastOtpCode || !user.otpExpiry) {
           console.error('[AUTH] Missing OTP or expiry:', {
@@ -386,16 +317,6 @@ export function setupAuth(app: Express) {
             timestamp: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid verification attempt" });
-        }
-
-        // Verify this is a customer account
-        if (user.role !== 'customer') {
-          console.error('[AUTH] Non-customer attempting OTP login:', {
-            userId: user.id,
-            role: user.role,
-            phone: fullPhone
-          });
-          return done(null, false, { message: "Invalid account type for OTP login" });
         }
 
         // Check if OTP is expired
