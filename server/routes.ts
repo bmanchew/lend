@@ -1158,10 +1158,17 @@ export function registerRoutes(app: Express): Server {
       body: req.body,
       headers: {...req.headers, authorization: undefined},
       timestamp: new Date().toISOString(),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      originalError: err instanceof Error ? {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      } : null
     };
 
     console.error("[API] Error caught:", JSON.stringify(errorDetails, null, 2));
+    // Log to logger service for persistence
+    logger.error("API Error", errorDetails);
 
     if (!res.headersSent) {
       const status = errorDetails.status;
