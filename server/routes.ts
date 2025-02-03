@@ -1130,16 +1130,44 @@ export function registerRoutes(app: Express): Server {
     }
   }
 
-  // Request tracking middleware
+  // Request tracking middleware with error handling
   app.use((req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     req.headers['x-request-id'] = requestId;
+    
+    // Log incoming request
     console.log(`[API] ${req.method} ${req.path}`, {
       requestId,
       query: req.query,
       body: req.body,
       headers: {...req.headers, authorization: undefined}
     });
+
+    // Capture response
+    const originalSend = res.send;
+    res.send = function(body: any) {
+      console.log(`[API] Response for ${req.path}`, {
+        requestId,
+        statusCode: res.statusCode,
+        body: typeof body === 'string' ? JSON.parse(body) : body
+      });
+      return originalSend.apply(res, arguments);
+    };
+
+    // Add error logging
+    const originalNext = next;
+    next = function(err?: any) {
+      if (err) {
+        console.error(`[API] Error in ${req.path}`, {
+          requestId,
+          error: err.message,
+          stack: err.stack,
+          status: err.status || 500
+        });
+      }
+      return originalNext.apply(null, arguments);
+    };
+    
     next();
   });
 
@@ -1153,6 +1181,9 @@ export function registerRoutes(app: Express): Server {
       status: (err as APIError).status || 500,
       code: (err as APIError).code,
       path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      url: req.originalUrl || req.url,
       method: req.method,
       query: req.query,
       body: req.body,
