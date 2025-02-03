@@ -1288,6 +1288,7 @@ export function registerRoutes(app: Express): Server {
 
   const httpServer = createServer(app);
   console.log('[WebSocket] Initializing Socket.IO server');
+  console.log('[WebSocket] Setting up Socket.IO server with enhanced logging');
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: "*",
@@ -1296,15 +1297,33 @@ export function registerRoutes(app: Express): Server {
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ["polling", "websocket"],
-    pingTimeout: 30000,
-    pingInterval: 25000,
+    transports: ["websocket", "polling"],
+    pingTimeout: 20000,
+    pingInterval: 10000,
     upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 45000
+    connectTimeout: 30000,
+    allowUpgrades: true,
+    perMessageDeflate: false
   });
 
-  // Enhanced WebSocket logging
+  // Enhanced WebSocket error handling
+  io.engine.on("connection_error", (err) => {
+    console.error('[WebSocket] Connection error:', {
+      type: err.type,
+      description: err.description,
+      context: err.context,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  io.engine.on("headers", (headers, req) => {
+    console.log('[WebSocket] Connection headers:', {
+      address: req.address,
+      transport: io.engine.transport.name,
+      timestamp: new Date().toISOString()
+    });
+  });
   io.engine.on("initial_headers", (headers, req) => {
     console.log("[WebSocket] Initial headers:", {
       time: new Date().toISOString(),
