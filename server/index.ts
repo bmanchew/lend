@@ -49,10 +49,15 @@ const getAvailablePort = async (startPort: number, maxAttempts = 10): Promise<nu
   });
 };
 
-const PORT = await getAvailablePort(3000);
+const PORT = await getAvailablePort(3001);
 const API_PORT = process.env.API_PORT || PORT;
 const CLIENT_PORT = process.env.CLIENT_PORT || 5173;
 console.log(`Server will start on port: ${PORT}`);
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM. Performing graceful shutdown...');
+  process.exit(0);
+});
 
 // Memory monitoring
 setInterval(() => {
