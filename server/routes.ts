@@ -84,8 +84,28 @@ type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise
 
 interface RouteConfig {
 
+// Configure route groups
+const routeGroups: Record<string, RouteGroup> = {
+  auth: {
+    prefix: '/auth',
+    routes: []
+  },
+  contracts: {
+    prefix: '/contracts', 
+    routes: []
+  },
+  merchants: {
+    prefix: '/merchants',
+    routes: []  
+  },
+  kyc: {
+    prefix: '/kyc',
+    routes: []
+  }
+};
+
 // Code Review endpoints
-  apiRouter.post("/code-review", async (req: Request, res: Response) => {
+apiRouter.post("/code-review", async (req: Request, res: Response) => {
     try {
       const { code, language } = req.body;
       if (!code || !language) {
