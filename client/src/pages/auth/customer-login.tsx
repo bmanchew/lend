@@ -108,14 +108,6 @@ export default function CustomerLogin() {
         });
         return;
       }
-    } catch (error) {
-      console.error("Verification error:", error);
-      toast({ 
-        title: "Error", 
-        description: "Failed to process verification", 
-        variant: "destructive" 
-      });
-    }
 
       // Prevent form from being cleared during verification
       const phoneNumber = data.phoneNumber;
