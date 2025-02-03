@@ -993,12 +993,14 @@ export function registerRoutes(app: Express): Server {
         } else {
           user = existingUser;
         }
-            .set({ name: `${firstName} ${lastName}` })
-            .where(eq(users.id, existingUser.id))
-            .returning();
-        } else {
-          user = existingUser;
-        }
+            [user] = await db
+          .update(users)
+          .set({ name: `${firstName} ${lastName}` })
+          .where(eq(users.id, existingUser.id))
+          .returning();
+      } else {
+        user = existingUser;
+      }
       } else {
         // Create new user with unique email based on phone
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
