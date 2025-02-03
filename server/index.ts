@@ -30,10 +30,10 @@ toobusy.maxLag(100);
 toobusy.interval(500); // Check less frequently
 
 const app = express();
+import { createServer } from 'net';
 const getAvailablePort = async (startPort: number): Promise<number> => {
-  const net = require('net');
   return new Promise((resolve, reject) => {
-    const server = net.createServer();
+    const server = createServer();
     server.unref();
     server.on('error', () => {
       resolve(getAvailablePort(startPort + 1));
