@@ -1184,12 +1184,10 @@ export function registerRoutes(app: Express): Server {
       method: req.method,
       timestamp: new Date().toISOString(),
       url: req.originalUrl || req.url,
-      method: req.method,
       query: req.query,
       body: req.body,
       headers: {...req.headers, authorization: undefined},
-      timestamp: new Date().toISOString(),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      stack: err.stack,
       originalError: err instanceof Error ? {
         name: err.name,
         message: err.message,
@@ -1197,7 +1195,9 @@ export function registerRoutes(app: Express): Server {
         code: (err as any).code
       } : null,
       route: req.route?.path,
-      params: req.params
+      params: req.params,
+      session: req.session,
+      user: req.user
     };
 
     console.error("[API] Error caught:", JSON.stringify(errorDetails, null, 2));
