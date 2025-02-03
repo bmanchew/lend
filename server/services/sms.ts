@@ -13,17 +13,20 @@ export const smsService = {
   formatPhoneNumber(phone: string): string {
     if (!phone) throw new Error('Phone number is required');
 
-    // Remove all non-numeric characters
+    // Remove all non-numeric characters and spaces
     const cleanNumber = phone.replace(/\D/g, '');
 
-    // Validate length and format
+    // Handle different formats
     if (cleanNumber.length === 10) {
       return `+1${cleanNumber}`;
     } else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
       return `+${cleanNumber}`;
+    } else if (cleanNumber.length === 12 && cleanNumber.startsWith('1')) {
+      return `+${cleanNumber.slice(1)}`;
     }
 
-    throw new Error('Invalid phone number format');
+    logger.error('Invalid phone number format:', { received: phone, cleaned: cleanNumber });
+    throw new Error('Phone number must be 10 digits excluding country code');
   },
 
   async sendSMS(to: string, message: string): Promise<boolean> {
