@@ -214,10 +214,13 @@ app.use(requestLogger);
       credentials: true,
       allowedHeaders: ["*"]
     },
-    transports: ['websocket', 'polling'],
-    pingTimeout: 60000,
-    connectTimeout: 60000,
+    transports: ['websocket'],
+    pingTimeout: 30000,
+    connectTimeout: 30000,
     debug: true,
+    allowUpgrades: true,
+    upgradeTimeout: 10000,
+    maxHttpBufferSize: 1e6
   });
 
   // Improved WebSocket error handling
