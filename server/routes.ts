@@ -1131,7 +1131,7 @@ export function registerRoutes(app: Express): Server {
   }
 
   // Error handling middleware with improved logging and types
-  app.use((err: Error | APIError, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: Error | APIError, req: Request, res: Response, _next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const errorDetails = {
       requestId,
@@ -1139,14 +1139,22 @@ export function registerRoutes(app: Express): Server {
       message: err.message,
       status: (err as APIError).status || 500,
       code: (err as APIError).code,
+      path: req.path,
+      method: req.method,
+      query: req.query,
+      body: req.body,
+      headers: {...req.headers, authorization: undefined},
+      timestamp: new Date().toISOString(),
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     };
 
-    console.error("[API] Error caught:", errorDetails);
+    console.error("[API] Error caught:", JSON.stringify(errorDetails, null, 2));
 
     if (!res.headersSent) {
       const status = errorDetails.status;
-      const message = status === 500 ? 'Internal Server Error' : err.message;
+      const message = process.env.NODE_ENV === 'development' ? 
+        err.message : 
+        'Internal Server Error';
 
       res.status(status).json({
         status: "error",
