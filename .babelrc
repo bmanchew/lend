@@ -1,13 +1,35 @@
 {
   "presets": [
-    "@babel/preset-env",
-    "@babel/preset-react",
-    "@babel/preset-typescript"
+    ["@babel/preset-env", {
+      "targets": {
+        "node": "current"
+      }
+    }],
+    ["@babel/preset-typescript", {
+      "isTSX": true,
+      "allExtensions": true
+    }],
+    ["@babel/preset-react", {
+      "runtime": "automatic",
+      "development": true
+    }]
   ],
   "plugins": [
-    "@babel/plugin-transform-runtime",
+    ["@babel/plugin-transform-runtime", {
+      "regenerator": true
+    }],
     "@babel/plugin-proposal-class-properties",
     "@babel/plugin-proposal-object-rest-spread",
     "@babel/plugin-syntax-dynamic-import"
-  ]
+  ],
+  "env": {
+    "production": {
+      "presets": [
+        ["@babel/preset-react", {
+          "runtime": "automatic",
+          "development": false
+        }]
+      ]
+    }
+  }
 }
