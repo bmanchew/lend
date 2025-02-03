@@ -177,7 +177,7 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // First find customer by phone with role check
+        // First find customer by exact phone match and role
         let [user] = await dbInstance
           .select()
           .from(users)
@@ -186,7 +186,17 @@ export function setupAuth(app: Express) {
               eq(users.phoneNumber, fullPhone),
               eq(users.role, 'customer')
             )
-          );
+          )
+          .orderBy(sql`created_at DESC`)
+          .limit(1);
+
+        console.log('[AUTH] Customer lookup result:', {
+          phone: fullPhone,
+          found: !!user,
+          userId: user?.id,
+          role: user?.role,
+          timestamp: new Date().toISOString()
+        });
 
         console.log('[AUTH] Customer lookup result:', {
           phone: fullPhone,
