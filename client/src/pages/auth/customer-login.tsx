@@ -137,80 +137,110 @@ export default function CustomerLogin() {
       const userData = response.data;
       console.log("[CustomerLogin] Login response:", userData);
 
-      if (userData && userData.id) {
-        const userId = userData.id.toString();
-        // Verify this is a customer account
-        if (userData.role !== 'customer') {
-          toast({ 
-            title: "Error", 
-            description: "Invalid account type", 
-            variant: "destructive" 
-          });
-          return;
-        }
+      console.log('[CustomerLogin] Validating user data:', {
+        userData,
+        timestamp: new Date().toISOString()
+      });
 
-        try {
-          // Log user data for debugging
-          console.log('[CustomerLogin] User data received:', {
-            userId: userData.id,
-            role: userData.role,
-            phone: userData.phoneNumber,
-            timestamp: new Date().toISOString()
-          });
-
-          // Ensure we have valid user ID
-          const userId = userData.id?.toString();
-          if (!userId) {
-            throw new Error('Invalid user ID received');
-          }
-
-          // Set storage with validation
-          localStorage.setItem('temp_user_id', userId);
-          sessionStorage.setItem('current_user_id', userId);
-          setUser(userData);
-
-          // Verify storage was set correctly
-          const storedTempId = localStorage.getItem('temp_user_id');
-          const storedCurrentId = sessionStorage.getItem('current_user_id');
-
-          console.log('[CustomerLogin] Storage verification:', {
-            userId,
-            storedTempId,
-            storedCurrentId,
-            timestamp: new Date().toISOString()
-          });
-
-          if (storedTempId !== userId || storedCurrentId !== userId) {
-            throw new Error('Storage validation failed');
-          }
-
-          // Use timeout to ensure storage is committed
-          setTimeout(() => {
-            console.log('[CustomerLogin] Redirecting with verified storage:', {
-              userId,
-              role: userData.role,
-              localStorage: localStorage.getItem('temp_user_id'),
-              sessionStorage: sessionStorage.getItem('current_user_id'),
-              timestamp: new Date().toISOString()
-            });
-            window.location.href = `/apply/${userId}?verification=true&from=login`;
-          }, 100);
-
-        } catch (error) {
-          console.error('[CustomerLogin] Storage error:', error);
-          toast({
-            title: "Error",
-            description: "Failed to save session data",
-            variant: "destructive"
-          });
-        }
-      } else {
-        toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
+      if (!userData || !userData.id) {
+        console.error('[CustomerLogin] Invalid user data received:', userData);
+        toast({ 
+          title: "Error", 
+          description: "Invalid user data received", 
+          variant: "destructive" 
+        });
+        return;
       }
-    } catch (error) {
-      console.error("Verification error:", error);
-      toast({ title: "Error", description: "Invalid verification code", variant: "destructive" });
+
+      // Strict user validation
+      const userId = userData.id.toString();
+      if (!userId || userId === 'undefined' || userId === 'null') {
+        console.error('[CustomerLogin] Invalid user ID:', userId);
+        toast({ 
+          title: "Error", 
+          description: "Invalid user ID received", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Strict role validation
+      if (userData.role !== 'customer') {
+        console.error('[CustomerLogin] Invalid role:', {
+          userId,
+          role: userData.role
+        });
+        toast({ 
+          title: "Error", 
+          description: "Invalid account type", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
+
+      try {
+        // Log user data for debugging
+        console.log('[CustomerLogin] User data received:', {
+          userId: userData.id,
+          role: userData.role,
+          phone: userData.phoneNumber,
+          timestamp: new Date().toISOString()
+        });
+
+        // Ensure we have valid user ID
+        const userId = userData.id?.toString();
+        if (!userId) {
+          throw new Error('Invalid user ID received');
+        }
+
+        // Set storage with validation
+        localStorage.setItem('temp_user_id', userId);
+        sessionStorage.setItem('current_user_id', userId);
+        setUser(userData);
+
+        // Verify storage was set correctly
+        const storedTempId = localStorage.getItem('temp_user_id');
+        const storedCurrentId = sessionStorage.getItem('current_user_id');
+
+        console.log('[CustomerLogin] Storage verification:', {
+          userId,
+          storedTempId,
+          storedCurrentId,
+          timestamp: new Date().toISOString()
+        });
+
+        if (storedTempId !== userId || storedCurrentId !== userId) {
+          throw new Error('Storage validation failed');
+        }
+
+        // Use timeout to ensure storage is committed
+        setTimeout(() => {
+          console.log('[CustomerLogin] Redirecting with verified storage:', {
+            userId,
+            role: userData.role,
+            localStorage: localStorage.getItem('temp_user_id'),
+            sessionStorage: sessionStorage.getItem('current_user_id'),
+            timestamp: new Date().toISOString()
+          });
+          window.location.href = `/apply/${userId}?verification=true&from=login`;
+        }, 100);
+
+      } catch (error) {
+        console.error('[CustomerLogin] Storage error:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save session data",
+          variant: "destructive"
+        });
+      }
+    } else {
+      toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
     }
+  } catch (error) {
+    console.error("Verification error:", error);
+    toast({ title: "Error", description: "Invalid verification code", variant: "destructive" });
+  }
   };
 
 

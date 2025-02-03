@@ -299,10 +299,31 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Invalid account type" });
         }
 
-        if (!user) {
-          console.log('[AUTH] No user found for phone:', fullPhone);
-          return done(null, false, { message: "User not found" });
+        if (!user || !user.id) {
+          console.error('[AUTH] Invalid user data:', {
+            phone: fullPhone,
+            user,
+            timestamp: new Date().toISOString()
+          });
+          return done(null, false, { message: "Invalid user data" });
         }
+
+        // Additional validation
+        if (user.role !== 'customer') {
+          console.error('[AUTH] Invalid role for OTP login:', {
+            userId: user.id,
+            role: user.role,
+            phone: fullPhone
+          });
+          return done(null, false, { message: "Invalid account type for OTP login" });
+        }
+
+        console.log('[AUTH] User validated successfully:', {
+          userId: user.id,
+          phone: fullPhone,
+          role: user.role,
+          timestamp: new Date().toISOString()
+        });
 
         if (!user) {
           // Create new user if doesn't exist
