@@ -177,22 +177,29 @@ export function setupAuth(app: Express) {
         });
         console.log('[AUTH] Looking up user by phone:', fullPhone);
 
-        // Find user by phone number and role
+        // Find user by phone number and role with logging
         let [user] = await dbInstance
           .select()
           .from(users)
-          .where(
-            and(
-              eq(users.phoneNumber, fullPhone),
-              eq(users.role, 'customer')
-            )
-          );
+          .where(eq(users.phoneNumber, fullPhone));
 
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
           found: !!user,
-          role: user?.role
+          userId: user?.id,
+          role: user?.role,
+          timestamp: new Date().toISOString()
         });
+
+        // Verify this is a customer account
+        if (user && user.role !== 'customer') {
+          console.error('[AUTH] Invalid role for phone number:', {
+            phone: fullPhone,
+            userId: user.id,
+            role: user.role
+          });
+          return done(null, false, { message: "Invalid account type" });
+        }
 
         if (!user) {
           console.log('[AUTH] No user found for phone:', fullPhone);

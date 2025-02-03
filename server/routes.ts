@@ -622,13 +622,26 @@ export function registerRoutes(app: Express): Server {
       const otpExpiry = new Date();
       otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // 5 minute expiry
 
-      // Check if user exists
+      // Check if user exists with role validation
       let user = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phoneNumber))
+        .where(
+          and(
+            eq(users.phoneNumber, phoneNumber),
+            eq(users.role, 'customer')
+          )
+        )
         .limit(1)
         .then(rows => rows[0]);
+
+      console.log('[Routes] User lookup for OTP:', {
+        phone: phoneNumber,
+        found: !!user,
+        userId: user?.id,
+        role: user?.role,
+        timestamp: new Date().toISOString()
+      });
 
       if (!user) {
         // Create new user if doesn't exist
