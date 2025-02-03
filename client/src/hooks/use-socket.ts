@@ -19,9 +19,15 @@ export function useSocket(merchantId: number) {
 
       console.log('[Socket] Initializing socket connection');
       
+      console.log('[Socket] Connection config:', {
+        url: window.location.origin,
+        protocol: window.location.protocol,
+        time: new Date().toISOString()
+      });
+      
       socketRef.current = io({
         path: '/socket.io/',
-        transports: ['polling', 'websocket'],
+        transports: ['websocket', 'polling'],
         reconnectionDelay: 500,
         reconnectionDelayMax: 2000,
         reconnectionAttempts: 10,

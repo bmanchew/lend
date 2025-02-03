@@ -231,7 +231,29 @@ app.use(requestLogger);
       transport: socket.transport.name,
       headers: socket.request.headers,
       ip: socket.request.connection.remoteAddress,
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      state: io.engine.state,
+      allowUpgrades: io.engine.allowUpgrades,
+      protocol: socket.request.headers['sec-websocket-protocol'],
+      upgrading: io.engine.upgrading,
+      transportName: io.engine.transport?.name
+    });
+  });
+
+  io.engine.on("close", (reason) => {
+    console.log("[WebSocket] Connection closed:", {
+      reason,
+      time: new Date().toISOString(),
+      state: io.engine.state
+    });
+  });
+
+  io.engine.on("packet", (packet, type) => {
+    console.log("[WebSocket] Packet:", {
+      type,
+      data: packet,
+      time: new Date().toISOString(),
+      transport: io.engine.transport?.name
     });
   });
 
