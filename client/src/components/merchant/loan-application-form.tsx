@@ -25,7 +25,20 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Advanced logging for application start
+    console.log('[LoanApplication] Starting new application:', {
+      formData,
+      timestamp: new Date().toISOString(),
+      userAgent: window.navigator.userAgent,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight
+      }
+    });
+
     try {
+      const startTime = performance.now();
       const response = await fetch('/api/contracts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,10 +52,26 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
       });
       
       if (response.ok) {
+        const endTime = performance.now();
+        console.log('[LoanApplication] Submission successful:', {
+          requestDuration: `${(endTime - startTime).toFixed(2)}ms`,
+          status: response.status,
+          timestamp: new Date().toISOString()
+        });
         onSuccess?.();
+      } else {
+        console.error('[LoanApplication] Submission failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          timestamp: new Date().toISOString()
+        });
       }
     } catch (error) {
-      console.error('Error creating contract:', error);
+      console.error('[LoanApplication] Error submitting application:', {
+        error,
+        formData,
+        timestamp: new Date().toISOString()
+      });
     }
   };
 
