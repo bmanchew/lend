@@ -15,7 +15,7 @@ export default defineConfig({
     include: '**/*.{jsx,tsx}',
     babel: {
       babelrc: false,
-      plugins: ['@babel/plugin-transform-react-jsx']
+      presets: ['@babel/preset-react']
     }
   }), 
   runtimeErrorOverlay(), 
