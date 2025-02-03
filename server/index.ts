@@ -73,13 +73,14 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app);
   
-  // Single Socket.IO initialization
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
+  // Only initialize Socket.IO if it hasn't been initialized yet
+  if (!global.io) {
+    const io = new Server(httpServer, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+      }
+    });
 
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
@@ -94,7 +95,7 @@ app.use(requestLogger);
       var io: Server;
     }
     global.io = io;
-  })();
+  }
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
