@@ -234,14 +234,12 @@ export default function CustomerLogin() {
           variant: "destructive"
         });
       }
-    } else {
-      toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
     }
   } catch (error) {
     console.error("Verification error:", error);
     toast({ title: "Error", description: "Invalid verification code", variant: "destructive" });
   }
-  };
+};
 
 
   const initiateKYC = (userId) => {
