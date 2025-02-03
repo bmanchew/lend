@@ -253,7 +253,7 @@ app.use(requestLogger);
     });
   });
 
-  // Improved WebSocket error handling
+  // Enhanced WebSocket logging
   io.engine.on("connection_error", (err) => {
     console.error('[WebSocket] Connection error:', {
       type: err.type,
@@ -262,7 +262,30 @@ app.use(requestLogger);
       timestamp: new Date().toISOString(),
       headers: err.req?.headers,
       url: err.req?.url,
-      method: err.req?.method
+      method: err.req?.method,
+      transport: io.engine.transport?.name,
+      state: io.engine.state,
+      protocol: err.req?.protocol,
+      remoteAddress: err.req?.socket?.remoteAddress
+    });
+  });
+
+  // Log transport changes
+  io.engine.on("transport", (transport) => {
+    console.log('[WebSocket] Transport change:', {
+      transport: transport.name,
+      uri: transport.uri,
+      timestamp: new Date().toISOString(),
+      state: io.engine.state
+    });
+  });
+
+  // Log packet events
+  io.engine.on("packet", (packet) => {
+    console.log('[WebSocket] Packet:', {
+      type: packet.type,
+      data: packet.data,
+      timestamp: new Date().toISOString()
     });
   });
 

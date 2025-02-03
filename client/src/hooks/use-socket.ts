@@ -39,7 +39,33 @@ export function useSocket(merchantId: number) {
           type: error.type,
           description: error.description,
           time: new Date().toISOString(),
-          transport: socketRef.current?.io?.engine?.transport?.name
+          transport: socketRef.current?.io?.engine?.transport?.name,
+          readyState: socketRef.current?.io?.engine?.readyState,
+          protocol: window.location.protocol,
+          host: window.location.host,
+          uri: socketRef.current?.io?.uri,
+          transportOptions: socketRef.current?.io?.opts?.transports,
+          attemptNumber: reconnectAttempts.current
+        });
+      });
+
+      // Monitor transport state
+      socketRef.current.io.engine.on("transportError", (err) => {
+        console.error('[Socket] Transport error:', {
+          error: err.message,
+          transport: socketRef.current?.io?.engine?.transport?.name,
+          time: new Date().toISOString()
+        });
+      });
+
+      // Log handshake details
+      socketRef.current.io.engine.on("handshake", (handshake) => {
+        console.log('[Socket] Handshake:', {
+          sid: handshake.sid,
+          upgrades: handshake.upgrades,
+          pingInterval: handshake.pingInterval,
+          pingTimeout: handshake.pingTimeout,
+          time: new Date().toISOString()
         });
       });
 
