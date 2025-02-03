@@ -143,11 +143,11 @@ const loginSchema = z.object({
 export function setupAuth(app: Express) {
   // Security headers
   app.use(helmet());
-  
+
   // Apply rate limiting to auth routes
   app.use('/api/login', authLimiter);
   app.use('/api/register', authLimiter);
-  
+
   // Session setup with enhanced security
   const store = new PostgresSessionStore({ 
     pool: dbInstance.pool, // Use dbInstance.pool here
@@ -162,13 +162,13 @@ export function setupAuth(app: Express) {
       resave: false,
       saveUninitialized: false,
       name: '_sid', // Custom session ID name
+      rolling: true, // Refresh session with activity
       cookie: {
-        secure: app.get("env") === "production",
+        maxAge: 3600000,
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: 'strict'
       },
-      rolling: true, // Refresh session with activity
     })
   );
 
@@ -195,7 +195,7 @@ export function setupAuth(app: Express) {
   app.use((req, res, next) => {
     // Add request tracking
     const requestId = req.headers['x-request-id'] || Date.now().toString(36);
-    
+
     // Check session state
     if (!req.session) {
       console.error(`[Auth][${requestId}] Invalid session state`);
@@ -206,7 +206,7 @@ export function setupAuth(app: Express) {
     if (req.user) {
       req.headers['x-user-id'] = req.user.id.toString();
       req.headers['x-user-role'] = req.user.role;
-      
+
       // Regenerate session periodically for security
       if (!req.session.created || Date.now() - req.session.created > 3600000) {
         return req.session.regenerate(() => {
@@ -232,7 +232,7 @@ export function setupAuth(app: Express) {
       req.headers['x-replit-user-id'] = req.user.id.toString();
       req.headers['x-replit-user-name'] = req.user.username;
       req.headers['x-replit-user-roles'] = req.user.role;
-      
+
       // Regenerate session periodically
       if (!req.session.created || Date.now() - req.session.created > 3600000) {
         return req.session.regenerate(() => {

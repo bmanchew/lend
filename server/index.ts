@@ -32,6 +32,42 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const VITE_PORT = process.env.VITE_PORT || 3000;
 
+// Memory monitoring
+setInterval(() => {
+  const used = process.memoryUsage();
+  console.log('Memory usage:', {
+    rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)}MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`,
+    external: `${Math.round(used.external / 1024 / 1024)}MB`
+  });
+}, 300000);
+
+// Add request timeout
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    res.status(408).send('Request timeout');
+  });
+  next();
+});
+
+// Add circuit breaker
+let requestCount = 0;
+const MAX_REQUESTS = 1000;
+const RESET_INTERVAL = 60000;
+
+setInterval(() => {
+  requestCount = 0;
+}, RESET_INTERVAL);
+
+app.use((req, res, next) => {
+  if (requestCount > MAX_REQUESTS) {
+    return res.status(503).send('Server too busy');
+  }
+  requestCount++;
+  next();
+});
+
 // Middleware to prevent requests when server is too busy
 app.use((req, res, next) => {
   if (toobusy()) {

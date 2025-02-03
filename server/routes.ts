@@ -1000,16 +1000,7 @@ export function registerRoutes(app: Express): Server {
       if (isNaN(merchantId)) {
         debugLog('Invalid merchant ID:', req.params.id);
         return res.status(400).json({ error: 'Invalid merchant ID' });
-      }
-
-      // Verify merchant exists
-      const merchantRecord = await db
-        .select()
-        .from(merchants)
-        .where(eq(merchants.id, merchantId))
-        .limit(1)
-        .then(rows => rows[0]);
-
+      }<replit_final_file>
       if (!merchantRecord) {
         debugLog('Merchant not found:', merchantId);
         return res.status(404).json({ error: 'Merchant not found' });
@@ -1311,6 +1302,28 @@ export function registerRoutes(app: Express): Server {
 
     socket.on('disconnect', () => {
       console.log('Socket.IO client disconnected:', socket.id);
+      // Cleanup socket resources
+      socket.rooms.forEach(room => socket.leave(room));
+      socket.removeAllListeners();
+    });
+
+    // Add error handling
+    socket.on('error', (error) => {
+      console.error('Socket error:', error);
+      socket.disconnect(true);
+    });
+
+    // Add connection monitoring
+    const pingInterval = setInterval(() => {
+      socket.emit('ping');
+    }, 30000);
+
+    socket.on('pong', () => {
+      console.log('Socket alive:', socket.id);
+    });
+
+    socket.on('disconnect', () => {
+      clearInterval(pingInterval);
     });
   });
 
