@@ -141,12 +141,45 @@ const loginSchema = z.object({
 });
 
 export function setupAuth(app: Express) {
-  app.post('/api/auth/login', async (req, res) => {
-  console.log('[Auth] Login request received:', {
-    body: req.body,
-    path: req.path,
-    headers: req.headers
+  // Merchant login endpoint
+  app.post('/api/auth/merchantLogin', async (req, res) => {
+    try {
+      console.log('[Auth] Merchant login attempt:', req.body);
+      const { username, password } = req.body;
+
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .leftJoin(users, eq(merchants.userId, users.id))
+        .where(eq(users.username, username))
+        .limit(1);
+
+      if (!merchant) {
+        console.log('[Auth] Merchant not found:', username);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const validPassword = await authService.comparePasswords(password, merchant.password);
+      if (!validPassword) {
+        console.log('[Auth] Invalid password for merchant:', username);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = authService.generateToken(merchant);
+      console.log('[Auth] Merchant login successful:', username);
+      res.json({ token, merchant });
+    } catch (err) {
+      console.error('[Auth] Merchant login error:', err);
+      res.status(500).json({ error: 'Login failed' });
+    }
   });
+
+  app.post('/api/auth/login', async (req, res) => {
+    console.log('[Auth] Login request received:', {
+      body: req.body,
+      path: req.path,
+      headers: req.headers
+    });
     try {
       const { username, password } = req.body;
       const [user] = await db
@@ -159,7 +192,7 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      const validPassword = await authService.verifyPassword(password, user.password);
+      const validPassword = await authService.comparePasswords(password, user.password);
       if (!validPassword) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
