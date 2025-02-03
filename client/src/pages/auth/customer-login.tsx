@@ -178,22 +178,15 @@ export default function CustomerLogin() {
         return;
       }
 
+      // Log user data for debugging
+      console.log('[CustomerLogin] User data received:', {
+        userId: userData.id,
+        role: userData.role,
+        phone: userData.phoneNumber,
+        timestamp: new Date().toISOString()
+      });
 
       try {
-        // Log user data for debugging
-        console.log('[CustomerLogin] User data received:', {
-          userId: userData.id,
-          role: userData.role,
-          phone: userData.phoneNumber,
-          timestamp: new Date().toISOString()
-        });
-
-        // Ensure we have valid user ID
-        const userId = userData.id?.toString();
-        if (!userId) {
-          throw new Error('Invalid user ID received');
-        }
-
         // Set storage with validation
         localStorage.setItem('temp_user_id', userId);
         sessionStorage.setItem('current_user_id', userId);
@@ -235,19 +228,11 @@ export default function CustomerLogin() {
         });
       }
     } catch (error) {
-      console.error("[CustomerLogin] Storage error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save session data",
-        variant: "destructive"
-      });
-    }
-  } catch (error) {
-    console.error("[CustomerLogin] Error:", error);
-    toast({ 
-      title: "Error", 
-      description: "Invalid verification code", 
-      variant: "destructive" 
+      console.error("[CustomerLogin] Error:", error);
+      toast({ 
+        title: "Error", 
+        description: "Invalid verification code", 
+        variant: "destructive" 
     });
   }
 };
