@@ -1057,11 +1057,27 @@ export function registerRoutes(app: Express): Server {
 
         if (result.success) {
           debugLog('SMS sent successfully');
+          // Create contract record
+          const [contract] = await db
+            .insert(contracts)
+            .values({
+              merchantId,
+              customerId: user.id,
+              contractNumber: `LN${Date.now()}`,
+              amount: parsedAmount,
+              term: 36, // Default term
+              interestRate: 24.99, // Default rate
+              status: 'pending_review',
+              borrowerEmail: uniqueEmail,
+              borrowerPhone: formattedPhone
+            })
+            .returning();
+
           // Emit contract update event to merchant's room
           global.io.to(`merchant_${merchantId}`).emit('contract_update', {
             type: 'new_application',
-            contractId: newContract[0].id,
-            status: 'draft'
+            contractId: contract.id,
+            status: 'pending_review'
           });
           res.json({ 
             status: 'success',
