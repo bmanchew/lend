@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

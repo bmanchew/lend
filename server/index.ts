@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
+import { Server } from 'socket.io';
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -12,36 +13,10 @@ const limiter = rateLimit({
 
 const app = express();
 
-// Global error handler for uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-});
-
 // Middleware
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
-
-// Add request logging
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Global error:', err);
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
-  });
-});
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {
   const requestId = Date.now().toString(36);
@@ -87,6 +62,26 @@ app.use((req, res, next) => {
 (async () => {
   // Register API routes first
   const httpServer = registerRoutes(app);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+
+    socket.on('join_merchant_room', (merchantId) => {
+      socket.join(`merchant_${merchantId}`);
+    });
+  });
+
+  // Make io globally available
+  declare global {
+    var io: Server;
+  }
+  global.io = io;
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -122,46 +117,8 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  let PORT = parseInt(process.env.PORT || '3001', 10);
-
-  const startServer = async (attempt = 0) => {
-    try {
-      // Close any existing connections
-      if (httpServer.listening) {
-        await new Promise(resolve => httpServer.close(resolve));
-      }
-
-      httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
-      });
-
-      httpServer.on('error', (err: any) => {
-        if (err.code === 'EADDRINUSE' && attempt < 3) {
-          console.log(`Port ${PORT} in use, trying ${PORT + 1}`);
-          PORT++;
-          startServer(attempt + 1);
-        } else {
-          console.error('Server error:', err);
-          process.exit(1);
-        }
-      });
-    } catch (err) {
-      console.error('Failed to start server:', err);
-      process.exit(1);
-    }
-  };
-
-  // Enable trust proxy for secure cookies
-  app.set('trust proxy', 1);
-
-  // Ensure all routes are properly handled
-  app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store');
-    next();
-  });
-
-  startServer(0).catch(err => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+  const PORT = 5000;
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    log(`serving on port ${PORT}`);
   });
 })();

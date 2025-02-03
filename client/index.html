@@ -2,40 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      var global = window;
-      window.process = { env: { NODE_ENV: 'development' } };
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ShiFi</title>
-    <script>
-      window.global = window;
-      window.process = { env: { NODE_ENV: 'development' } };
-      window.__vite_is_modern_browser = true;
-      window.__vite_is_secure = true;
-      window.__vite_ws_protocol = 'wss';
-    </script>
-    <script type="module">
-      import RefreshRuntime from "/@react-refresh";
-      RefreshRuntime.injectIntoGlobalHook(window);
-      window.$RefreshReg$ = () => {};
-      window.$RefreshSig$ = () => (type) => type;
-      window.__vite_plugin_react_preamble_installed__ = true;
-    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      var global = window;
-      window.process = { env: { NODE_ENV: 'development' } };
-    </script>
-    <script type="module">
-      import RefreshRuntime from "/@react-refresh";
-      RefreshRuntime.injectIntoGlobalHook(window);
-      window.$RefreshReg$ = () => {};
-      window.$RefreshSig$ = () => (type) => type;
-      window.__vite_plugin_react_preamble_installed__ = true;
-    </script>
-    <script type="module" src="./src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

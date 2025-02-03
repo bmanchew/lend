@@ -24,21 +24,29 @@ export function useMobile() {
       orientation: window.screen.orientation?.type || 'unknown'
     };
 
-    // Simplified mobile detection
-    const isMobileDevice = /mobile|android|ios|iphone|ipad|ipod/.test(deviceInfo.userAgent);
-    const isSmallScreen = window.innerWidth <= 768;
+    // Mobile detection criteria with weighted importance
+    const mobileChecks = {
+      // Primary checks (most reliable)
+      userAgent: /iphone|ipad|ipod|android|blackberry|windows phone|opera mini|silk/i.test(deviceInfo.userAgent),
+      platform: /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(deviceInfo.platform),
 
-    const isMobile = isMobileDevice || isSmallScreen;
+      // Secondary checks (supporting evidence)
+      touch: deviceInfo.touchPoints > 0 && deviceInfo.hasTouch,
+
+      // Screen size is now a supplementary check, not primary
+      screen: window.innerWidth <= 768 && !/macintosh|windows nt|linux/i.test(deviceInfo.platform)
+    };
 
     // Log detailed detection info
     console.log('[useMobile] Device detection:', {
       ...deviceInfo,
-      isMobileDevice,
-      isSmallScreen,
-      isMobile
+      checks: mobileChecks,
+      // Device is mobile if either userAgent or platform indicates mobile,
+      // or if both touch and screen size suggest mobile
+      result: mobileChecks.userAgent || mobileChecks.platform || (mobileChecks.touch && mobileChecks.screen)
     });
 
-    return isMobile;
+    return mobileChecks.userAgent || mobileChecks.platform || (mobileChecks.touch && mobileChecks.screen);
   }, []);
 
   useEffect(() => {

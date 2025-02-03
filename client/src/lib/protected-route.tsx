@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
@@ -23,12 +24,10 @@ export function ProtectedRoute({ path, component: Component, allowedRoles }: Pro
   }
 
   if (!user) {
-    const redirectPath = allowedRoles?.includes('merchant') ? '/auth/merchant' 
-      : allowedRoles?.includes('admin') ? '/auth/admin'
-      : '/';
+    console.log('[ProtectedRoute] No user, redirecting to auth');
     return (
       <Route path={path}>
-        <Redirect to={redirectPath} />
+        <Redirect to="/auth" />
       </Route>
     );
   }

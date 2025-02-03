@@ -10,6 +10,8 @@ import { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import NodeCache from 'node-cache';
 import morgan from 'morgan';
+import { Server as SocketIOServer } from 'socket.io'; // Import Socket.IO
+
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
 
 // Morgan logging will be configured in the main Express app setup
@@ -850,44 +852,37 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const [event] = await db()
-        .insert(webhookEvents)
-        .values({
-          eventType: 'loan_application_attempt',
-          payload: JSON.stringify({
-            merchantId: req.params.id,
-            phone: req.body.phone,
-            firstName: req.body.firstName,
-            lastName: req.body.lastName,
-            amount: req.body.amount || req.body.fundingAmount,
-            timestamp: new Date().toISOString(),
-            userAgent: req.headers['user-agent'],
-            stage: 'initiation',
-            requestId
-          }),
-          status: 'received',
-          error: null
-        })
-        .returning();
+    const event = await db.insert(webhookEvents).values({
+        eventType: 'loan_application_attempt',
+        payload: JSON.stringify({
+          merchantId: req.params.id,
+          phone: req.body.phone,
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          amount: req.body.amount || req.body.fundingAmount,
+          timestamp: new Date().toISOString(),
+          userAgent: req.headers['user-agent'],
+          stage: 'initiation',
+          requestId
+        }),
+        status: 'received'
+      }).returning();
 
       // Track merchant activity
-      const [activity] = await db
-        .insert(webhookEvents)
-        .values({
-          eventType: 'merchant_activity',
-          payload: JSON.stringify({
-            merchantId: req.params.id,
-            action: 'send_application',
-            timestamp: new Date().toISOString(),
-            details: {
-              borrowerPhone: req.body.phone,
-              amount: req.body.amount || req.body.fundingAmount,
-              requestId
-            }
-          }),
-          status: 'recorded',
-          error: null
-        });
+      await db.insert(webhookEvents).values({
+        eventType: 'merchant_activity',
+        payload: JSON.stringify({
+          merchantId: req.params.id,
+          action: 'send_application',
+          timestamp: new Date().toISOString(),
+          details: {
+            borrowerPhone: req.body.phone,
+            amount: req.body.amount || req.body.fundingAmount,
+            requestId
+          }
+        }),
+        status: 'recorded'
+      });
 
       global.io.to(`merchant_${req.params.id}`).emit('application_update', {
         type: 'loan_application_attempt',
@@ -1101,5 +1096,17 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
+  const io = new SocketIOServer(httpServer); // Initialize Socket.IO server
+
+  io.on('connection', (socket) => {
+    console.log('Socket.IO client connected:', socket.id);
+
+    socket.on('disconnect', () => {
+      console.log('Socket.IO client disconnected:', socket.id);
+    });
+    // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
+
+
+  });
   return httpServer;
 }

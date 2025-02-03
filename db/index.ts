@@ -16,7 +16,6 @@ const RETRY_DELAY = 2000; // 2 seconds
 
 const createDbConnection = async () => {
   let retries = 0;
-  let lastError;
   while (retries < MAX_RETRIES) {
     try {
       const pool = new Pool({ connectionString: process.env.DATABASE_URL });
