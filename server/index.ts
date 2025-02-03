@@ -73,7 +73,7 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app);
 
-  // Initialize Socket.IO  - Modified to address potential multiple upgrade issue
+  // Initialize Socket.IO with proper upgrade handling
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -81,9 +81,14 @@ app.use(requestLogger);
     },
     path: "/socket.io/",
     transports: ["websocket", "polling"],
-    allowEIO3: true
+    allowEIO3: true,
+    allowRequest: (req, callback) => {
+      // Accept all connections
+      callback(null, true);
+    }
   });
 
+  // Single connection handler
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
