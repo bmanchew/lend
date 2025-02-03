@@ -2,6 +2,11 @@ import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
 
+const getWebSocketProtocol = () => {
+  return window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+};
+
+
 export function useSocket(merchantId: number) {
   const { user } = useAuth();
   const socketRef = useRef<Socket>();
@@ -9,14 +14,18 @@ export function useSocket(merchantId: number) {
   useEffect(() => {
     if (!user || !merchantId) return;
 
-    socketRef.current = io('/', {
+    const protocol = getWebSocketProtocol();
+    const host = window.location.host;
+    socketRef.current = io(`${protocol}//${host}`, {
       path: '/socket.io',
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      secure: true,
-      transports: ['websocket', 'polling']
+      secure: protocol === 'wss:',
+      transports: ['websocket', 'polling'],
+      rejectUnauthorized: false
     });
+    wsDebugLog('Socket', 'Connecting', { protocol, host });
     socketRef.current.emit('join_merchant_room', merchantId);
 
     socketRef.current.on('application_update', (update) => {
