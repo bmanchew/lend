@@ -177,18 +177,36 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // First find customer by exact phone match and role
+        // First find customer by exact phone match with strict role validation
         let [user] = await dbInstance
           .select()
           .from(users)
           .where(
             and(
               eq(users.phoneNumber, fullPhone),
-              eq(users.role, 'customer')
+              sql`role = 'customer'`
             )
           )
           .orderBy(sql`created_at DESC`)
           .limit(1);
+
+        console.log('[AUTH] User lookup with role check:', {
+          phone: fullPhone,
+          found: !!user,
+          role: user?.role,
+          userId: user?.id,
+          timestamp: new Date().toISOString()
+        });
+
+        // Double check role to prevent any SQL query issues
+        if (user && user.role !== 'customer') {
+          console.error('[AUTH] Invalid role found:', {
+            userId: user.id,
+            role: user.role,
+            phone: fullPhone
+          });
+          user = null;
+        }
 
         console.log('[AUTH] Customer lookup result:', {
           phone: fullPhone,
