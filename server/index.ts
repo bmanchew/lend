@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { Server } from 'socket.io';
+import { createServer } from 'http'; // Added import for createServer
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -71,7 +72,7 @@ app.use(requestLogger);
 
 (async () => {
   // Register API routes first
-  const httpServer = registerRoutes(app);
+  const httpServer = registerRoutes(app); // Assumed registerRoutes returns the httpServer
 
   // Make io globally available
   declare global {
@@ -106,6 +107,18 @@ app.use(requestLogger);
     }
   });
 
+  // Error handling for HTTP server
+  httpServer.on('error', (error) => {
+    console.error('Server error:', error);
+    // Attempt recovery
+    setTimeout(() => {
+      httpServer.close(() => {
+        httpServer.listen(PORT, '0.0.0.0');
+      });
+    }, 1000);
+  });
+
+
   // Setup Vite/static serving last
   if (app.get("env") === "development") {
     await setupVite(app, httpServer);
@@ -128,9 +141,6 @@ app.use(requestLogger);
     console.log('WebSocket status: enabled');
   });
 
-  // Improve error handling
-  httpServer.on('error', (error: Error) => {
-    console.error('Server error:', error);
-    process.exit(1);
-  });
+  //Improve error handling - already added above.
+
 })();
