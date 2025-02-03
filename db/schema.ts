@@ -94,7 +94,7 @@ export const verificationSessions = pgTable('verification_sessions', {
 export const webhookEvents = pgTable('webhook_events', {
   id: serial('id').primaryKey(),
   eventType: varchar('event_type', { length: 255 }).notNull(),
-  sessionId: varchar('session_id', { length: 255 }),
+  sessionId: varchar('session_id', { length: 255 }).notNull().default('app'),
   status: varchar('status', { length: 50 }).default('pending'),
   payload: json('payload'),
   error: text('error'),
