@@ -150,12 +150,26 @@ export default function CustomerLogin() {
         }
 
         try {
-          // Set storage synchronously
+          // Log user data for debugging
+          console.log('[CustomerLogin] User data received:', {
+            userId: userData.id,
+            role: userData.role,
+            phone: userData.phoneNumber,
+            timestamp: new Date().toISOString()
+          });
+
+          // Ensure we have valid user ID
+          const userId = userData.id?.toString();
+          if (!userId) {
+            throw new Error('Invalid user ID received');
+          }
+
+          // Set storage with validation
           localStorage.setItem('temp_user_id', userId);
           sessionStorage.setItem('current_user_id', userId);
           setUser(userData);
 
-          // Verify storage was set
+          // Verify storage was set correctly
           const storedTempId = localStorage.getItem('temp_user_id');
           const storedCurrentId = sessionStorage.getItem('current_user_id');
 
