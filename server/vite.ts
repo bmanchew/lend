@@ -40,6 +40,8 @@ export async function setupVite(app: Express, server: Server) {
         host: '0.0.0.0',
         protocol: 'ws',
         clientPort: 24678,
+        path: '/@hmr',
+        timeout: 120000,
       },
       watch: {
         usePolling: true,

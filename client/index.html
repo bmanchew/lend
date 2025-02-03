@@ -2,9 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>var global = window;</script>
+    <script>
+      var global = window;
+      window.process = { env: { NODE_ENV: 'development' } };
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ShiFi</title>
+    <script type="module">
+      import RefreshRuntime from "/@react-refresh"
+      RefreshRuntime.injectIntoGlobalHook(window)
+      window.$RefreshReg$ = () => {}
+      window.$RefreshSig$ = () => (type) => type
+      window.__vite_plugin_react_preamble_installed__ = true
+    </script>
   </head>
   <body>
     <div id="root"></div>
