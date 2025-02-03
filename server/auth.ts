@@ -384,19 +384,27 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Missing verification code" });
         }
 
-        // Compare OTP with stored value
+        // Enhanced OTP validation with session check
         if (normalizedStoredOTP !== normalizedInputOTP) {
           console.error('[AUTH] Invalid OTP:', {
             userId: user.id,
             phone: user.phoneNumber,
-            expected: normalizedStoredOTP,
-            received: normalizedInputOTP,
-            timestamp: new Date().toISOString(),
-            otpExpiry: user.otpExpiry,
-            currentTime: new Date().toISOString()
+            hasSession: !!req.session,
+            timestamp: new Date().toISOString()
           });
           return done(null, false, { message: "Invalid verification code" });
         }
+
+        // Ensure session is properly initialized
+        if (!req.session) {
+          console.error('[AUTH] Missing session during OTP validation');
+          return done(new Error('Session initialization failed'));
+        }
+
+        // Set essential session data
+        req.session.userId = user.id;
+        req.session.userRole = user.role;
+        req.session.phoneNumber = user.phoneNumber;
 
         console.log('[AUTH] OTP validation successful:', {
           userId: user.id,

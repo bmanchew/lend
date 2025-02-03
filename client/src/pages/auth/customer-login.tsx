@@ -133,20 +133,27 @@ export default function CustomerLogin() {
         timestamp: new Date().toISOString()
       });
 
-      // Ensure consistent phone format
-      const normalizedPhone = phoneNumber.replace(/\D/g, '').slice(-10);
-      const formattedPhone = '+1' + normalizedPhone;
+      // Format phone number once
+      const formatPhoneNumber = (phone: string): string => {
+        const cleaned = phone.replace(/\D/g, '');
+        const normalized = cleaned.replace(/^1/, '');
+        if (normalized.length !== 10) {
+          throw new Error('Phone number must be 10 digits');
+        }
+        return `+1${normalized}`;
+      };
+
+      const formattedPhone = formatPhoneNumber(phoneNumber);
 
       console.log('[CustomerLogin] Attempting login with:', {
         originalPhone: phoneNumber,
-        normalizedPhone: normalizedPhone,
-        formattedPhone: formattedPhone,
-        otp: otp,
+        formattedPhone,
+        otp,
         timestamp: new Date().toISOString()
       });
 
       const response = await axios.post("/api/login", {
-        username: formattedPhone, // Use consistently formatted phone
+        username: formattedPhone,
         password: otp,
         loginType: 'customer'
       });
