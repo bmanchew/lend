@@ -23,16 +23,39 @@ interface RouteConfig {
   roles?: string[];
 }
 
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="p-4 text-red-500">Something went wrong. Please try again.</div>;
+    }
+    return this.props.children;
+  }
+}
+
 function AppRouter() {
   console.log('[Router] Rendering AppRouter');
 
-  // Route configurations grouped by feature
-  const authRoutes: RouteConfig[] = [
-    { path: "/login/customer", element: <CustomerLogin /> },
-    { path: "/auth/customer-login", element: <CustomerLogin /> },
-    { path: "/login/merchant", element: <MerchantLogin /> },
-    { path: "/login/admin", element: <AdminLogin /> },
-  ];
+  // Structured route configurations
+  const routes = {
+    auth: [
+      { path: "/login/customer", element: <CustomerLogin />, title: "Customer Login" },
+      { path: "/auth/customer-login", element: <CustomerLogin />, title: "Customer Login" },
+      { path: "/login/merchant", element: <MerchantLogin />, title: "Merchant Login" },
+      { path: "/login/admin", element: <AdminLogin />, title: "Admin Login" },
+    ],
 
   const protectedRoutes = [
     { 

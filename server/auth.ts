@@ -21,14 +21,29 @@ interface AuthResult {
   error?: string;
 }
 
+interface AuthConfig {
+  saltLength: number;
+  keyLength: number;
+  sessionDuration: number;
+}
+
 class AuthService {
-  private readonly SALT_LENGTH = 16;
-  private readonly KEY_LENGTH = 32;
+  private readonly config: AuthConfig = {
+    saltLength: 16,
+    keyLength: 32,
+    sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
+  };
+
+  private readonly logger = {
+    info: (message: string, meta?: any) => console.log(`[AuthService] ${message}`, meta),
+    error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta),
+    debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta)
+  };
   
   async hashPassword(password: string): Promise<string> {
-    console.log("[AuthService] Generating password hash");
-    const salt = randomBytes(16).toString("hex");
-    const derivedKey = (await scryptAsync(password, salt, 32)) as Buffer;
+    this.logger.debug("Generating password hash");
+    const salt = randomBytes(this.config.saltLength).toString("hex");
+    const derivedKey = (await scryptAsync(password, salt, this.config.keyLength)) as Buffer;
     return `${derivedKey.toString("hex")}.${salt}`;
   }
 

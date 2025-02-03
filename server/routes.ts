@@ -66,25 +66,59 @@ interface DiditWebhookPayload {
   };
 }
 
-// Route type definitions
+// Custom error class for API errors
+class APIError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'APIError';
+  }
+}
+
+// Route type definitions with improved typing
 type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 
 interface RouteConfig {
   path: string;
-  method: 'get' | 'post';
+  method: 'get' | 'post' | 'put' | 'delete';
   handler: RouteHandler;
   middleware?: any[];
+  description?: string;
+}
+
+// Route grouping by domain
+interface RouteGroup {
+  prefix: string;
+  routes: RouteConfig[];
 }
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
   const apiRouter = express.Router();
   
-  // Group routes by domain
-  const authRoutes: RouteConfig[] = [];
-  const contractRoutes: RouteConfig[] = [];
-  const merchantRoutes: RouteConfig[] = [];
-  const kycRoutes: RouteConfig[] = [];
+  // Structured route groups
+  const routeGroups: Record<string, RouteGroup> = {
+    auth: {
+      prefix: '/auth',
+      routes: []
+    },
+    contracts: {
+      prefix: '/contracts', 
+      routes: []
+    },
+    merchants: {
+      prefix: '/merchants',
+      routes: []  
+    },
+    kyc: {
+      prefix: '/kyc',
+      routes: []
+    }
+  };
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
