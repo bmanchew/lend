@@ -1,0 +1,60 @@
+For robust port management—and to avoid hardcoding port numbers that cause conflicts—it's a good idea to have your app dynamically detect an available port or at least always respect the environment’s provided port. Here are a few recommendations and a sample prompt you can give your AI developer:
+
+---
+
+### Recommended Dependencies
+
+1. **`portfinder` or `detect-port`:**  
+   • These libraries help you automatically find a free port if the desired one is already in use.  
+   • For example, with `portfinder` you can set it up to search for the next available port if `process.env.PORT` is already taken.
+
+2. **Always Use `process.env.PORT`:**  
+   • In environments like Replit, Heroku, or similar, the platform assigns a port via `process.env.PORT`.  
+   • Ensure your server binds to this port, and if it’s not available (or if you’re in local development), then fall back to a default port (e.g., 3000).
+
+---
+
+### Example Code Snippet
+
+Here’s a basic example using `portfinder` in a Node.js app:
+
+```javascript
+const express = require('express');
+const portfinder = require('portfinder');
+
+const app = express();
+
+// Always try to use the environment-provided port
+const basePort = process.env.PORT || 3000;
+
+portfinder.getPortPromise({ port: basePort })
+  .then((port) => {
+    app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Could not find an available port:', err);
+  });
+```
+
+---
+
+### Sample Prompt for the AI Developer
+
+You can instruct the AI developer with a prompt like this:
+
+> **Prompt:**  
+> "When building our Node.js application for real‑time retail status updates, ensure that the server always uses the port provided by `process.env.PORT` for deployment environments (like Replit). To improve local development and avoid port conflicts, integrate a dependency such as `portfinder` (or `detect-port`) to automatically check and assign a free port if the default one is occupied. The goal is to have dynamic port management so that the application runs reliably without manual port configuration changes."
+
+---
+
+### Benefits of This Approach
+
+- **Dynamic Resolution:** Automatically finds an available port, minimizing manual intervention.
+- **Deployment Compatibility:** Ensures compatibility with hosting environments that require binding to a specific port.
+- **Avoids Conflicts:** Prevents errors that occur when the desired port is already in use, reducing downtime and debugging time.
+
+Using this strategy will help maintain better port management throughout your development process, especially when integrating multiple real-time components like WebSockets or retail status updates.
+
+Feel free to modify the prompt and code snippet as needed for your project’s specific requirements.
