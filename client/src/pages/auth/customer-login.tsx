@@ -234,6 +234,13 @@ export default function CustomerLogin() {
           variant: "destructive"
         });
       }
+    } catch (error) {
+      console.error("[CustomerLogin] Storage error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save session data",
+        variant: "destructive"
+      });
     }
   } catch (error) {
     console.error("Verification error:", error);
