@@ -169,24 +169,37 @@ export function setupAuth(app: Express) {
           return '+1' + clean;
         };
 
+        // Format phone consistently
         const fullPhone = formatPhone(username);
         console.log('[AUTH] Phone formatting:', {
           original: username,
           formatted: fullPhone,
           timestamp: new Date().toISOString()
         });
-        console.log('[AUTH] Looking up user by phone:', fullPhone);
 
-        // Find user by phone number and role with logging
+        // First find exact user by phone
         let [user] = await dbInstance
           .select()
           .from(users)
-          .where(
-            and(
-              eq(users.phoneNumber, fullPhone),
-              eq(users.role, 'customer')
-            )
-          );
+          .where(eq(users.phoneNumber, fullPhone));
+
+        console.log('[AUTH] User lookup result:', {
+          phone: fullPhone,
+          found: !!user,
+          userId: user?.id,
+          role: user?.role,
+          timestamp: new Date().toISOString()
+        });
+
+        // Strictly validate customer role
+        if (!user || user.role !== 'customer') {
+          console.error('[AUTH] Invalid role or user not found:', {
+            phone: fullPhone,
+            userId: user?.id,
+            role: user?.role
+          });
+          return done(null, false, { message: "Invalid account type for OTP login" });
+        }
 
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
