@@ -1144,6 +1144,5 @@ export function registerRoutes(app: Express): Server {
     // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
 
 
-  });
   return httpServer;
 }
