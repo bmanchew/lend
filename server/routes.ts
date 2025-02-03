@@ -1058,8 +1058,8 @@ export function registerRoutes(app: Express): Server {
           // Emit contract update event to merchant's room
           global.io.to(`merchant_${merchantId}`).emit('contract_update', {
             type: 'new_application',
-            contractId: contract.id,
-            status: 'draft'
+            contractId: newContract.id,
+            status: 'pending_review'
           });
           res.json({ 
             status: 'success',
