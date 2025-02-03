@@ -82,148 +82,7 @@ class APIError extends Error {
 // Route type definitions with improved typing
 type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 
-// Initialize Express Router
-const apiRouter = express.Router();
-
 interface RouteConfig {
-  path: string;
-  element: JSX.Element;
-  roles?: string[];
-}
-
-// Configure route groups
-const routeGroups: Record<string, RouteGroup> = {
-  auth: {
-    prefix: '/auth',
-    routes: []
-  },
-  contracts: {
-    prefix: '/contracts', 
-    routes: []
-  },
-  merchants: {
-    prefix: '/merchants',
-    routes: []  
-  },
-  kyc: {
-    prefix: '/kyc',
-    routes: []
-  }
-};
-
-// Code Review endpoints
-apiRouter.post("/code-review", async (req: Request, res: Response) => {
-    try {
-      const { code, language } = req.body;
-      if (!code || !language) {
-        return res.status(400).json({ error: 'Code and language are required' });
-      }
-
-      const result = await CodeReviewService.reviewCode(code, language);
-      res.json(result);
-    } catch (err: any) {
-      console.error('Code review endpoint error:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  apiRouter.post("/analyze-repo", async (req: Request, res: Response) => {
-    try {
-      const { files } = req.body;
-      if (!Array.isArray(files)) {
-        return res.status(400).json({ error: 'Files array is required' });
-      }
-
-      const result = await CodeReviewService.analyzeRepository(files);
-      res.json(result);
-    } catch (err: any) {
-      console.error('Repository analysis error:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  apiRouter.post("/review-websocket", async (req:Request, res:Response) => {
-    try {
-      const wsConfig = `
-        const io = new SocketIOServer(httpServer, {
-          cors: {
-            origin: "*",
-            methods: ["GET", "POST"],
-            credentials: true
-          },
-          path: "/socket.io/",
-          transports: ['polling', 'websocket'],
-          pingTimeout: 30000,
-          pingInterval: 10000,
-          upgradeTimeout: 15000,
-          maxHttpBufferSize: 1e6,
-          connectTimeout: 30000,
-          allowUpgrades: true
-        });
-      `;
-
-      const review = await CodeReviewService.reviewCode(wsConfig, 'javascript');
-      res.json(review);
-    } catch (err) {
-      console.error('WebSocket config review error:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  apiRouter.get("/verify-openai", async (req:Request, res:Response) => {
-  try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      console.error('[OpenAI] Missing API key configuration');
-
-  apiRouter.post("/analyze-code", async (req: Request, res: Response) => {
-    try {
-      const { code, language } = req.body;
-      if (!code || !language) {
-        return res.status(400).json({ error: 'Code and language are required' });
-      }
-
-      const analysis = await CodeReviewService.analyzeInRealTime(code, language);
-      res.json(analysis);
-    } catch (err: any) {
-      console.error('Code analysis error:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-      return res.status(500).json({ 
-        status: "error", 
-        message: "OpenAI API key not configured" 
-      });
-    }
-
-    const response = await fetch('https://api.openai.com/v1/models', {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-
-    if (response.ok) {
-      res.json({ 
-        status: "success", 
-        message: "OpenAI setup verified successfully" 
-      });
-    } else {
-      res.status(500).json({ 
-        status: "error", 
-        message: "OpenAI setup verification failed. Check API key." 
-      });
-    }
-  } catch (err:any) {
-    console.error('OpenAI verification error:', err);
-    res.status(500).json({ 
-      status: "error", 
-      message: err.message || "OpenAI verification failed" 
-    });
-  }
-});
-
-  interface RouteConfig {
   path: string;
   method: 'get' | 'post' | 'put' | 'delete';
   handler: RouteHandler;
@@ -817,17 +676,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add debug logging for auth routes
-  app.use('/api/auth', (req: Request, res: Response, next: NextFunction) => {
-    console.log('[Auth] Request:', {
-      method: req.method,
-      path: req.path,
-      body: req.body,
-      timestamp: new Date().toISOString()
-    });
-    next();
-  });
-
   apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber } = req.body;
@@ -1154,11 +1002,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid merchant ID' });
       }
 
-      const [merchantRecord] = await db
+      // Verify merchant exists
+      const merchantRecord = await db
         .select()
         .from(merchants)
         .where(eq(merchants.id, merchantId))
-        .limit(1);
+        .limit(1)
+        .then(rows => rows[0]);
 
       if (!merchantRecord) {
         debugLog('Merchant not found:', merchantId);
@@ -1439,73 +1289,16 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  console.log('[WebSocket] Initializing Socket.IO server');
-  console.log('[WebSocket] Setting up Socket.IO server with enhanced logging');
+  // Initialize Socket.IO with proper configuration
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
-      methods: ["GET", "POST"],
-      credentials: true
+      origin: "*",
+      methods: ["GET", "POST"]
     },
     path: "/socket.io/",
-    transports: ['websocket', 'polling'],
-    pingTimeout: 30000,
-    pingInterval: 10000,
-    maxHttpBufferSize: 1e6,
-    allowUpgrades: true,
-    cookie: {
-      secure: true,
-      sameSite: 'none'
-    }
-  });
-
-  // Enhanced WebSocket error handling
-  io.engine.on("connection_error", (err) => {
-    console.error('[WebSocket] Connection error:', {
-      type: err.type,
-      description: err.description,
-      context: err.context,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  io.engine.on("headers", (headers, req) => {
-    console.log('[WebSocket] Connection headers:', {
-      address: req.address,
-      transport: io.engine.transport.name,
-      timestamp: new Date().toISOString()
-    });
-  });
-  io.engine.on("initial_headers", (headers, req) => {
-    console.log("[WebSocket] Initial headers:", {
-      time: new Date().toISOString(),
-      address: req.address,
-      headers: headers
-    });
-  });
-
-  io.engine.on("headers", (headers, req) => {
-    console.log("[WebSocket] Handshake headers:", {
-      time: new Date().toISOString(),
-      address: req.address,
-      headers: headers
-    });
-  });
-
-  // Debug logging for connection events
-  io.engine.on("connection_error", (err) => {
-    console.error("[WebSocket] Connection error:", {
-      type: err.type,
-      description: err.description,
-      context: err.context
-    });
-  });
-
-  io.engine.on("headers", (headers, req) => {
-    console.log("[WebSocket] Handshake headers:", {
-      reqHeaders: req.headers,
-      resHeaders: headers
-    });
+    transports: ["websocket", "polling"],
+    allowEIO3: true,
+    serveClient: false
   });
 
   io.on('connection', (socket) => {
@@ -1518,28 +1311,6 @@ export function registerRoutes(app: Express): Server {
 
     socket.on('disconnect', () => {
       console.log('Socket.IO client disconnected:', socket.id);
-      // Cleanup socket resources
-      socket.rooms.forEach(room => socket.leave(room));
-      socket.removeAllListeners();
-    });
-
-    // Add error handling
-    socket.on('error', (error) => {
-      console.error('Socket error:', error);
-      socket.disconnect(true);
-    });
-
-    // Add connection monitoring
-    const pingInterval = setInterval(() => {
-      socket.emit('ping');
-    }, 30000);
-
-    socket.on('pong', () => {
-      console.log('Socket alive:', socket.id);
-    });
-
-    socket.on('disconnect', () => {
-      clearInterval(pingInterval);
     });
   });
 

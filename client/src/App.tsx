@@ -31,7 +31,6 @@ export class ErrorBoundary extends React.Component<{children: React.ReactNode}, 
   }
 
   static getDerivedStateFromError(error: Error) {
-    console.error('[ErrorBoundary] Caught error:', error);
     return { hasError: true, error };
   }
 

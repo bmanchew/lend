@@ -1,3 +1,4 @@
+
 import { ViteDevServer, createServer } from 'vite';
 import express from 'express';
 import { Server } from 'http';
@@ -6,29 +7,22 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      server: {
-        port: parseInt(process.env.VITE_PORT || '3000'),
-        host: '0.0.0.0'
-      },
       hmr: {
-        port: parseInt(process.env.VITE_PORT || '3000'),
-        protocol: 'wss', // Changed to wss
+        server: httpServer,
+        port: process.env.VITE_PORT || 3000,
+        protocol: 'ws',
         host: '0.0.0.0',
-        timeout: 60000,
+        timeout: 120000,
         overlay: {
           errors: true,
-          warnings: false
+          warnings: true
         },
-        clientPort: parseInt(process.env.VITE_PORT || '3001'),
-        path: '/__hmr'
+        clientPort: process.env.VITE_PORT || 3000
       },
       watch: {
         usePolling: false,
-        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**', '**/attached_assets/**'],
-        interval: 1000
-      },
-      port: parseInt(process.env.VITE_PORT || '3001'),
-      host: '0.0.0.0'
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
+      }
     },
     optimizeDeps: {
       include: [

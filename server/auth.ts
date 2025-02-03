@@ -141,76 +141,13 @@ const loginSchema = z.object({
 });
 
 export function setupAuth(app: Express) {
-  // Merchant login endpoint
-  app.post('/api/auth/merchant/login', async (req, res) => {
-    try {
-      console.log('[Auth] Merchant login attempt:', req.body);
-      const { username, password } = req.body;
-
-      const [merchant] = await db
-        .select()
-        .from(merchants)
-        .leftJoin(users, eq(merchants.userId, users.id))
-        .where(eq(users.username, username))
-        .limit(1);
-
-      if (!merchant) {
-        console.log('[Auth] Merchant not found:', username);
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      const validPassword = await authService.comparePasswords(password, merchant.password);
-      if (!validPassword) {
-        console.log('[Auth] Invalid password for merchant:', username);
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      const token = authService.generateToken(merchant);
-      console.log('[Auth] Merchant login successful:', username);
-      res.json({ token, merchant });
-    } catch (err) {
-      console.error('[Auth] Merchant login error:', err);
-      res.status(500).json({ error: 'Login failed' });
-    }
-  });
-
-  app.post('/api/auth/login', async (req, res) => {
-    console.log('[Auth] Login request received:', {
-      body: req.body,
-      path: req.path,
-      headers: req.headers
-    });
-    try {
-      const { username, password } = req.body;
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.username, username))
-        .limit(1);
-
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      const validPassword = await authService.comparePasswords(password, user.password);
-      if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      const token = authService.generateToken(user);
-      res.json({ token, user });
-    } catch (err) {
-      console.error('Login error:', err);
-      res.status(500).json({ error: 'Login failed' });
-    }
-  });
   // Security headers
   app.use(helmet());
-
+  
   // Apply rate limiting to auth routes
   app.use('/api/login', authLimiter);
   app.use('/api/register', authLimiter);
-
+  
   // Session setup with enhanced security
   const store = new PostgresSessionStore({ 
     pool: dbInstance.pool, // Use dbInstance.pool here
@@ -225,13 +162,13 @@ export function setupAuth(app: Express) {
       resave: false,
       saveUninitialized: false,
       name: '_sid', // Custom session ID name
-      rolling: true, // Refresh session with activity
       cookie: {
-        maxAge: 3600000,
-        secure: process.env.NODE_ENV === 'production',
+        secure: app.get("env") === "production",
         httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: 'strict'
       },
+      rolling: true, // Refresh session with activity
     })
   );
 
@@ -250,59 +187,16 @@ export function setupAuth(app: Express) {
     next();
   });
 
-  // Passport setup with enhanced security
+  // Passport setup
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Enhanced auth middleware
+  // Add header validation middleware
   app.use((req, res, next) => {
-    // Add request tracking
-    const requestId = req.headers['x-request-id'] || Date.now().toString(36);
-
-    // Check session state
-    if (!req.session) {
-      console.error(`[Auth][${requestId}] Invalid session state`);
-      return res.status(401).json({ error: 'Invalid session state' });
-    }
-
-    // Set auth headers if user exists
-    if (req.user) {
-      req.headers['x-user-id'] = req.user.id.toString();
-      req.headers['x-user-role'] = req.user.role;
-
-      // Regenerate session periodically for security
-      if (!req.session.created || Date.now() - req.session.created > 3600000) {
-        return req.session.regenerate(() => {
-          req.session.created = Date.now();
-          next();
-        });
-      }
-    }
-
-    next();
-  });
-
-  // Enhanced header validation middleware
-  app.use((req, res, next) => {
-    // Check for session
-    if (!req.session) {
-      console.error('[Auth] Invalid session state');
-      return res.status(401).json({ error: 'Invalid session state' });
-    }
-
-    // If user exists in session, set headers
-    if (req.user) {
+    if (req.user && !req.headers['x-replit-user-id']) {
       req.headers['x-replit-user-id'] = req.user.id.toString();
       req.headers['x-replit-user-name'] = req.user.username;
       req.headers['x-replit-user-roles'] = req.user.role;
-
-      // Regenerate session periodically
-      if (!req.session.created || Date.now() - req.session.created > 3600000) {
-        return req.session.regenerate(() => {
-          req.session.created = Date.now();
-          next();
-        });
-      }
     }
     next();
   });
@@ -695,12 +589,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/auth/login", (req, res, next) => {
-    console.log('[Auth] Login request received:', {
-      body: req.body,
-      path: req.path,
-      timestamp: new Date().toISOString()
-    });
+  app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User | false, info: any) => {
       console.log('Auth attempt:', {
         body: req.body,

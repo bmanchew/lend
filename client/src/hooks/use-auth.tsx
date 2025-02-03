@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const res = await apiRequest("POST", "/api/auth/login", {
+      const res = await apiRequest("POST", "/api/login", {
         ...credentials,
         deviceInfo: {
           isMobile,
