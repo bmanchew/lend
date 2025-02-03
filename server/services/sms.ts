@@ -59,9 +59,7 @@ export const smsService = {
   },
 
   generateOTP(): string {
-    const { totp } = require('otplib');
-    const secret = totp.generateSecret();
-    return totp.generate(secret);
+    return Math.random().toString().substring(2, 8);
   },
 
   async sendLoanApplicationLink(phone: string, merchantName: string, url: string): Promise<{success: boolean, error?: string}> {
