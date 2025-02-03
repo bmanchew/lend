@@ -84,20 +84,19 @@ app.use(requestLogger);
     allowEIO3: true
   });
 
-    io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
 
-      socket.on('join_merchant_room', (merchantId) => {
-        socket.join(`merchant_${merchantId}`);
-      });
+    socket.on('join_merchant_room', (merchantId) => {
+      socket.join(`merchant_${merchantId}`);
     });
+  });
 
-    // Make io globally available
-    declare global {
-      var io: Server;
-    }
-    global.io = io;
+  // Make io globally available
+  declare global {
+    var io: Server;
   }
+  global.io = io;
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
