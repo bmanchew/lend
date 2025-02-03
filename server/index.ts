@@ -73,17 +73,16 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app);
   
-  // Initialize Socket.IO only if not already initialized
-  if (!global.io) {
-    const io = new Server(httpServer, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      },
-      path: "/socket.io/", // Explicit path
-      transports: ["websocket", "polling"],
-      allowEIO3: true
-    });
+  // Initialize Socket.IO
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    },
+    path: "/socket.io/",
+    transports: ["websocket", "polling"],
+    allowEIO3: true
+  });
 
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
