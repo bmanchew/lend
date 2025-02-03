@@ -117,23 +117,6 @@ export default function CustomerLogin() {
       });
 
       // Format phone number consistently 
-      let formattedPhone = data.phoneNumber.replace(/\D/g, '');
-      formattedPhone = formattedPhone.replace(/^1/, '');
-      formattedPhone = '+1' + formattedPhone;
-
-      // Validate OTP format
-      const otp = data.code.trim();
-      if (!otp || !/^\d{6}$/.test(otp)) {
-        toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
-        return;
-      }
-
-      console.log('[CustomerLogin] Attempting login with:', {
-        phone: phoneNumber,
-        timestamp: new Date().toISOString()
-      });
-
-      // Format phone number once
       const formatPhoneNumber = (phone: string): string => {
         const cleaned = phone.replace(/\D/g, '');
         const normalized = cleaned.replace(/^1/, '');
@@ -143,7 +126,20 @@ export default function CustomerLogin() {
         return `+1${normalized}`;
       };
 
+      // Validate OTP format
+      const otp = data.code.trim();
+      if (!otp || !/^\d{6}$/.test(otp)) {
+        toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
+        return;
+      }
+
       const formattedPhone = formatPhoneNumber(phoneNumber);
+
+      console.log('[CustomerLogin] Attempting login with:', {
+        phone: phoneNumber,
+        formattedPhone,
+        timestamp: new Date().toISOString()
+      });
 
       console.log('[CustomerLogin] Attempting login with:', {
         originalPhone: phoneNumber,
