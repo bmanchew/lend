@@ -1068,7 +1068,7 @@ export function registerRoutes(app: Express): Server {
               term: 36, // Default term
               interestRate: 24.99, // Default rate
               status: 'pending_review',
-              borrowerEmail: uniqueEmail,
+              borrowerEmail: user.email || `${phoneDigits}@temp.shifi.com`,
               borrowerPhone: formattedPhone
             })
             .returning();
