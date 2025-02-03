@@ -1297,9 +1297,9 @@ export function registerRoutes(app: Express): Server {
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ["websocket"],
-    pingTimeout: 10000,
-    pingInterval: 5000,
+    transports: ['polling', 'websocket'],
+    pingTimeout: 60000,
+    pingInterval: 25000,
     upgradeTimeout: 5000,
     maxHttpBufferSize: 5e5,
     connectTimeout: 15000,
