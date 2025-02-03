@@ -133,8 +133,20 @@ export default function CustomerLogin() {
         timestamp: new Date().toISOString()
       });
 
+      // Ensure consistent phone format
+      const normalizedPhone = phoneNumber.replace(/\D/g, '').slice(-10);
+      const formattedPhone = '+1' + normalizedPhone;
+
+      console.log('[CustomerLogin] Attempting login with:', {
+        originalPhone: phoneNumber,
+        normalizedPhone: normalizedPhone,
+        formattedPhone: formattedPhone,
+        otp: otp,
+        timestamp: new Date().toISOString()
+      });
+
       const response = await axios.post("/api/login", {
-        username: phoneNumber,
+        username: formattedPhone, // Use consistently formatted phone
         password: otp,
         loginType: 'customer'
       });

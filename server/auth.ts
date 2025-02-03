@@ -252,8 +252,15 @@ export function setupAuth(app: Express) {
           found: !!user,
           userId: user?.id,
           role: user?.role,
+          hasValidSession: !!req.session,
           timestamp: new Date().toISOString()
         });
+
+        // Enhanced session validation
+        if (!req.session) {
+          console.error('[AUTH] Invalid session state');
+          return done(new Error('Invalid session state'));
+        }
 
         if (!user?.id) {
           console.error('[AUTH] Invalid user data:', {
