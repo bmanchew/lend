@@ -471,22 +471,26 @@ export function registerRoutes(app: Express): Server {
         amount,
         fundingAmount: req.body.fundingAmount
       });
-      const newContract = await db.insert(contracts).values({
-        merchantId,
-        customerId: customer.id,
-        contractNumber,
-        amount,
-        term,
-        interestRate,
-        downPayment: amount * 0.05,
-        monthlyPayment,
-        totalInterest,
-        status: 'draft',
-        notes,
-        underwritingStatus: 'pending',
-        borrowerEmail: customerDetails.email,
-        borrowerPhone: customerDetails.phone
-      }).returning();
+      const dbClient = await db();
+      const [newContract] = await dbClient
+        .insert(contracts)
+        .values({
+          merchantId,
+          customerId: customer.id,
+          contractNumber,
+          amount,
+          term,
+          interestRate,
+          downPayment: amount * 0.05,
+          monthlyPayment,
+          totalInterest,
+          status: 'draft',
+          notes,
+          underwritingStatus: 'pending',
+          borrowerEmail: customerDetails.email,
+          borrowerPhone: customerDetails.phone
+        })
+        .returning();
 
       res.json(newContract[0]);
     } catch (err:any) {
@@ -976,8 +980,7 @@ export function registerRoutes(app: Express): Server {
             email: uniqueEmail,
             name: `${firstName} ${lastName}`,
             role: 'customer',
-            phoneNumber: fullPhone,
-            kycStatus: 'pending'
+            phoneNumber: fullPhone,            kycStatus: 'pending'
           })
           .returning();
       }
