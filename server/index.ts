@@ -72,26 +72,30 @@ app.use(requestLogger);
 (async () => {
   // Register API routes first
   const httpServer = registerRoutes(app);
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
-
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('join_merchant_room', (merchantId) => {
-      socket.join(`merchant_${merchantId}`);
+  
+  // Only initialize Socket.IO if it hasn't been initialized yet
+  if (!global.io) {
+    const io = new Server(httpServer, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+      }
     });
-  });
 
-  // Make io globally available
-  declare global {
-    var io: Server;
+    io.on('connection', (socket) => {
+      console.log('Client connected:', socket.id);
+
+      socket.on('join_merchant_room', (merchantId) => {
+        socket.join(`merchant_${merchantId}`);
+      });
+    });
+
+    // Make io globally available
+    declare global {
+      var io: Server;
+    }
+    global.io = io;
   }
-  global.io = io;
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
