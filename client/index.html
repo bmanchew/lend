@@ -13,6 +13,14 @@
       import 'vite/modulepreload-polyfill'
       window.$RefreshReg$ = () => {}
       window.$RefreshSig$ = () => (type) => type
+      window.$RefreshRuntime$ = {
+        injectIntoGlobalHook(window) {
+          window.__vite_plugin_react = {
+            runtime: this
+          }
+        }
+      }
+      window.$RefreshRuntime$.injectIntoGlobalHook(window)
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
