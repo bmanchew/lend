@@ -30,9 +30,25 @@ toobusy.maxLag(100);
 toobusy.interval(500); // Check less frequently
 
 const app = express();
-const PORT = process.env.PORT || 3000;  // Main server port
-const API_PORT = process.env.API_PORT || PORT;  // API server fallback
-const CLIENT_PORT = process.env.CLIENT_PORT || 5173;  // Client dev server
+const getAvailablePort = async (startPort: number): Promise<number> => {
+  const net = require('net');
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', () => {
+      resolve(getAvailablePort(startPort + 1));
+    });
+    server.listen(startPort, '0.0.0.0', () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+};
+
+const PORT = await getAvailablePort(3000);
+const API_PORT = process.env.API_PORT || PORT;
+const CLIENT_PORT = process.env.CLIENT_PORT || 5173;
+console.log(`Server will start on port: ${PORT}`);
 
 // Memory monitoring
 setInterval(() => {
