@@ -12,6 +12,7 @@
       import RefreshRuntime from '/@react-refresh'
       window.$RefreshReg$ = () => {}
       window.$RefreshSig$ = () => (type) => type
+      window.RefreshRuntime = RefreshRuntime
       RefreshRuntime.injectIntoGlobalHook(window)
     </script>
     <script type="module" src="/src/main.tsx"></script>
