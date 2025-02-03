@@ -88,6 +88,12 @@ app.use(requestLogger);
     allowEIO3: true,
     maxHttpBufferSize: 1e6,
     allowRequest: (req, callback) => {
+      // Check if socket already exists
+      const socketId = req.headers['x-socket-id'];
+      if (socketId && connectedClients.has(socketId)) {
+        callback(new Error('Socket already connected'), false);
+        return;
+      }
       callback(null, true);
     }
   });
