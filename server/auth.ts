@@ -272,13 +272,14 @@ export function setupAuth(app: Express) {
           return done(new Error('Invalid session state'));
         }
 
-        if (!userRecord?.id) {
-          console.error('[AUTH] Invalid user data:', {
-            userRecord,
-            phone: fullPhone,
+        // Enhanced user validation
+        if (!userRecord || !userRecord.id) {
+          console.error('[AUTH] Invalid user record:', {
+            hasUser: !!userRecord,
+            phone: formattedPhone,
             timestamp: new Date().toISOString()
           });
-          return done(null, false, { message: "User account not found" });
+          return done(null, false, { message: "Invalid user account" });
         }
 
         console.log('[AUTH] User lookup with role check:', {
@@ -289,14 +290,14 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // Double check role to prevent any SQL query issues
-        if (userRecord && userRecord.role !== 'customer') {
-          console.error('[AUTH] Invalid role found:', {
+        // Strict role validation
+        if (userRecord.role !== 'customer') {
+          console.error('[AUTH] Invalid role for OTP login:', {
             userId: userRecord.id,
             role: userRecord.role,
-            phone: fullPhone
+            phone: userRecord.phoneNumber
           });
-          userRecord = null;
+          return done(null, false, { message: "Invalid account type for OTP login" });
         }
 
         console.log('[AUTH] Customer lookup result:', {
@@ -344,25 +345,16 @@ export function setupAuth(app: Express) {
         });
 
 
+        // Check if user has valid OTP data
         if (!userRecord.lastOtpCode || !userRecord.otpExpiry) {
-          console.error('[AUTH] Missing OTP or expiry:', {
-            hasOtp: !!userRecord.lastOtpCode,
-            hasExpiry: !!userRecord.otpExpiry
-          });
-          return done(null, false, { message: "No active OTP found" });
-        }
-
-        // Check if user has OTP data
-        if (!userRecord.lastOtpCode || !userRecord.otpExpiry || userRecord.role !== 'customer') {
-          console.error('[AUTH] Invalid OTP attempt:', {
+          console.error('[AUTH] Missing OTP data:', {
             userId: userRecord.id,
             phone: userRecord.phoneNumber,
-            role: userRecord.role,
             hasOtp: !!userRecord.lastOtpCode,
             hasExpiry: !!userRecord.otpExpiry,
             timestamp: new Date().toISOString()
           });
-          return done(null, false, { message: "Invalid verification attempt" });
+          return done(null, false, { message: "No active verification code found" });
         }
 
         // Check if OTP is expired
