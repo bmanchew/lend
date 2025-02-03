@@ -124,7 +124,7 @@ app.use((req, res, next) => {
 
   const PORT = parseInt(process.env.PORT || '3000', 10);
 
-  const startServer = async () => {
+  const startServer = async (attempt = 0) => {
     try {
       // Close any existing connections
       if (httpServer.listening) {
@@ -135,15 +135,10 @@ app.use((req, res, next) => {
         console.log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
       });
 
-      httpServer.on('error', (err) => {
-        console.error('Server error:', err);
-        process.exit(1);
-      });
-
-      server.on('error', (err: any) => {
-        if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
-          console.log(`Port ${port} in use, trying ${port + 1}`);
-          server.close();
+      httpServer.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE' && attempt < 3) {
+          console.log(`Port ${PORT} in use, trying ${PORT + 1}`);
+          PORT++;
           startServer(attempt + 1);
         } else {
           console.error('Server error:', err);
