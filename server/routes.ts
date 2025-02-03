@@ -1130,9 +1130,22 @@ export function registerRoutes(app: Express): Server {
     }
   }
 
+  // Request tracking middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const requestId = Date.now().toString(36);
+    req.headers['x-request-id'] = requestId;
+    console.log(`[API] ${req.method} ${req.path}`, {
+      requestId,
+      query: req.query,
+      body: req.body,
+      headers: {...req.headers, authorization: undefined}
+    });
+    next();
+  });
+
   // Error handling middleware with improved logging and types
   app.use((err: Error | APIError, req: Request, res: Response, _next: NextFunction) => {
-    const requestId = Date.now().toString(36);
+    const requestId = req.headers['x-request-id'] || Date.now().toString(36);
     const errorDetails = {
       requestId,
       name: err.name,

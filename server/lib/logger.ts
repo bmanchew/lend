@@ -1,4 +1,3 @@
-
 type LogLevel = 'info' | 'error' | 'warn' | 'debug';
 
 class Logger {
@@ -11,8 +10,14 @@ class Logger {
     this.log('info', message, ...args);
   }
 
-  error(message: string, ...args: any[]) {
-    this.log('error', message, ...args);
+  error(message: string, data?: any) {
+    const logData = {
+      timestamp: new Date().toISOString(),
+      message,
+      data,
+      requestId: Date.now().toString(36)
+    };
+    console.error('[ERROR]', JSON.stringify(logData, null, 2));
   }
 
   warn(message: string, ...args: any[]) {
