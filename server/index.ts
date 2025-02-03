@@ -73,7 +73,7 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app);
 
-  // Initialize Socket.IO with proper upgrade handling
+  // Initialize Socket.IO with enhanced configuration
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -82,12 +82,38 @@ app.use(requestLogger);
     },
     path: "/socket.io/",
     transports: ["websocket", "polling"],
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    connectTimeout: 45000,
     allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    maxHttpBufferSize: 1e6,
     allowRequest: (req, callback) => {
       callback(null, true);
     }
+  });
+
+  // Track connected clients
+  const connectedClients = new Set();
+
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    connectedClients.add(socket.id);
+
+    socket.on('join_merchant_room', (merchantId) => {
+      if (!merchantId) return;
+      const roomName = `merchant_${merchantId}`;
+      socket.join(roomName);
+      console.log(`Socket ${socket.id} joined room ${roomName}`);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+      connectedClients.delete(socket.id);
+    });
+
+    socket.on('error', (error) => {
+      console.error('Socket error:', error);
+    });
   });
 
   // Single connection handler
