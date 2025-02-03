@@ -1295,13 +1295,17 @@ export function registerRoutes(app: Express): Server {
       credentials: true
     },
     path: "/socket.io",
-    transports: ["websocket"],
-    pingTimeout: 30000,
-    pingInterval: 15000,
-    upgradeTimeout: 15000,
+    transports: ["websocket", "polling"],
+    pingTimeout: 20000,
+    pingInterval: 10000,
+    upgradeTimeout: 10000,
     allowUpgrades: true,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 45000
+    connectTimeout: 30000,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2000,
+      skipMiddlewares: true,
+    }
   });
 
   io.on('connection', (socket) => {
