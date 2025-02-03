@@ -75,18 +75,18 @@ app.use((req, res, next) => {
   const httpServer = registerRoutes(app);
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
+      origin: "*", 
       methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["*"],
       credentials: true
     },
     transports: ['websocket', 'polling'],
     allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    connectTimeout: 60000,
-    upgradeTimeout: 30000,
-    maxHttpBufferSize: 10e7
+    allowUpgrades: true,
+    upgradeTimeout: 10000,
+    pingInterval: 10000,
+    pingTimeout: 5000,
+    cookie: false
   });
 
   io.on('connection', (socket) => {
@@ -141,7 +141,7 @@ app.use((req, res, next) => {
   const BIND_ADDRESS = '0.0.0.0';
   const PORT = process.env.PORT || 3001;
   const MAX_PORT_ATTEMPTS = 5;
-  
+
   const startServer = async (attempt = 0) => {
     try {
       const port = PORT + attempt;
@@ -159,6 +159,9 @@ app.use((req, res, next) => {
           process.exit(1);
         }
       });
+      server.on('upgrade', (request, socket, head) => {
+        io.engine.handleUpgrade(request, socket, head);
+      });
     } catch (err) {
       console.error('Failed to start server:', err);
       process.exit(1);
@@ -167,14 +170,14 @@ app.use((req, res, next) => {
 
   // Enable trust proxy for secure cookies
   app.set('trust proxy', 1);
-  
+
   // Ensure all routes are properly handled
   app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
 
-  startServer().catch(err => {
+  startServer(0).catch(err => {
     console.error('Failed to start server:', err);
     process.exit(1);
   });
