@@ -73,61 +73,7 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app);
 
-  // Initialize Socket.IO with enhanced configuration
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
-    },
-    path: "/socket.io/",
-    transports: ["websocket", "polling"],
-    pingTimeout: 30000,
-    pingInterval: 10000,
-    connectTimeout: 45000,
-    allowEIO3: true,
-    maxHttpBufferSize: 1e6,
-    allowRequest: (req, callback) => {
-      // Check if socket already exists
-      const socketId = req.headers['x-socket-id'];
-      if (socketId && connectedClients.has(socketId)) {
-        callback(new Error('Socket already connected'), false);
-        return;
-      }
-      callback(null, true);
-    }
-  });
-
-  // Track connected clients
-  const connectedClients = new Set();
-
-  io.on('connection', (socket) => {
-    if (connectedClients.has(socket.id)) {
-      console.warn('Duplicate connection attempt:', socket.id);
-      socket.disconnect();
-      return;
-    }
-
-    console.log('Client connected:', socket.id);
-    connectedClients.add(socket.id);
-
-    socket.on('join_merchant_room', (merchantId) => {
-      if (!merchantId) return;
-      const roomName = `merchant_${merchantId}`;
-      socket.join(roomName);
-      console.log(`Socket ${socket.id} joined room ${roomName}`);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-      connectedClients.delete(socket.id);
-    });
-
-    socket.on('error', (error) => {
-      console.error('Socket error:', error);
-      connectedClients.delete(socket.id);
-    });
-  });
+  // Socket.IO will be initialized in routes.ts
 
 
   // Make io globally available
