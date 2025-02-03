@@ -963,7 +963,6 @@ export function registerRoutes(app: Express): Server {
 
       // Always use existing user if found
       let user;
-      let user;
       if (existingUser) {
         // Update existing user's name if it has changed
         if (existingUser.name !== `${firstName} ${lastName}`) {
