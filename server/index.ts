@@ -116,19 +116,6 @@ app.use(requestLogger);
     });
   });
 
-  // Single connection handler
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('join_merchant_room', (merchantId) => {
-      socket.join(`merchant_${merchantId}`);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
-  });
-
 
   // Make io globally available
   declare global {
