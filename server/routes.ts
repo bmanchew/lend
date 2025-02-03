@@ -1297,12 +1297,13 @@ export function registerRoutes(app: Express): Server {
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],
     pingTimeout: 60000,
     pingInterval: 25000,
-    upgradeTimeout: 5000,
-    maxHttpBufferSize: 5e5,
-    connectTimeout: 15000,
+    upgradeTimeout: 10000,
+    maxHttpBufferSize: 1e6,
+    connectTimeout: 45000,
+    allowUpgrades: true,
     perMessageDeflate: true,
     httpCompression: true,
     serveClient: false
