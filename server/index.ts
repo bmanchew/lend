@@ -144,25 +144,13 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  const tryPort = async (startPort: number): Promise<number> => {
-    for (let port = startPort; port < startPort + 10; port++) {
-      try {
-        await new Promise((resolve, reject) => {
-          const server = httpServer.listen(port, "0.0.0.0", () => {
-            server.close();
-            resolve(port);
-          });
-          server.on('error', reject);
-        });
-        return port;
-      } catch (err) {
-        if (port === startPort + 9) throw err;
-      }
-    }
-    throw new Error('No available ports found');
-  };
+  import portfinder from 'portfinder';
 
-  const PORT = await tryPort(3000);
+  // Configure portfinder
+  portfinder.basePort = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  portfinder.highestPort = 9000;
+
+  const PORT = await portfinder.getPortPromise();
   httpServer.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
     // Log successful startup
