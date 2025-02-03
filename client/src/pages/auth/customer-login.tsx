@@ -243,8 +243,12 @@ export default function CustomerLogin() {
       });
     }
   } catch (error) {
-    console.error("Verification error:", error);
-    toast({ title: "Error", description: "Invalid verification code", variant: "destructive" });
+    console.error("[CustomerLogin] Error:", error);
+    toast({ 
+      title: "Error", 
+      description: "Invalid verification code", 
+      variant: "destructive" 
+    });
   }
 };
 
