@@ -23,12 +23,12 @@ export default defineConfig({
     themePlugin()
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@components': path.resolve(__dirname, './src/components'),
-      '@hooks': path.resolve(__dirname, './src/hooks'),
-      '@pages': path.resolve(__dirname, './src/pages'),
-      '@lib': path.resolve(__dirname, './src/lib')
-    }
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+      { find: '@components', replacement: path.resolve(__dirname, 'src/components') },
+      { find: '@hooks', replacement: path.resolve(__dirname, 'src/hooks') },
+      { find: '@pages', replacement: path.resolve(__dirname, 'src/pages') },
+      { find: '@lib', replacement: path.resolve(__dirname, 'src/lib') }
+    ]
   }
 });
