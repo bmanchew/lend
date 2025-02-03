@@ -6,10 +6,12 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: {
-        server: httpServer,
+      server: {
         port: parseInt(process.env.VITE_PORT || '3000'),
-        host: '0.0.0.0', // Use standard Vite port
+        host: '0.0.0.0'
+      },
+      hmr: {
+        port: parseInt(process.env.VITE_PORT || '3000'),
         protocol: 'ws',
         host: '0.0.0.0',
         timeout: 60000,
@@ -17,7 +19,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
           errors: true,
           warnings: false
         },
-        clientPort: parseInt(process.env.VITE_PORT || '3001'), // Updated client port
+        clientPort: parseInt(process.env.VITE_PORT || '3001'),
         path: '/__hmr'
       },
       watch: {
@@ -25,7 +27,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
         ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**', '**/attached_assets/**'],
         interval: 1000
       },
-      port: parseInt(process.env.VITE_PORT || '3001'), // Updated port for the server
+      port: parseInt(process.env.VITE_PORT || '3001'),
       host: '0.0.0.0'
     },
     optimizeDeps: {

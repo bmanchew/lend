@@ -30,7 +30,7 @@ toobusy.maxLag(100);
 toobusy.interval(500); // Check less frequently
 
 const app = express();
-const PORT = process.env.PORT || 3001;  // Main API server
+const PORT = process.env.PORT || 5173;  // Main API server 
 const VITE_PORT = process.env.VITE_PORT || 3000;  // Client dev server
 
 // Memory monitoring
@@ -227,13 +227,7 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  const portfinder = await import('portfinder');
-
-  // Configure portfinder
-  const PORT = await portfinder.getPortPromise({
-    port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-    stopPort: 9000
-  });
+  // Use consistent port configuration
   httpServer.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
     // Log successful startup
