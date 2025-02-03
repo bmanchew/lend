@@ -73,35 +73,6 @@ app.use((req, res, next) => {
 (async () => {
   // Register API routes first
   const httpServer = registerRoutes(app);
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["*"],
-      credentials: true
-    },
-    transports: ['polling', 'websocket'],
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 30000,
-    maxHttpBufferSize: 1e8,
-    path: '/socket.io'
-  });
-
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('join_merchant_room', (merchantId) => {
-      socket.join(`merchant_${merchantId}`);
-    });
-  });
-
-  // Make io globally available
-  declare global {
-    var io: Server;
-  }
-  global.io = io;
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
