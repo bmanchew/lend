@@ -589,7 +589,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post(["/api/login", "/api/auth/login"], (req, res, next) => {
+  app.post(["/api/login", "/api/auth/login", "/api/login/merchant"], (req, res, next) => {
     passport.authenticate("local", (err: any, user: User | false, info: any) => {
       console.log('Auth attempt:', {
         body: req.body,

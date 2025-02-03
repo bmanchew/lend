@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
@@ -15,8 +14,10 @@ export function useSocket(merchantId: number) {
     const host = window.location.host;
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:${process.env.PORT || '3001'}`;
-    
+    const wsUrl = process.env.NODE_ENV === 'production'
+      ? process.env.DEPLOYMENT_URL
+      : `${wsProtocol}//${window.location.hostname}:3001`;
+
     socketRef.current = io(wsUrl, {
       path: '/socket.io/',
       transports: ['websocket', 'polling'],

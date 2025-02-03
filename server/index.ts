@@ -18,8 +18,8 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CLIENT_URL 
-      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev:3002',
+      ? process.env.DEPLOYMENT_URL 
+      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev',
     credentials: true,
     methods: ['GET', 'POST']
   },
