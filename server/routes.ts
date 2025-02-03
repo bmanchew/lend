@@ -1147,7 +1147,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-            applicationUrl
+            contract,
+            message: 'Loan application invitation sent successfully'
           });
         } else {
           debugLog('SMS failed to send:', result.error);
