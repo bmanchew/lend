@@ -40,6 +40,7 @@ import { diditService } from "./services/didit";
 import axios from 'axios';
 import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
+import { logger } from "./lib/logger";
 
 export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
 
