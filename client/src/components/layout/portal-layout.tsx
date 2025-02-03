@@ -1,6 +1,6 @@
 import React from "react";
 import Navbar from "./navbar";
-import ErrorBoundary from "./ErrorBoundary"; // Assuming ErrorBoundary component exists
+import ErrorBoundary from "../../App"; // Assuming ErrorBoundary component exists
 
 export default function PortalLayout({
   children,
