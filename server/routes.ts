@@ -1291,22 +1291,18 @@ export function registerRoutes(app: Express): Server {
   console.log('[WebSocket] Setting up Socket.IO server with enhanced logging');
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: true,
-      credentials: true,
-      methods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["*"]
+      origin: "*",
+      methods: ["GET", "POST"],
+      credentials: true
     },
     path: "/socket.io/",
-    transports: ['polling', 'websocket'],
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 30000,
+    transports: ['websocket', 'polling'],
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    upgradeTimeout: 15000,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 45000,
-    allowUpgrades: true,
-    forceNew: true,
-    rememberUpgrade: true,
-    transports: ['polling', 'websocket']
+    connectTimeout: 30000,
+    allowUpgrades: true
   });
 
   // Enhanced WebSocket error handling
