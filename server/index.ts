@@ -25,8 +25,9 @@ const logger = winston.createLogger({
   ]
 });
 
-// Configure toobusy
-toobusy.maxLag(70);
+// Configure toobusy with more lenient threshold
+toobusy.maxLag(100);
+toobusy.interval(500); // Check less frequently
 
 const app = express();
 const PORT = process.env.PORT || 3001;  // Main API server
@@ -68,10 +69,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware to prevent requests when server is too busy
+// Enhanced busy server handling with retry header
 app.use((req, res, next) => {
   if (toobusy()) {
-    res.status(503).send("Server too busy!");
+    res.set('Retry-After', '5');
+    res.status(503).json({
+      error: "Server is experiencing high load",
+      retryAfter: 5
+    });
   } else {
     next();
   }
