@@ -1072,23 +1072,36 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Error handling middleware
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error("[API] Error caught:", {
+  class APIError extends Error {
+    constructor(public status: number, message: string, public code?: string) {
+      super(message);
+      this.name = 'APIError';
+    }
+  }
+
+  // Error handling middleware with improved logging and types
+  app.use((err: Error | APIError, _req: Request, res: Response, _next: NextFunction) => {
+    const requestId = Date.now().toString(36);
+    const errorDetails = {
+      requestId,
+      name: err.name,
       message: err.message,
-      stack: err.stack,
-      status: err.status
-    });
+      status: (err as APIError).status || 500,
+      code: (err as APIError).code,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    };
+
+    console.error("[API] Error caught:", errorDetails);
 
     if (!res.headersSent) {
-      const status = err.status || 500;
+      const status = errorDetails.status;
       const message = status === 500 ? 'Internal Server Error' : err.message;
 
       res.status(status).json({
         status: "error",
         message,
-        code: err.code,
-        requestId: Date.now().toString(36)
+        code: errorDetails.code,
+        requestId
       });
     }
   });

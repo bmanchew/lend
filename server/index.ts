@@ -18,46 +18,56 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use((req, res, next) => {
+const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   const start = Date.now();
   const path = req.path;
 
-  // Monitor memory usage
-  const memoryStart = process.memoryUsage();
+  // Clean headers for logging
+  const safeHeaders = { ...req.headers };
+  delete safeHeaders.authorization;
+  delete safeHeaders.cookie;
 
   console.log(`[API] ${req.method} ${path} started`, {
     requestId,
     query: req.query,
     body: req.body,
-    headers: req.headers
+    headers: safeHeaders
   });
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
+  // Capture response
+  let capturedResponse: Record<string, any> | undefined;
+  const originalJson = res.json;
+  res.json = function(body: any, ...args) {
+    capturedResponse = body;
+    return originalJson.apply(res, [body, ...args]);
   };
 
+  // Log response on finish
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
+      const memoryUsage = process.memoryUsage();
+      const logData = {
+        method: req.method,
+        path,
+        status: res.statusCode,
+        duration: `${duration}ms`,
+        memory: {
+          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+          rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB'
+        },
+        response: capturedResponse
+      };
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+      log(JSON.stringify(logData));
     }
   });
 
   next();
-});
+};
+
+app.use(requestLogger);
 
 (async () => {
   // Register API routes first

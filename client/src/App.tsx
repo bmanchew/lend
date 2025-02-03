@@ -16,28 +16,57 @@ import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 import ApplyPage from "@/pages/apply"; // Placeholder component
 
 
-function AppRouter() { // Renamed Router to AppRouter
-  console.log('[Router] Rendering AppRouter'); // Added logging
-  return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login/customer" />} /> {/* Replaced Redirect */}
-      <Route path="/login/customer" element={<CustomerLogin />} />
-      <Route path="/auth/customer-login" element={<CustomerLogin />} />
-      <Route path="/login/merchant" element={<MerchantLogin />} />
-      <Route path="/login/admin" element={<AdminLogin />} />
-      <Route path="/customer" element={<ProtectedRoute component={CustomerDashboard} />} /> {/* Modified ProtectedRoute usage */}
-      <Route path="/merchant" element={<ProtectedRoute component={MerchantDashboard} />} /> {/* Modified ProtectedRoute usage */}
-      <Route path="/admin" element={<ProtectedRoute component={AdminDashboard} />} /> {/* Modified ProtectedRoute usage */}
-      <Route path="/admin/kyc-verifications" element={<ProtectedRoute component={KycVerificationsPage} />} /> {/* Modified ProtectedRoute usage */}
-      <Route path="/apply/:token" element={<ApplyPage />} />
-      <Route path="/merchant/dashboard" element={
+function AppRouter() {
+  console.log('[Router] Rendering AppRouter');
+
+  // Group routes by type for better organization
+  const authRoutes = [
+    { path: "/login/customer", element: <CustomerLogin /> },
+    { path: "/auth/customer-login", element: <CustomerLogin /> },
+    { path: "/login/merchant", element: <MerchantLogin /> },
+    { path: "/login/admin", element: <AdminLogin /> },
+  ];
+
+  const protectedRoutes = [
+    { 
+      path: "/customer", 
+      element: <ProtectedRoute component={CustomerDashboard} />
+    },
+    { 
+      path: "/merchant", 
+      element: <ProtectedRoute component={MerchantDashboard} />
+    },
+    { 
+      path: "/admin", 
+      element: <ProtectedRoute component={AdminDashboard} />
+    },
+    { 
+      path: "/admin/kyc-verifications", 
+      element: <ProtectedRoute component={KycVerificationsPage} />
+    },
+    { 
+      path: "/merchant/dashboard",
+      element: (
         <ProtectedRoute 
           path="/merchant/dashboard"
           allowedRoles={["merchant"]} 
           component={MerchantDashboard}
         />
-      } />
-      <Route path="*" element={<NotFound />} /> {/* Used * for catch-all */}
+      )
+    },
+  ];
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login/customer" />} />
+      {authRoutes.map(route => (
+        <Route key={route.path} {...route} />
+      ))}
+      {protectedRoutes.map(route => (
+        <Route key={route.path} {...route} />
+      ))}
+      <Route path="/apply/:token" element={<ApplyPage />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
