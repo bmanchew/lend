@@ -112,8 +112,6 @@
     "react-router-dom": "^7.1.5",
     "recharts": "^2.13.0",
     "resend": "^4.1.1",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "ts-jest": "^29.2.5",
