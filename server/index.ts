@@ -211,19 +211,36 @@ app.use(requestLogger);
     cors: {
       origin: true,
       credentials: true,
+      methods: ["GET", "POST"],
       allowedHeaders: ["*"]
     },
-    transports: ['websocket', 'polling'],
-    pingTimeout: 20000,
-    connectTimeout: 20000,
-    debug: true,
-    perMessageDeflate: {
-      threshold: 2048
-    },
-    allowUpgrades: true,
-    upgradeTimeout: 15000,
+    allowEIO3: true,
+    transports: ['polling', 'websocket'],
+    pingInterval: 10000,
+    pingTimeout: 5000,
+    connectTimeout: 10000,
+    upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6,
-    allowEIO3: true
+    allowUpgrades: true,
+    cookie: {
+      name: "io",
+      httpOnly: true,
+      sameSite: "lax"
+    }
+  });
+
+  // Enhanced error logging
+  io.engine.on("connection_error", (err) => {
+    console.error("[Socket.IO] Connection error:", {
+      type: err.type,
+      description: err.description,
+      context: err.context,
+      req: {
+        url: err.req?.url,
+        headers: err.req?.headers,
+        method: err.req?.method
+      }
+    });
   });
 
   // Detailed connection logging

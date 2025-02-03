@@ -27,15 +27,23 @@ export function useSocket(merchantId: number) {
       
       socketRef.current = io({
         path: '/socket.io/',
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        timeout: 20000,
-        forceNew: false,
+        timeout: 10000,
+        forceNew: true,
         autoConnect: true,
-        withCredentials: true,
         withCredentials: true
+      });
+
+      // Enhanced error tracking
+      socketRef.current.io.on("error", (error) => {
+        console.error("[Socket.IO] Transport error:", {
+          error,
+          transport: socketRef.current?.io?.engine?.transport?.name,
+          state: socketRef.current?.io?.engine?.readyState
+        });
       });
 
       // Log socket connection state
