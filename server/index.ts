@@ -49,10 +49,10 @@ const getAvailablePort = async (startPort: number, maxAttempts = 10): Promise<nu
   });
 };
 
-const PORT = await getAvailablePort(3001);
-const API_PORT = process.env.API_PORT || PORT;
-const CLIENT_PORT = process.env.CLIENT_PORT || 5173;
-console.log(`Server will start on port: ${PORT}`);
+const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0';
+
+console.log(`Server starting on ${HOST}:${PORT}`);
 
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM. Performing graceful shutdown...');
@@ -209,23 +209,16 @@ app.use(requestLogger);
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.NODE_ENV === 'production' 
-        ? ["https://shi-fi-lend-brandon263.replit.app"]
-        : ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
+      origin: true,
       methods: ["GET", "POST"],
       credentials: true
     },
     path: "/socket.io/",
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     pingTimeout: 20000,
     pingInterval: 10000,
     maxHttpBufferSize: 1e6,
-    allowUpgrades: true,
-    cookie: {
-      secure: true,
-      sameSite: 'none'
-    },
-    perMessageDeflate: false
+    allowUpgrades: true
   });
 
   // Enhanced error logging
