@@ -36,22 +36,10 @@ export async function setupVite(app: Express, server: Server) {
     server: {
       middlewareMode: true,
       hmr: {
-        server,
         port: 24678,
         host: '0.0.0.0',
-        protocol: 'wss',
-        clientPort: 443,
-        path: '/__vite_hmr',
-        timeout: 15000,
-        overlay: true,
-        server: {
-          ws: true,
-          watch: {
-            ignored: ['!**/node_modules/**'],
-            usePolling: true
-          },
-          middlewareMode: "html"
-        }
+        protocol: 'ws',
+        clientPort: 24678,
       },
       watch: {
         usePolling: true,
