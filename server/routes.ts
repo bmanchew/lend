@@ -83,6 +83,43 @@ class APIError extends Error {
 type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 
 interface RouteConfig {
+
+apiRouter.get("/verify-openai", async (req:Request, res:Response) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ 
+        status: "error", 
+        message: "OpenAI API key not configured" 
+      });
+    }
+
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (response.ok) {
+      res.json({ 
+        status: "success", 
+        message: "OpenAI setup verified successfully" 
+      });
+    } else {
+      res.status(500).json({ 
+        status: "error", 
+        message: "OpenAI setup verification failed. Check API key." 
+      });
+    }
+  } catch (err:any) {
+    console.error('OpenAI verification error:', err);
+    res.status(500).json({ 
+      status: "error", 
+      message: err.message || "OpenAI verification failed" 
+    });
+  }
+});
+
   path: string;
   method: 'get' | 'post' | 'put' | 'delete';
   handler: RouteHandler;
