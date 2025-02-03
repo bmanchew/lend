@@ -11,7 +11,12 @@ export default defineConfig({
   plugins: [
   react({
     fastRefresh: true,
-    jsxRuntime: 'automatic'
+    jsxRuntime: 'automatic',
+    include: '**/*.{jsx,tsx}',
+    babel: {
+      babelrc: false,
+      plugins: ['@babel/plugin-transform-react-jsx']
+    }
   }), 
   runtimeErrorOverlay(), 
   themePlugin()
