@@ -1162,8 +1162,11 @@ export function registerRoutes(app: Express): Server {
       originalError: err instanceof Error ? {
         name: err.name,
         message: err.message,
-        stack: err.stack
-      } : null
+        stack: err.stack,
+        code: (err as any).code
+      } : null,
+      route: req.route?.path,
+      params: req.params
     };
 
     console.error("[API] Error caught:", JSON.stringify(errorDetails, null, 2));
