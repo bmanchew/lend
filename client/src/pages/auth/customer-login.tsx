@@ -138,10 +138,15 @@ export default function CustomerLogin() {
       console.log("[CustomerLogin] Login response:", userData);
 
       if (userData && userData.id) {
-        localStorage.setItem('temp_user_id', userData.id.toString());
+        const userId = userData.id.toString();
+        localStorage.setItem('temp_user_id', userId);
+        sessionStorage.setItem('current_user_id', userId);
         setUser(userData);
-        // Don't reset form state until after navigation
-        window.location.href = `/apply/${userData.id}?verification=true&from=login`;
+        console.log('[CustomerLogin] Setting user ID and redirecting:', {
+          userId,
+          userData
+        });
+        window.location.href = `/apply/${userId}?verification=true&from=login`;
       } else {
         toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
       }
