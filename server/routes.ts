@@ -134,7 +134,7 @@ interface RouteConfig {
           allowUpgrades: true
         });
       `;
-      
+
       const review = await CodeReviewService.reviewCode(wsConfig, 'javascript');
       res.json(review);
     } catch (err) {

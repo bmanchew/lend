@@ -12,7 +12,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
       },
       hmr: {
         port: parseInt(process.env.VITE_PORT || '3000'),
-        protocol: 'ws',
+        protocol: 'wss', // Changed to wss
         host: '0.0.0.0',
         timeout: 60000,
         overlay: {
