@@ -1,3 +1,4 @@
+
 import { ViteDevServer, createServer } from 'vite';
 import express from 'express';
 import { Server } from 'http';
@@ -12,18 +13,33 @@ export async function setupVite(app: express.Application, httpServer: Server) {
         protocol: 'ws',
         host: '0.0.0.0',
         timeout: 120000,
-        overlay: true,
-        path: '/__vite_hmr',
+        overlay: {
+          errors: true,
+          warnings: true
+        },
         clientPort: process.env.VITE_PORT || 3000
       },
       watch: {
         usePolling: false,
-        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**']
-      },
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
+      }
     },
     optimizeDeps: {
-      force: true,
-      entries: ['./src/**/*.{ts,tsx}']
+      include: [
+        'react',
+        'react-dom',
+        'react-router-dom',
+        '@tanstack/react-query'
+      ],
+      exclude: ['vitest']
+    },
+    build: {
+      sourcemap: true,
+      rollupOptions: {
+        input: {
+          main: './client/src/main.tsx'
+        }
+      }
     },
     appType: 'spa',
     clearScreen: false,
