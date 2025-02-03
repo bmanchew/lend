@@ -94,7 +94,7 @@ app.use(requestLogger);
       var io: Server;
     }
     global.io = io;
-  }
+  })();
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
