@@ -1047,7 +1047,25 @@ export function registerRoutes(app: Express): Server {
         });
 
         // Send the SMS invitation
-        const result = await smsService.sendLoanApplicationLink(
+        // Create contract before sending SMS
+      const [newContract] = await db
+        .insert(contracts)
+        .values({
+          merchantId,
+          customerId: user.id,
+          contractNumber: `LN${Date.now()}`,
+          amount: parsedAmount,
+          term: 36, // Default term
+          interestRate: "24.99", // Default interest rate
+          downPayment: parsedAmount * 0.05,
+          status: 'pending_review',
+          underwritingStatus: 'pending',
+          borrowerEmail: req.body.email,
+          borrowerPhone: formattedPhone
+        })
+        .returning();
+
+      const result = await smsService.sendLoanApplicationLink(
           formattedPhone,
           merchantRecord.companyName,
           applicationUrl
@@ -1064,7 +1082,8 @@ export function registerRoutes(app: Express): Server {
           res.json({ 
             status: 'success',
             message: 'Loan application invitation sent successfully',
-            applicationUrl
+            applicationUrl,
+            contractId: newContract.id
           });
         } else {
           debugLog('SMS failed to send:', result.error);
