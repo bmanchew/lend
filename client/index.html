@@ -11,6 +11,8 @@
     <script>
       window.global = window;
       window.process = { env: { NODE_ENV: 'development' } };
+      window.__vite_is_modern_browser = true;
+      window.__vite_is_secure = window.location.protocol === 'https:';
     </script>
     <script type="module">
       import { injectIntoGlobalHook } from "/@react-refresh";
