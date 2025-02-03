@@ -13,11 +13,11 @@ export function useSocket(merchantId: number) {
     // Initialize socket with proper error handling
     socketRef.current = io({
       path: '/socket.io',
-      transports: ['polling', 'websocket'],
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      timeout: 10000,
+      transports: ['websocket'],
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 10,
+      timeout: 30000,
       forceNew: true,
       autoConnect: true
     });
