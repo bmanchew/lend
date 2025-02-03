@@ -1291,17 +1291,20 @@ export function registerRoutes(app: Express): Server {
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      credentials: true,
+      allowedHeaders: ["Content-Type", "Authorization"]
     },
     path: "/socket.io/",
-    transports: ["websocket", "polling"],
+    transports: ["polling", "websocket"],
     allowEIO3: true,
     serveClient: false,
-    allowUpgrades: true,
+    connectTimeout: 45000,
+    pingInterval: 25000,
+    pingTimeout: 20000,
     upgradeTimeout: 10000,
-    pingInterval: 10000,
-    pingTimeout: 5000
+    allowUpgrades: true,
+    cookie: false
   });
 
   io.on('connection', (socket) => {
