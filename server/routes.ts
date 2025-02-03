@@ -852,8 +852,7 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    const dbClient = await db();
-      const event = await dbClient
+    const event = await db
         .insert(webhookEvents)
         .values({
           eventType: 'loan_application_attempt',
@@ -868,12 +867,13 @@ export function registerRoutes(app: Express): Server {
             stage: 'initiation',
             requestId
           }),
-          status: 'received'
+          status: 'received',
+          error: null
         })
         .returning();
 
       // Track merchant activity
-      await dbClient
+      await db
         .insert(webhookEvents)
         .values({
           eventType: 'merchant_activity',
@@ -887,7 +887,8 @@ export function registerRoutes(app: Express): Server {
               requestId
             }
           }),
-          status: 'recorded'
+          status: 'recorded',
+          error: null
         });
 
       global.io.to(`merchant_${req.params.id}`).emit('application_update', {
