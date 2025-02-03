@@ -15,6 +15,22 @@ const limiter = rateLimit({
 const app = express();
 const PORT = process.env.PORT || 3001;
 const VITE_PORT = process.env.VITE_PORT || 3000;
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: true,
+    credentials: true
+  },
+  path: '/socket.io/',
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  cookie: {
+    name: 'io',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict'
+  }
+});
 
 // Middleware
 app.use(cors({

@@ -14,9 +14,12 @@ export function useSocket(merchantId: number) {
     socketRef.current = io({
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
+      secure: true,
+      rejectUnauthorized: false,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5
+      reconnectionAttempts: 5,
+      withCredentials: true
     });
 
     const socket = socketRef.current;
