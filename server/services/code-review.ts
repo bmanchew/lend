@@ -157,16 +157,17 @@ class CodeReviewService {
         messages: [
           {
             role: "system",
-            content: "Analyze this WebSocket configuration for potential issues causing 'Upgrade Required' errors. Focus on transport settings, upgrade paths, and timeouts."
+            content: "Analyze this WebSocket configuration for potential issues with HTTPS/WSS security and upgrade paths. Focus on secure WebSocket setup and mixed content prevention."
           },
           {
-            role: "user",
-            content: `Review this Socket.IO configuration:\n${socketConfig}`
+            role: "user", 
+            content: `Review this Socket.IO configuration for security and upgrade issues:\n${socketConfig}\n\nCurrent errors: SecurityError: Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS`
           }
         ]
       });
 
-      logger.info('WebSocket Analysis:', response.choices[0].message.content);
+      const analysis = response.choices[0].message.content;
+      logger.info('WebSocket Security Analysis:', analysis);
       return response.choices[0].message.content;
 
     } catch (error) {
