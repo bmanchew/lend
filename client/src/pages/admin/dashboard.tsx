@@ -148,7 +148,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts?.reduce((sum, c) => sum + Number(c.amount), 0).toFixed(2) ?? "0.00"}
+                ${contracts?.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
               </p>
             </CardContent>
           </Card>
