@@ -214,7 +214,8 @@ app.use(requestLogger);
       credentials: true
     },
     path: "/socket.io/",
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
+    secure: true,
     pingTimeout: 60000,
     pingInterval: 25000,
     upgradeTimeout: 45000,
