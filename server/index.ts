@@ -209,14 +209,14 @@ app.use(requestLogger);
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*",
+      origin: true,
       methods: ["GET", "POST"],
       credentials: true,
       allowedHeaders: ["*"]
     },
-    transports: ['websocket', 'polling'],
-    pingTimeout: 30000,
-    connectTimeout: 30000,
+    transports: ['polling', 'websocket'],
+    pingTimeout: 20000,
+    connectTimeout: 20000,
     debug: true,
     allowUpgrades: true,
     upgradeTimeout: 10000,
