@@ -133,15 +133,20 @@ app.use(requestLogger);
 
   const portfinder = await import('portfinder');
 
-  // Configure portfinder
-  const PORT = await portfinder.getPortPromise({
-    port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-    stopPort: 9000
-  });
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-    // Log successful startup
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+  const VITE_PORT = 3000;
+  const API_PORT = 3001;
+
+  // Start Vite dev server
+  if (process.env.NODE_ENV === 'development') {
+    await setupVite(app, httpServer);
+  } else {
+    serveStatic(app);
+  }
+
+  // Start API server
+  httpServer.listen(API_PORT, "0.0.0.0", () => {
+    log(`API server running on port ${API_PORT}`);
+    console.log(`Server running at http://0.0.0.0:${API_PORT}`);
     console.log('Environment:', process.env.NODE_ENV);
     console.log('WebSocket status: enabled');
   });

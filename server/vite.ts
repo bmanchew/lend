@@ -7,8 +7,11 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
+      strictPort: true,
       hmr: {
         server: httpServer,
+        timeout: 180000,
+        overlay: false,
         port: process.env.VITE_PORT || 3000,
         protocol: 'ws',
         host: '0.0.0.0',
