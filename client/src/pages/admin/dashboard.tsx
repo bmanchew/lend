@@ -76,9 +76,9 @@ export default function AdminDashboard() {
 
   const filteredContracts = contracts?.filter(contract => {
     const matchesSearch = 
-      contract.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.merchants?.companyName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === "all" || contract.status === selectedStatus;
+      (contract?.contractNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (contract?.merchants?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    const matchesStatus = selectedStatus === "all" || contract?.status === selectedStatus;
     return matchesSearch && matchesStatus;
   });
 
