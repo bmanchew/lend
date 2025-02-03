@@ -54,6 +54,20 @@ export default function MerchantDashboard() {
   const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],
     enabled: !!merchant,
+    onSuccess: (data) => {
+      console.log("[MerchantDashboard] Contracts loaded:", {
+        merchantId: merchant?.id,
+        contractCount: data?.length,
+        timestamp: new Date().toISOString()
+      });
+    },
+    onError: (error) => {
+      console.error("[MerchantDashboard] Error loading contracts:", {
+        merchantId: merchant?.id,
+        error,
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   // Connect to socket for real-time updates

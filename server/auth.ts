@@ -125,6 +125,12 @@ export function setupAuth(app: Express) {
       passwordField: 'password',
       passReqToCallback: true
     }, async (req, username, password, done) => {
+      console.log("[Auth] Login attempt:", {
+        username,
+        loginType: req.body.loginType,
+        timestamp: new Date().toISOString(),
+        userAgent: req.headers['user-agent']
+      });
       try {
         const loginType = req.body.loginType || 'customer';
 

@@ -27,6 +27,18 @@ export default function AdminDashboard() {
 
   const { data: merchants } = useQuery<SelectMerchant[]>({
     queryKey: ["/api/merchants"],
+    onSuccess: (data) => {
+      console.log("[AdminDashboard] Merchants loaded:", {
+        count: data?.length,
+        timestamp: new Date().toISOString()
+      });
+    },
+    onError: (error) => {
+      console.error("[AdminDashboard] Error loading merchants:", {
+        error,
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   const contractColumns: ColumnDef<SelectContract>[] = [
