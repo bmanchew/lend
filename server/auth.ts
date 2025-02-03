@@ -266,6 +266,16 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Invalid verification attempt" });
         }
 
+        // Verify this is a customer account
+        if (user.role !== 'customer') {
+          console.error('[AUTH] Non-customer attempting OTP login:', {
+            userId: user.id,
+            role: user.role,
+            phone: fullPhone
+          });
+          return done(null, false, { message: "Invalid account type for OTP login" });
+        }
+
         // Check if OTP is expired
         const now = new Date();
         const expiry = new Date(user.otpExpiry);
