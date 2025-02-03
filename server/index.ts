@@ -210,18 +210,20 @@ app.use(requestLogger);
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: true,
-      methods: ["GET", "POST"],
       credentials: true,
       allowedHeaders: ["*"]
     },
-    transports: ['polling', 'websocket'],
-    pingTimeout: 10000,
-    connectTimeout: 10000,
+    transports: ['websocket', 'polling'],
+    pingTimeout: 20000,
+    connectTimeout: 20000,
     debug: true,
-    pingInterval: 5000,
+    perMessageDeflate: {
+      threshold: 2048
+    },
     allowUpgrades: true,
-    upgradeTimeout: 10000,
-    maxHttpBufferSize: 1e6
+    upgradeTimeout: 15000,
+    maxHttpBufferSize: 1e6,
+    allowEIO3: true
   });
 
   // Detailed connection logging
