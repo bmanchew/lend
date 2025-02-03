@@ -209,18 +209,20 @@ app.use(requestLogger);
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.NODE_ENV === 'production' 
-        ? 'https://shi-fi-lend-brandon263.replit.app'
-        : '*',
+      origin: ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
       methods: ["GET", "POST"],
       credentials: true
     },
     path: "/socket.io/",
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],
     pingTimeout: 30000,
     pingInterval: 10000,
     maxHttpBufferSize: 1e6,
-    allowUpgrades: true
+    allowUpgrades: true,
+    cookie: {
+      secure: true,
+      sameSite: 'none'
+    }
   });
 
   // Enhanced error logging

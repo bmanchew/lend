@@ -817,6 +817,17 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add debug logging for auth routes
+  app.use('/api/auth', (req: Request, res: Response, next: NextFunction) => {
+    console.log('[Auth] Request:', {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+    next();
+  });
+
   apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber } = req.body;
@@ -1432,19 +1443,16 @@ export function registerRoutes(app: Express): Server {
   console.log('[WebSocket] Setting up Socket.IO server with enhanced logging');
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: true,
-      methods: ["GET", "POST", "OPTIONS"],
+      origin: ["https://shi-fi-lend-brandon263.replit.app", "https://replit.com"],
+      methods: ["GET", "POST"],
       credentials: true
     },
     path: "/socket.io/",
     transports: ['websocket', 'polling'],
-    secure: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 45000,
-    maxHttpBufferSize: 1e8,
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    maxHttpBufferSize: 1e6,
     allowUpgrades: true,
-    perMessageDeflate: true,
     cookie: {
       secure: true,
       sameSite: 'none'
