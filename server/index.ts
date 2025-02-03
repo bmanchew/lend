@@ -215,9 +215,10 @@ app.use(requestLogger);
       allowedHeaders: ["*"]
     },
     transports: ['polling', 'websocket'],
-    pingTimeout: 20000,
-    connectTimeout: 20000,
+    pingTimeout: 10000,
+    connectTimeout: 10000,
     debug: true,
+    pingInterval: 5000,
     allowUpgrades: true,
     upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6
