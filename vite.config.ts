@@ -1,3 +1,4 @@
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
@@ -7,32 +8,37 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 export default defineConfig({
   server: {
     port: 3002,
     host: '0.0.0.0'
   },
   plugins: [
-  react({
-    fastRefresh: true,
-    jsxRuntime: 'automatic',
-    babel: {
-      plugins: [
-        '@babel/plugin-transform-react-jsx'
-      ],
-      presets: [
-        '@babel/preset-react'
-      ]
-    }
-  }), 
-  runtimeErrorOverlay(), 
-  themePlugin()
-],
+    react({
+      fastRefresh: true,
+      jsxRuntime: 'automatic',
+      babel: {
+        plugins: [
+          '@babel/plugin-transform-react-jsx'
+        ],
+        presets: [
+          '@babel/preset-react'
+        ]
+      }
+    }), 
+    runtimeErrorOverlay(), 
+    themePlugin()
+  ],
   resolve: {
     alias: {
-      "@db": path.resolve(__dirname, "db"),
-      "@": path.resolve(__dirname, "client", "src"),
-    },
+      "@": path.resolve(__dirname, "client/src"),
+      "@components": path.resolve(__dirname, "client/src/components"),
+      "@hooks": path.resolve(__dirname, "client/src/hooks"), 
+      "@pages": path.resolve(__dirname, "client/src/pages"),
+      "@lib": path.resolve(__dirname, "client/src/lib"),
+      "@db": path.resolve(__dirname, "db")
+    }
   },
   root: path.resolve(__dirname, "client"),
   build: {
