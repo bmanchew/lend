@@ -9,11 +9,10 @@
   <body>
     <div id="root"></div>
     <script type="module">
-      import RefreshRuntime from '/@react-refresh'
+      import '@/index.css'
+      import 'vite/modulepreload-polyfill'
       window.$RefreshReg$ = () => {}
       window.$RefreshSig$ = () => (type) => type
-      window.RefreshRuntime = RefreshRuntime
-      RefreshRuntime.injectIntoGlobalHook(window)
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
