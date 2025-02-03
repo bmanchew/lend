@@ -224,22 +224,29 @@ export function setupAuth(app: Express) {
         });
 
         // Format phone consistently
-        const fullPhone = formatPhone(username);
+        const formattedPhone = formatPhone(username);
         console.log('[AUTH] Phone formatting:', {
           original: username,
-          formatted: fullPhone,
+          formatted: formattedPhone,
           timestamp: new Date().toISOString()
         });
 
-        // First find customer by exact phone match
-        let [user] = await dbInstance
+        // Ensure consistent phone format for lookup
+        const normalizedPhone = formattedPhone.replace(/\D/g, '').slice(-10);
+        const fullPhone = '+1' + normalizedPhone;
+
+        console.log('[AUTH] Looking up user with phone:', {
+          original: formattedPhone,
+          normalized: fullPhone,
+          timestamp: new Date().toISOString()
+        });
+
+        const [user] = await dbInstance
           .select()
           .from(users)
           .where(eq(users.phoneNumber, fullPhone))
-          .orderBy(sql`created_at DESC`)
           .limit(1);
 
-        // Log user lookup result
         console.log('[AUTH] User lookup result:', {
           phone: fullPhone,
           found: !!user,
@@ -247,6 +254,15 @@ export function setupAuth(app: Express) {
           role: user?.role,
           timestamp: new Date().toISOString()
         });
+
+        if (!user?.id) {
+          console.error('[AUTH] Invalid user data:', {
+            user,
+            phone: fullPhone,
+            timestamp: new Date().toISOString()
+          });
+          return done(null, false, { message: "User account not found" });
+        }
 
         console.log('[AUTH] User lookup with role check:', {
           phone: fullPhone,
@@ -287,7 +303,7 @@ export function setupAuth(app: Express) {
               phoneNumber: fullPhone
             })
             .returning();
-            
+
           console.log('[AUTH] Created new customer account:', {
             userId: user.id,
             phone: fullPhone,

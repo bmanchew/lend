@@ -128,6 +128,11 @@ export default function CustomerLogin() {
         return;
       }
 
+      console.log('[CustomerLogin] Attempting login with:', {
+        phone: phoneNumber,
+        timestamp: new Date().toISOString()
+      });
+
       const response = await axios.post("/api/login", {
         username: phoneNumber,
         password: otp,
@@ -135,7 +140,15 @@ export default function CustomerLogin() {
       });
 
       const userData = response.data;
-      console.log("[CustomerLogin] Login response:", userData);
+      console.log("[CustomerLogin] Login response:", {
+        ...userData,
+        timestamp: new Date().toISOString()
+      });
+
+      if (!userData?.id) {
+        console.error('[CustomerLogin] Missing user ID in response:', userData);
+        throw new Error('Invalid login response - missing user ID');
+      }
 
       console.log('[CustomerLogin] Validating user data:', {
         userData,
