@@ -177,13 +177,18 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // First find exact user by phone
+        // First find customer by phone with role check
         let [user] = await dbInstance
           .select()
           .from(users)
-          .where(eq(users.phoneNumber, fullPhone));
+          .where(
+            and(
+              eq(users.phoneNumber, fullPhone),
+              eq(users.role, 'customer')
+            )
+          );
 
-        console.log('[AUTH] User lookup result:', {
+        console.log('[AUTH] Customer lookup result:', {
           phone: fullPhone,
           found: !!user,
           userId: user?.id,

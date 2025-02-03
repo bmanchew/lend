@@ -21,7 +21,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow(),
   plaidAccessToken: varchar('plaid_access_token', { length: 255 }),
   kycStatus: varchar('kyc_status', { length: 50 }),
-  phoneNumber: varchar('phone_number', { length: 50 }),
+  phoneNumber: varchar('phone_number', { length: 12 }).unique(), // +1XXXXXXXXXX format
   lastOtpCode: varchar('last_otp_code', { length: 6 }),
   otpExpiry: timestamp('otp_expiry'),
   faceIdHash: text('face_id_hash')
