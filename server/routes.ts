@@ -1296,16 +1296,31 @@ export function registerRoutes(app: Express): Server {
       allowedHeaders: ["*"]
     },
     path: "/socket.io/",
-    transports: ["polling", "websocket"],
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    upgradeTimeout: 30000,
-    allowUpgrades: true,
+    transports: ["websocket", "polling"],
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    upgradeTimeout: 15000,
     maxHttpBufferSize: 1e6,
-    perMessageDeflate: {
-      threshold: 2048
-    },
-    connectTimeout: 45000
+    connectTimeout: 20000,
+    allowEIO3: true,
+    perMessageDeflate: false
+  });
+
+  // Enhanced WebSocket logging
+  io.engine.on("initial_headers", (headers, req) => {
+    console.log("[WebSocket] Initial headers:", {
+      time: new Date().toISOString(),
+      address: req.address,
+      headers: headers
+    });
+  });
+
+  io.engine.on("headers", (headers, req) => {
+    console.log("[WebSocket] Handshake headers:", {
+      time: new Date().toISOString(),
+      address: req.address,
+      headers: headers
+    });
   });
 
   // Debug logging for connection events

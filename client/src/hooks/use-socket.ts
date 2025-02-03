@@ -63,13 +63,34 @@ export function useSocket(merchantId: number) {
     });
 
     socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      console.error('[Socket] Connection error:', {
+        error: error.message,
+        time: new Date().toISOString(),
+        transportType: socket.io.engine.transport.name
+      });
       handleReconnect();
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
+      console.log('[Socket] Disconnected:', {
+        reason,
+        time: new Date().toISOString(),
+        wasConnected: socket.connected,
+        attemptNumber: reconnectAttempts.current
+      });
       handleReconnect();
+    });
+
+    socket.io.on("reconnect_attempt", (attempt) => {
+      console.log('[Socket] Reconnection attempt:', {
+        attempt,
+        time: new Date().toISOString()
+      });
+    });
+
+    socket.io.on("reconnect_failed", () => {
+      console.error('[Socket] Reconnection failed after max attempts');
+      socket.disconnect();
     });
 
     return () => {
