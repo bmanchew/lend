@@ -75,18 +75,18 @@ app.use((req, res, next) => {
   const httpServer = registerRoutes(app);
   const io = new Server(httpServer, {
     cors: {
-      origin: "*", 
+      origin: "*",
       methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["*"],
       credentials: true
     },
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     allowEIO3: true,
-    allowUpgrades: true,
-    upgradeTimeout: 10000,
-    pingInterval: 10000,
-    pingTimeout: 5000,
-    cookie: false
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e8,
+    path: '/socket.io'
   });
 
   io.on('connection', (socket) => {
