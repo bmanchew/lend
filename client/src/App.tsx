@@ -49,13 +49,12 @@ function AppRouter() {
   console.log('[Router] Rendering AppRouter');
 
   // Structured route configurations
-  const routes = {
-    auth: [
-      { path: "/login/customer", element: <CustomerLogin />, title: "Customer Login" },
-      { path: "/auth/customer-login", element: <CustomerLogin />, title: "Customer Login" },
-      { path: "/login/merchant", element: <MerchantLogin />, title: "Merchant Login" },
-      { path: "/login/admin", element: <AdminLogin />, title: "Admin Login" },
-    ],
+  const authRoutes = [
+    { path: "/login/customer", element: <CustomerLogin />, title: "Customer Login" },
+    { path: "/auth/customer-login", element: <CustomerLogin />, title: "Customer Login" },
+    { path: "/login/merchant", element: <MerchantLogin />, title: "Merchant Login" },
+    { path: "/login/admin", element: <AdminLogin />, title: "Admin Login" },
+  ];
 
   const protectedRoutes = [
     { 
