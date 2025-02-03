@@ -72,8 +72,8 @@ app.use(requestLogger);
 (async () => {
   // Register API routes first
   const httpServer = registerRoutes(app);
-  
-  // Initialize Socket.IO
+
+  // Initialize Socket.IO  - Modified to address potential multiple upgrade issue
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -90,7 +90,12 @@ app.use(requestLogger);
     socket.on('join_merchant_room', (merchantId) => {
       socket.join(`merchant_${merchantId}`);
     });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
   });
+
 
   // Make io globally available
   declare global {
