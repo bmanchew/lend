@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { db, checkConnection } from "@db";
+import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
@@ -195,7 +195,8 @@ export function registerRoutes(app: Express): Server {
       }
 
       console.log("[Merchant Lookup] Executing query for userId:", userId);
-      const merchantResults = await db
+      const dbClient = await db();
+      const merchantResults = await dbClient
         .select()
         .from(merchants)
         .where(eq(merchants.userId, userId))
@@ -374,9 +375,11 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
-      const merchantPrograms = await db.query.programs.findMany({
-        where: eq(programs.merchantId, merchantId)
-      });
+      const dbClient = await db();
+      const merchantPrograms = await dbClient
+        .select()
+        .from(programs)
+        .where(eq(programs.merchantId, merchantId));
       res.json(merchantPrograms);
     } catch (err:any) {
       console.error("Error fetching merchant programs:", err);
@@ -468,7 +471,8 @@ export function registerRoutes(app: Express): Server {
         amount,
         fundingAmount: req.body.fundingAmount
       });
-      const [newContract] = await db
+      const dbClient = await db();
+      const [newContract] = await dbClient
         .insert(contracts)
         .values({
           merchantId,
@@ -653,19 +657,6 @@ export function registerRoutes(app: Express): Server {
             otpExpiry: otpExpiry
           })
           .where(eq(users.id, user.id));
-      }
-
-      // Check if user exists and verify role
-      const existingUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, phoneNumber))
-        .limit(1)
-        .then(rows => rows[0]);
-
-      if (existingUser && existingUser.role !== 'customer') {
-        console.error('[Routes] Attempted OTP send to non-customer account:', phoneNumber);
-        return res.status(403).json({ error: "Invalid authentication method for this account type" });
       }
 
       // Send OTP via SMS
@@ -861,14 +852,8 @@ export function registerRoutes(app: Express): Server {
     });
 
     // Store application attempt in webhook_events table
-    console.log('[Webhook] Starting event insertion');
-
-    const [event] = await db
-      .insert(webhookEvents)
-      .values({
+    const event = await db.insert(webhookEvents).values({
         eventType: 'loan_application_attempt',
-        sessionId: `loan_app_${Date.now()}`, // Ensure unique session ID
-        status: 'pending',
         payload: JSON.stringify({
           merchantId: req.params.id,
           phone: req.body.phone,
@@ -879,7 +864,8 @@ export function registerRoutes(app: Express): Server {
           userAgent: req.headers['user-agent'],
           stage: 'initiation',
           requestId
-        })
+        }),
+        status: 'received'
       }).returning();
 
       // Track merchant activity
@@ -982,35 +968,20 @@ export function registerRoutes(app: Express): Server {
         if (existingUser.name !== `${firstName} ${lastName}`) {
           [user] = await db
             .update(users)
-            .set({ 
-              name: `${firstName} ${lastName}`,
-              role: 'borrower'
-            })
+            .set({ name: `${firstName} ${lastName}` })
             .where(eq(users.id, existingUser.id))
             .returning();
         } else {
           user = existingUser;
         }
-            [user] = await db
-          .update(users)
-          .set({ name: `${firstName} ${lastName}` })
-          .where(eq(users.id, existingUser.id))
-          .returning();
       } else {
         // Create new user with unique email based on phone
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
-        const fullPhone = '+1' + normalizedPhone.slice(-10);
+        const fullPhone = '+1' + normalizedPhone;
         const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
-        
-        console.log('[User Creation] Creating new borrower:', {
-          phone: fullPhone,
-          name: `${firstName} ${lastName}`
-        });
-        
         [user] = await db
           .insert(users)
           .values({
-            username: normalizedPhone,
             username: normalizedPhone,
             password: Math.random().toString(36).slice(-8),
             email: uniqueEmail,
@@ -1070,32 +1041,16 @@ export function registerRoutes(app: Express): Server {
 
         if (result.success) {
           debugLog('SMS sent successfully');
-          // Create contract record
-          const [contract] = await db
-            .insert(contracts)
-            .values({
-              merchantId,
-              customerId: user.id,
-              contractNumber: `LN${Date.now()}`,
-              amount: parsedAmount,
-              term: 36, // Default term
-              interestRate: 24.99, // Default rate
-              status: 'pending_review',
-              borrowerEmail: user.email || `${phoneDigits}@temp.shifi.com`,
-              borrowerPhone: formattedPhone
-            })
-            .returning();
-
           // Emit contract update event to merchant's room
           global.io.to(`merchant_${merchantId}`).emit('contract_update', {
             type: 'new_application',
-            contractId: contract.id,
-            status: 'pending_review'
+            contractId: newContract[0].id,
+            status: 'draft'
           });
           res.json({ 
             status: 'success',
             message: 'Loan application invitation sent successfully',
-            contract: newContract
+            applicationUrl
           });
         } else {
           debugLog('SMS failed to send:', result.error);
@@ -1113,127 +1068,6 @@ export function registerRoutes(app: Express): Server {
       }
     } catch (err) {
       console.error('Error sending loan application invitation:', err);
-      next(err);
-    }
-  });
-
-  apiRouter.post("/contracts/:id/verify", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { otp } = req.body;
-      const contractId = parseInt(req.params.id);
-
-      const [contract] = await db
-        .select()
-        .from(contracts)
-        .where(eq(contracts.id, contractId))
-        .limit(1);
-
-      if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' });
-      }
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, contract.borrowerPhone))
-        .limit(1);
-
-      if (!user || !user.lastOtpCode || otp !== user.lastOtpCode) {
-        return res.status(400).json({ error: 'Invalid verification code' });
-      }
-
-      // Update contract status and clear OTP
-      await db.transaction(async (tx) => {
-        await tx
-          .update(contracts)
-          .set({ status: 'verified' })
-          .where(eq(contracts.id, contractId));
-
-        await tx
-          .update(users)
-          .set({ lastOtpCode: null, otpExpiry: null })
-          .where(eq(users.id, user.id));
-      });
-
-      // Redirect to KYC after verification
-      res.json({ 
-        status: 'success',
-        nextStep: 'kyc',
-        redirectUrl: `/apply/${user.id}?verification=true` 
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-            contract,
-            message: 'Loan application invitation sent successfully'
-          });
-        } else {
-          debugLog('SMS failed to send:', result.error);
-          res.status(400).json({ 
-            error: 'Failed to send loan application invitation',
-            details: result.error || 'SMS service returned failure'
-          });
-        }
-      } catch (err) {
-        console.error('Error in send-loan-application:', err);
-        res.status(500).json({
-          error: 'Failed to send loan application invitation',
-          details: err.message
-        });
-      }
-    } catch (err) {
-      console.error('Error sending loan application invitation:', err);
-      next(err);
-    }
-  });
-
-  apiRouter.post("/contracts/:id/verify", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { otp } = req.body;
-      const contractId = parseInt(req.params.id);
-
-      const [contract] = await db
-        .select()
-        .from(contracts)
-        .where(eq(contracts.id, contractId))
-        .limit(1);
-
-      if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' });
-      }
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, contract.borrowerPhone))
-        .limit(1);
-
-      if (!user || !user.lastOtpCode || otp !== user.lastOtpCode) {
-        return res.status(400).json({ error: 'Invalid verification code' });
-      }
-
-      // Update contract status and clear OTP
-      await db.transaction(async (tx) => {
-        await tx
-          .update(contracts)
-          .set({ status: 'verified' })
-          .where(eq(contracts.id, contractId));
-
-        await tx
-          .update(users)
-          .set({ lastOtpCode: null, otpExpiry: null })
-          .where(eq(users.id, user.id));
-      });
-
-      // Redirect to KYC after verification
-      res.json({ 
-        status: 'success',
-        nextStep: 'kyc',
-        redirectUrl: `/apply/${user.id}?verification=true` 
-      });
-    } catch (err) {
       next(err);
     }
   });
@@ -1275,5 +1109,17 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
+  const io = new SocketIOServer(httpServer); // Initialize Socket.IO server
+
+  io.on('connection', (socket) => {
+    console.log('Socket.IO client connected:', socket.id);
+
+    socket.on('disconnect', () => {
+      console.log('Socket.IO client disconnected:', socket.id);
+    });
+    // Add logic to join rooms based on merchant ID.  This would need to be added to your frontend code as well.  For example, in your merchant's dashboard:  socket.emit('join', `merchant_${merchantId}`);
+
+
+  });
   return httpServer;
 }
