@@ -147,6 +147,22 @@ interface RouteConfig {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+
+  apiRouter.post("/analyze-code", async (req: Request, res: Response) => {
+    try {
+      const { code, language } = req.body;
+      if (!code || !language) {
+        return res.status(400).json({ error: 'Code and language are required' });
+      }
+
+      const analysis = await CodeReviewService.analyzeInRealTime(code, language);
+      res.json(analysis);
+    } catch (err: any) {
+      console.error('Code analysis error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
       return res.status(500).json({ 
         status: "error", 
         message: "OpenAI API key not configured" 

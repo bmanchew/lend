@@ -6,7 +6,66 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-export class CodeReviewService {
+export interface AnalysisResult {
+  issues: Array<{
+    severity: 'error' | 'warning' | 'info';
+    message: string;
+    line?: number;
+    column?: number;
+  }>;
+  suggestions: string[];
+  summary: string;
+}
+
+class CodeReviewService {
+  static async analyzeInRealTime(code: string, language: string): Promise<AnalysisResult> {
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{
+          role: "system",
+          content: "Analyze this code in real-time for potential issues, bugs, and improvements. Focus on security, performance, and best practices."
+        }, {
+          role: "user",
+          content: `Please analyze this ${language} code:\n\n${code}`
+        }],
+        temperature: 0.3,
+        max_tokens: 1000
+      });
+
+      const analysis = response.choices[0].message.content || '';
+      
+      // Parse the analysis into structured format
+      const issues: AnalysisResult['issues'] = [];
+      const suggestions: string[] = [];
+      let summary = '';
+
+      try {
+        const parsed = JSON.parse(analysis);
+        return parsed as AnalysisResult;
+      } catch {
+        // If not JSON, provide basic analysis
+        return {
+          issues: [{
+            severity: 'info',
+            message: analysis
+          }],
+          suggestions: [],
+          summary: analysis.split('\n')[0] || 'Analysis completed'
+        };
+      }
+    } catch (err: any) {
+      logger.error('Real-time code analysis error:', err);
+      return {
+        issues: [{
+          severity: 'error',
+          message: err.message
+        }],
+        suggestions: [],
+        summary: 'Analysis failed'
+      };
+    }
+  }
   static async reviewCode(code: string, language: string) {
     try {
       const response = await openai.chat.completions.create({
