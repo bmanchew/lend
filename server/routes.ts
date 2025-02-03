@@ -1170,6 +1170,55 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.post("/contracts/:id/verify", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { otp } = req.body;
+      const contractId = parseInt(req.params.id);
+
+      const [contract] = await db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.id, contractId))
+        .limit(1);
+
+      if (!contract) {
+        return res.status(404).json({ error: 'Contract not found' });
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, contract.borrowerPhone))
+        .limit(1);
+
+      if (!user || !user.lastOtpCode || otp !== user.lastOtpCode) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      // Update contract status and clear OTP
+      await db.transaction(async (tx) => {
+        await tx
+          .update(contracts)
+          .set({ status: 'verified' })
+          .where(eq(contracts.id, contractId));
+
+        await tx
+          .update(users)
+          .set({ lastOtpCode: null, otpExpiry: null })
+          .where(eq(users.id, user.id));
+      });
+
+      // Redirect to KYC after verification
+      res.json({ 
+        status: 'success',
+        nextStep: 'kyc',
+        redirectUrl: `/apply/${user.id}?verification=true` 
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   class APIError extends Error {
     constructor(public status: number, message: string, public code?: string) {
       super(message);
