@@ -214,14 +214,15 @@ app.use(requestLogger);
       methods: ["GET", "POST"],
       allowedHeaders: ["*"]
     },
-    allowEIO3: true,
-    transports: ['polling', 'websocket'],
-    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
     pingTimeout: 20000,
-    connectTimeout: 10000,
-    upgradeTimeout: 10000,
+    connectTimeout: 20000,
+    upgradeTimeout: 15000,
     allowUpgrades: true,
     rememberUpgrade: true,
+    perMessageDeflate: {
+      threshold: 2048
+    },
     maxHttpBufferSize: 1e6,
     cookie: {
       name: "io",
