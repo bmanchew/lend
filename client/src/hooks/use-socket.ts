@@ -1,2 +1,5 @@
-// This file can be safely removed
-export {};
+
+// Socket.io functionality removed
+export const useSocket = () => {
+  return null;
+};
