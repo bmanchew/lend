@@ -7,7 +7,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
 import { db } from "@db";
-const dbInstance = await db(); // Initialize dbInstance here
+const dbInstance = db; // Use db object directly
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms"; // Added import for sms service
