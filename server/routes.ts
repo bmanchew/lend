@@ -879,8 +879,7 @@ export function registerRoutes(app: Express): Server {
           userAgent: req.headers['user-agent'],
           stage: 'initiation',
           requestId
-        }),
-        status: 'received'
+        })
       }).returning();
 
       // Track merchant activity
