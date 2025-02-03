@@ -148,15 +148,25 @@ export default function CustomerLogin() {
           });
           return;
         }
+        
+        // Set storage values before redirect
         localStorage.setItem('temp_user_id', userId);
         sessionStorage.setItem('current_user_id', userId);
         setUser(userData);
-        console.log('[CustomerLogin] Setting user ID and redirecting:', {
+        
+        // Log the state before redirect
+        console.log('[CustomerLogin] User authenticated:', {
           userId,
           userData,
-          role: userData.role
+          role: userData.role,
+          localStorage: localStorage.getItem('temp_user_id'),
+          sessionStorage: sessionStorage.getItem('current_user_id')
         });
-        window.location.href = `/apply/${userId}?verification=true&from=login`;
+
+        // Use setTimeout to ensure storage is set before redirect
+        setTimeout(() => {
+          window.location.href = `/apply/${userId}?verification=true&from=login`;
+        }, 100);
       } else {
         toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
       }
