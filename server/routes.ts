@@ -374,8 +374,7 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
-      const dbClient = await db();
-      const merchantPrograms = await dbClient
+      const merchantPrograms = await db
         .select()
         .from(programs)
         .where(eq(programs.merchantId, merchantId));
@@ -470,8 +469,7 @@ export function registerRoutes(app: Express): Server {
         amount,
         fundingAmount: req.body.fundingAmount
       });
-      const dbClient = await db();
-      const [newContract] = await dbClient
+      const [newContract] = await db
         .insert(contracts)
         .values({
           merchantId,
@@ -865,10 +863,8 @@ export function registerRoutes(app: Express): Server {
 
     // Store application attempt in webhook_events table
     console.log('[Webhook] Starting event insertion');
-    
-    const dbClient = await db();
-    console.log('[Webhook] Inserting event');
-    const [event] = await dbClient
+
+    const [event] = await db
       .insert(webhookEvents)
       .values({
         eventType: 'loan_application_attempt',
