@@ -9,19 +9,21 @@ export async function setupVite(app: express.Application, httpServer: Server) {
       middlewareMode: true,
       hmr: {
         server: httpServer,
-        port: process.env.VITE_PORT || 3000,
+        port: 3002,
         protocol: 'ws',
         host: '0.0.0.0',
-        timeout: 120000,
+        timeout: 60000,
         overlay: {
           errors: true,
-          warnings: true
+          warnings: false
         },
-        clientPort: process.env.VITE_PORT || 3000
+        clientPort: 3002,
+        path: '/__hmr'
       },
       watch: {
         usePolling: false,
-        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**', '**/attached_assets/**'],
+        interval: 1000
       }
     },
     optimizeDeps: {
