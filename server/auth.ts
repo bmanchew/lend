@@ -633,6 +633,11 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/login", (req, res, next) => {
+    console.log('[Auth] Login request received:', {
+      body: req.body,
+      path: req.path,
+      timestamp: new Date().toISOString()
+    });
     passport.authenticate("local", (err: any, user: User | false, info: any) => {
       console.log('Auth attempt:', {
         body: req.body,
