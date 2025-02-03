@@ -141,6 +141,31 @@ const loginSchema = z.object({
 });
 
 export function setupAuth(app: Express) {
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const validPassword = await authService.verifyPassword(password, user.password);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = authService.generateToken(user);
+      res.json({ token, user });
+    } catch (err) {
+      console.error('Login error:', err);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
   // Security headers
   app.use(helmet());
 
