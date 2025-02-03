@@ -31,12 +31,16 @@ toobusy.interval(500); // Check less frequently
 
 const app = express();
 import { createServer } from 'net';
-const getAvailablePort = async (startPort: number): Promise<number> => {
+const getAvailablePort = async (startPort: number, maxAttempts = 10): Promise<number> => {
+  if (maxAttempts <= 0) {
+    throw new Error('Could not find an available port after maximum attempts');
+  }
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.unref();
     server.on('error', () => {
-      resolve(getAvailablePort(startPort + 1));
+      console.log(`Port ${startPort} in use, trying ${startPort + 1}...`);
+      resolve(getAvailablePort(startPort + 1, maxAttempts - 1));
     });
     server.listen(startPort, '0.0.0.0', () => {
       const { port } = server.address();
