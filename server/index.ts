@@ -13,16 +13,18 @@ const limiter = rateLimit({
 });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const VITE_PORT = process.env.VITE_PORT || 3000;
+const PORT = process.env.PORT || 3000;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CLIENT_URL || 'https://shi-fi-lend-brandon263.replit.app'
-      : 'https://0.0.0.0:3000',
-    credentials: true
+      ? process.env.CLIENT_URL 
+      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev',
+    credentials: true,
+    methods: ['GET', 'POST']
   },
+  path: '/socket.io/',
+  transports: ['websocket', 'polling'],
   path: '/socket.io/',
   transports: ['websocket'],
   cookie: {
