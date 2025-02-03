@@ -214,13 +214,42 @@ app.use(requestLogger);
       credentials: true,
       allowedHeaders: ["*"]
     },
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
     pingTimeout: 30000,
     connectTimeout: 30000,
     debug: true,
     allowUpgrades: true,
     upgradeTimeout: 10000,
     maxHttpBufferSize: 1e6
+  });
+
+  // Detailed connection logging
+  io.engine.on("connection", (socket) => {
+    console.log("[WebSocket] New connection:", {
+      id: socket.id,
+      transport: socket.transport.name,
+      headers: socket.request.headers,
+      ip: socket.request.connection.remoteAddress,
+      time: new Date().toISOString()
+    });
+  });
+
+  io.engine.on("upgrade", (req) => {
+    console.log("[WebSocket] Upgrade attempt:", {
+      headers: req.headers,
+      url: req.url,
+      method: req.method,
+      time: new Date().toISOString()
+    });
+  });
+
+  io.engine.on("upgradeError", (err) => {
+    console.error("[WebSocket] Upgrade failed:", {
+      error: err.message,
+      code: err.code,
+      type: err.type,
+      time: new Date().toISOString()
+    });
   });
 
   // Improved WebSocket error handling

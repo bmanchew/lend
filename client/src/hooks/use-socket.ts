@@ -17,9 +17,11 @@ export function useSocket(merchantId: number) {
         timestamp: new Date().toISOString()
       });
 
+      console.log('[Socket] Initializing socket connection');
+      
       socketRef.current = io({
         path: '/socket.io/',
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
@@ -27,6 +29,32 @@ export function useSocket(merchantId: number) {
         forceNew: true,
         autoConnect: true,
         withCredentials: true
+      });
+
+      // Log socket connection state
+      socketRef.current.on('connect_error', (error) => {
+        console.error('[Socket] Connection error:', {
+          message: error.message,
+          type: error.type,
+          description: error.description,
+          time: new Date().toISOString(),
+          transport: socketRef.current?.io?.engine?.transport?.name
+        });
+      });
+
+      socketRef.current.io.engine.on('upgrade', () => {
+        console.log('[Socket] Transport upgraded:', {
+          transport: socketRef.current?.io?.engine?.transport?.name,
+          time: new Date().toISOString()
+        });
+      });
+
+      socketRef.current.io.engine.on('upgradeError', (err) => {
+        console.error('[Socket] Upgrade error:', {
+          error: err,
+          transport: socketRef.current?.io?.engine?.transport?.name,
+          time: new Date().toISOString()
+        });
       });
 
       // Debug transport state
