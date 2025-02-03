@@ -148,25 +148,48 @@ export default function CustomerLogin() {
           });
           return;
         }
-        
-        // Set storage values before redirect
-        localStorage.setItem('temp_user_id', userId);
-        sessionStorage.setItem('current_user_id', userId);
-        setUser(userData);
-        
-        // Log the state before redirect
-        console.log('[CustomerLogin] User authenticated:', {
-          userId,
-          userData,
-          role: userData.role,
-          localStorage: localStorage.getItem('temp_user_id'),
-          sessionStorage: sessionStorage.getItem('current_user_id')
-        });
 
-        // Use setTimeout to ensure storage is set before redirect
-        setTimeout(() => {
-          window.location.href = `/apply/${userId}?verification=true&from=login`;
-        }, 100);
+        try {
+          // Set storage synchronously
+          localStorage.setItem('temp_user_id', userId);
+          sessionStorage.setItem('current_user_id', userId);
+          setUser(userData);
+
+          // Verify storage was set
+          const storedTempId = localStorage.getItem('temp_user_id');
+          const storedCurrentId = sessionStorage.getItem('current_user_id');
+
+          console.log('[CustomerLogin] Storage verification:', {
+            userId,
+            storedTempId,
+            storedCurrentId,
+            timestamp: new Date().toISOString()
+          });
+
+          if (storedTempId !== userId || storedCurrentId !== userId) {
+            throw new Error('Storage validation failed');
+          }
+
+          // Use timeout to ensure storage is committed
+          setTimeout(() => {
+            console.log('[CustomerLogin] Redirecting with verified storage:', {
+              userId,
+              role: userData.role,
+              localStorage: localStorage.getItem('temp_user_id'),
+              sessionStorage: sessionStorage.getItem('current_user_id'),
+              timestamp: new Date().toISOString()
+            });
+            window.location.href = `/apply/${userId}?verification=true&from=login`;
+          }, 100);
+
+        } catch (error) {
+          console.error('[CustomerLogin] Storage error:', error);
+          toast({
+            title: "Error",
+            description: "Failed to save session data",
+            variant: "destructive"
+          });
+        }
       } else {
         toast({ title: "Error", description: "Please try entering the code again", variant: "destructive" });
       }
