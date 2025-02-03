@@ -90,20 +90,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     onSuccess: (user: SelectUser) => {
       if (!user || !user.id) {
         console.error('[Auth] Invalid user data received:', user);
+        toast({
+          title: "Login Error",
+          description: "Invalid user data received from server",
+          variant: "destructive",
+        });
         return;
       }
+
       console.log('[Auth] Login successful:', {
         userId: user.id,
         role: user.role,
         timestamp: new Date().toISOString()
       });
-      // Set user data in query client
-      queryClient.setQueryData(["/api/user"], user);
-      // Store user ID in session
-      sessionStorage.setItem('current_user_id', user.id.toString());
-      // Redirect based on role
-      const targetPath = user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`;
-      setLocation(targetPath);
+
+      try {
+        // Set user data in query client
+        queryClient.setQueryData(["/api/user"], user);
+        // Store user ID in session
+        sessionStorage.setItem('current_user_id', user.id.toString());
+        // Redirect based on role
+        const targetPath = user.role === 'merchant' ? '/merchant/dashboard' : `/${user.role}`;
+        setLocation(targetPath);
+      } catch (err) {
+        console.error('[Auth] Error setting user session:', err);
+        toast({
+          title: "Login Error",
+          description: "Failed to initialize user session",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
