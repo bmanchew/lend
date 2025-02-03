@@ -13,12 +13,13 @@ export function useSocket(merchantId: number) {
     // Initialize socket with proper error handling
     socketRef.current = io({
       path: '/socket.io/',
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      timeout: 20000,
-      forceNew: true
+      timeout: 60000,
+      forceNew: true,
+      upgrade: true
     });
 
     const socket = socketRef.current;
