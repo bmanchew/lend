@@ -963,14 +963,23 @@ export function registerRoutes(app: Express): Server {
 
       // Always use existing user if found
       let user;
+      let user;
       if (existingUser) {
         // Update existing user's name if it has changed
         if (existingUser.name !== `${firstName} ${lastName}`) {
           [user] = await db
             .update(users)
-            .set({ name: `${firstName} ${lastName}` })
+            .set({ 
+              name: `${firstName} ${lastName}`,
+              role: 'customer' // Ensure role is set
+            })
             .where(eq(users.id, existingUser.id))
             .returning();
+          
+          logger.info('Updated existing user:', {
+            userId: user.id,
+            phone: formattedPhone
+          });
         } else {
           user = existingUser;
         }
@@ -979,17 +988,24 @@ export function registerRoutes(app: Express): Server {
         const normalizedPhone = (borrowerPhone || '').toString().replace(/\D/g, '');
         const fullPhone = '+1' + normalizedPhone;
         const uniqueEmail = `${normalizedPhone}@temp.shifi.com`;
+        
         [user] = await db
           .insert(users)
           .values({
             username: normalizedPhone,
-            password: Math.random().toString(36).slice(-8),
+            password: await authService.hashPassword(Math.random().toString(36).slice(-8)),
             email: uniqueEmail,
             name: `${firstName} ${lastName}`,
             role: 'customer',
-            phoneNumber: fullPhone,            kycStatus: 'pending'
+            phoneNumber: fullPhone,
+            kycStatus: 'pending'
           })
           .returning();
+
+        logger.info('Created new user:', {
+          userId: user.id,
+          phone: fullPhone
+        });
       }
 
       console.log('Created/Updated user account:', user);

@@ -65,13 +65,26 @@ export const smsService = {
     return Math.random().toString().substring(2, 8);
   },
 
-  async sendLoanApplicationLink(phone: string, merchantName: string, url: string): Promise<{success: boolean, error?: string}> {
+  async sendLoanApplicationLink(phone: string, merchantName: string, url: string, userId?: number): Promise<{success: boolean, error?: string}> {
     try {
-      const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${url}`;
-      await this.sendSMS(phone, message);
-      return { success: true };
+      // Add userId to URL if provided
+      const finalUrl = userId ? `${url}&userId=${userId}` : url;
+      const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${finalUrl}`;
+      
+      const sent = await this.sendSMS(phone, message);
+      logger.info('Loan application SMS sent:', {
+        phone,
+        userId,
+        success: sent
+      });
+      
+      return { success: sent };
     } catch (error) {
-      logger.error('Error sending loan application link:', error);
+      logger.error('Error sending loan application link:', {
+        error,
+        phone,
+        userId 
+      });
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
