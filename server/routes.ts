@@ -1001,6 +1001,12 @@ export function registerRoutes(app: Express): Server {
         debugLog('Invalid merchant ID:', req.params.id);
         return res.status(400).json({ error: 'Invalid merchant ID' });
       }<replit_final_file>
+      const [merchantRecord] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId))
+        .limit(1);
+
       if (!merchantRecord) {
         debugLog('Merchant not found:', merchantId);
         return res.status(404).json({ error: 'Merchant not found' });
