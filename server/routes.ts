@@ -375,9 +375,11 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
-      const merchantPrograms = await db.query.programs.findMany({
-        where: eq(programs.merchantId, merchantId),
-      });
+      const dbClient = await db();
+      const merchantPrograms = await dbClient
+        .select()
+        .from(programs)
+        .where(eq(programs.merchantId, merchantId));
       res.json(merchantPrograms);
     } catch (err:any) {
       console.error("Error fetching merchant programs:", err);
