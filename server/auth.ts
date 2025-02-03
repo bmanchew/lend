@@ -231,18 +231,22 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // First find customer by exact phone match with strict role validation
+        // First find customer by exact phone match
         let [user] = await dbInstance
           .select()
           .from(users)
-          .where(
-            and(
-              eq(users.phoneNumber, fullPhone),
-              sql`role = 'customer'`
-            )
-          )
+          .where(eq(users.phoneNumber, fullPhone))
           .orderBy(sql`created_at DESC`)
           .limit(1);
+
+        // Log user lookup result
+        console.log('[AUTH] User lookup result:', {
+          phone: fullPhone,
+          found: !!user,
+          userId: user?.id,
+          role: user?.role,
+          timestamp: new Date().toISOString()
+        });
 
         console.log('[AUTH] User lookup with role check:', {
           phone: fullPhone,
@@ -270,21 +274,30 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        console.log('[AUTH] Customer lookup result:', {
-          phone: fullPhone,
-          found: !!user,
-          userId: user?.id,
-          role: user?.role,
-          timestamp: new Date().toISOString()
-        });
-
-        // Single consolidated role and user validation
-        if (!user || !user.id || user.role !== 'customer') {
-          console.error('[AUTH] Invalid user or role:', {
+        // Create customer account if doesn't exist
+        if (!user) {
+          [user] = await dbInstance
+            .insert(users)
+            .values({
+              username: fullPhone.replace(/\D/g, ''),
+              password: await hashPassword(Math.random().toString(36).slice(-8)),
+              email: `${fullPhone.replace(/\D/g, '')}@temp.shifi.com`,
+              name: '',
+              role: 'customer',
+              phoneNumber: fullPhone
+            })
+            .returning();
+            
+          console.log('[AUTH] Created new customer account:', {
+            userId: user.id,
             phone: fullPhone,
-            userId: user?.id,
-            role: user?.role,
             timestamp: new Date().toISOString()
+          });
+        } else if (user.role !== 'customer') {
+          console.error('[AUTH] Non-customer attempting OTP login:', {
+            userId: user.id,
+            role: user.role,
+            phone: fullPhone
           });
           return done(null, false, { message: "Invalid account type for OTP login" });
         }
