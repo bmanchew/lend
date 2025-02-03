@@ -29,8 +29,8 @@ const logger = winston.createLogger({
 toobusy.maxLag(70);
 
 const app = express();
-const PORT = process.env.PORT || 3000;  // Main API server
-const VITE_PORT = process.env.VITE_PORT || 3002;  // Client dev server
+const PORT = process.env.PORT || 5000;  // Main API server on port 5000
+const VITE_PORT = process.env.VITE_PORT || 3000;  // Client dev server on default Vite port
 
 // Memory monitoring
 setInterval(() => {
