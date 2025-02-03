@@ -12,19 +12,34 @@ export function useSocket(merchantId: number) {
     if (!merchantId) return;
 
     const initSocket = () => {
+      console.log('[Socket] Initializing with config:', {
+        merchantId,
+        timestamp: new Date().toISOString()
+      });
+
       socketRef.current = io({
-        path: '/socket.io',
-        transports: ['websocket', 'polling'],
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: Infinity,
-        timeout: 20000,
+        path: '/socket.io/',
+        transports: ['polling', 'websocket'],
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
+        reconnectionAttempts: 5,
+        timeout: 45000,
         forceNew: true,
         autoConnect: true,
-        withCredentials: true,
-        extraHeaders: {
-          'X-Merchant-ID': merchantId.toString()
-        }
+        upgrade: true
+      });
+
+      // Debug transport state
+      socketRef.current.on('upgrading', (transport) => {
+        console.log('[Socket] Upgrading transport:', transport);
+      });
+
+      socketRef.current.on('upgrade', (transport) => {
+        console.log('[Socket] Transport upgraded to:', transport);
+      });
+
+      socketRef.current.on('upgradeError', (err) => {
+        console.error('[Socket] Transport upgrade failed:', err);
       });
     };
 

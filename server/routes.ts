@@ -1287,29 +1287,41 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  // Initialize Socket.IO with proper configuration
+  console.log('[WebSocket] Initializing Socket.IO server');
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
+      methods: ["GET", "POST", "OPTIONS"],
+      credentials: true,
+      allowedHeaders: ["*"]
     },
-    path: "/socket.io",
-    transports: ["websocket", "polling"],
-    pingTimeout: 30000,
-    pingInterval: 10000,
-    upgradeTimeout: 10000,
+    path: "/socket.io/",
+    transports: ["polling", "websocket"],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
     allowUpgrades: true,
     maxHttpBufferSize: 1e6,
-    connectTimeout: 20000,
-    connectionStateRecovery: {
-      maxDisconnectionDuration: 2000,
-      skipMiddlewares: true
+    perMessageDeflate: {
+      threshold: 2048
     },
-    adapter: new SocketIOServer.Adapter({
-      pingInterval: 10000,
-      pingTimeout: 5000
-    })
+    connectTimeout: 45000
+  });
+
+  // Debug logging for connection events
+  io.engine.on("connection_error", (err) => {
+    console.error("[WebSocket] Connection error:", {
+      type: err.type,
+      description: err.description,
+      context: err.context
+    });
+  });
+
+  io.engine.on("headers", (headers, req) => {
+    console.log("[WebSocket] Handshake headers:", {
+      reqHeaders: req.headers,
+      resHeaders: headers
+    });
   });
 
   io.on('connection', (socket) => {
