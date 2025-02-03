@@ -117,10 +117,9 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  const PORT = 5000;
   const BIND_ADDRESS = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
   const PORT = process.env.PORT || 5000;
-  
+
   httpServer.listen(PORT, BIND_ADDRESS, () => {
     log(`Server running on ${BIND_ADDRESS}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   });
