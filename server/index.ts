@@ -119,7 +119,7 @@ app.use((req, res, next) => {
 
   process.env.NODE_ENV = 'production';
   const BIND_ADDRESS = '0.0.0.0';
-  const PORT = process.env.PORT || 5000;
+  const PORT = process.env.PORT || 3000;
 
   httpServer.listen(PORT, BIND_ADDRESS, () => {
     log(`Server running on ${BIND_ADDRESS}:${PORT} in production mode`);
