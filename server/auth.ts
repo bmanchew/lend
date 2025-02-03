@@ -216,6 +216,13 @@ export function setupAuth(app: Express) {
           return formatted;
         };
 
+        // Add additional debug logging
+        console.log('[Auth] Starting phone validation:', {
+          username,
+          loginType: req.body.loginType,
+          timestamp: new Date().toISOString()
+        });
+
         // Format phone consistently
         const fullPhone = formatPhone(username);
         console.log('[AUTH] Phone formatting:', {
@@ -289,14 +296,15 @@ export function setupAuth(app: Express) {
           timestamp: new Date().toISOString()
         });
 
-        // Verify this is a customer account
-        if (user && user.role !== 'customer') {
-          console.error('[AUTH] Invalid role for phone number:', {
+        // Single consolidated role check
+        if (!user || user.role !== 'customer') {
+          console.error('[AUTH] Invalid user or role:', {
             phone: fullPhone,
-            userId: user.id,
-            role: user.role
+            userId: user?.id,
+            role: user?.role,
+            timestamp: new Date().toISOString()
           });
-          return done(null, false, { message: "Invalid account type" });
+          return done(null, false, { message: "Invalid account type for OTP login" });
         }
 
         if (!user || !user.id) {

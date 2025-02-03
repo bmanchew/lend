@@ -707,7 +707,7 @@ export function registerRoutes(app: Express): Server {
             password: Math.random().toString(36).slice(-8), // temporary password
             email: `${phoneNumber.replace(/\D/g, '')}@temp.shifi.com`,
             name: '',
-            role: 'borrower',
+            role: 'customer',
             phoneNumber: phoneNumber,
             lastOtpCode: otp,
             otpExpiry: otpExpiry,
