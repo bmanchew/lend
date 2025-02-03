@@ -65,8 +65,12 @@ app.use((req, res, next) => {
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+      allowedHeaders: ["*"]
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
+    pingTimeout: 60000
   });
 
   io.on('connection', (socket) => {
