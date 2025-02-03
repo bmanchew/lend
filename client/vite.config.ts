@@ -27,13 +27,13 @@ export default defineConfig({
     themePlugin()
   ],
   resolve: {
-    alias: [
-      { find: '@', replacement: path.resolve(__dirname, 'src') },
-      { find: '@components', replacement: path.resolve(__dirname, 'src/components') },
-      { find: '@hooks', replacement: path.resolve(__dirname, 'src/hooks') },
-      { find: '@pages', replacement: path.resolve(__dirname, 'src/pages') },
-      { find: '@lib', replacement: path.resolve(__dirname, 'src/lib') },
-      { find: '@db', replacement: path.resolve(__dirname, '../db') }
-    ]
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@components': path.resolve(__dirname, 'src/components'),
+      '@hooks': path.resolve(__dirname, 'src/hooks'),
+      '@pages': path.resolve(__dirname, 'src/pages'),
+      '@lib': path.resolve(__dirname, 'src/lib'),
+      '@db': path.resolve(__dirname, '../db')
+    }
   }
 });
