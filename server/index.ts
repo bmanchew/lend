@@ -14,9 +14,20 @@ const limiter = rateLimit({
 const app = express();
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Global error:', err);
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
+  });
+});
 
 app.use((req, res, next) => {
   const requestId = Date.now().toString(36);
@@ -65,12 +76,17 @@ app.use((req, res, next) => {
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"],
-      allowedHeaders: ["*"]
+      methods: ["GET", "POST", "OPTIONS"],
+      allowedHeaders: ["*"],
+      credentials: true
     },
     transports: ['websocket', 'polling'],
     allowEIO3: true,
-    pingTimeout: 60000
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 60000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 10e7
   });
 
   io.on('connection', (socket) => {
