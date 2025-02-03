@@ -29,8 +29,8 @@ const logger = winston.createLogger({
 toobusy.maxLag(70);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const VITE_PORT = process.env.VITE_PORT || 3000;
+const PORT = process.env.PORT || 3000;
+const VITE_PORT = process.env.VITE_PORT || 3001;
 
 // Memory monitoring
 setInterval(() => {
