@@ -17,14 +17,14 @@ const PORT = process.env.PORT || 3000;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CLIENT_URL 
-      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev',
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST']
   },
   path: '/socket.io/',
-  transports: ['websocket', 'polling'],
+  transports: ['websocket'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
   path: '/socket.io/',
   transports: ['websocket'],
   cookie: {
