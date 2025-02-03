@@ -122,34 +122,22 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  process.env.NODE_ENV = 'production';
-  const PORT = parseInt(process.env.PORT || '3001', 10);
-  const MAX_PORT_ATTEMPTS = 5;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
-  const startServer = async (attempt = 0) => {
+  const startServer = async () => {
     try {
-      const port = PORT + attempt;
-      console.log(`Attempting to start server on port ${port}...`);
-      
       // Close any existing connections
       if (httpServer.listening) {
         await new Promise(resolve => httpServer.close(resolve));
       }
 
-      const server = httpServer.listen(port, '0.0.0.0', () => {
-        console.log(`Server running on port ${port} (http://0.0.0.0:${port})`);
+      httpServer.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
       });
 
-      server.on('error', async (err) => {
+      httpServer.on('error', (err) => {
         console.error('Server error:', err);
-        if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
-          console.log(`Port ${port} in use, trying ${port + 1}`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
-          startServer(attempt + 1);
-        } else {
-          console.error('Could not start server:', err);
-          process.exit(1);
-        }
+        process.exit(1);
       });
 
       server.on('error', (err: any) => {
