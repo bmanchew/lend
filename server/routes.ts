@@ -83,6 +83,10 @@ class APIError extends Error {
 type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
 
 interface RouteConfig {
+  path: string;
+  element: JSX.Element;
+  roles?: string[];
+}
 
 // Configure route groups
 const routeGroups: Record<string, RouteGroup> = {
