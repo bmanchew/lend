@@ -194,19 +194,16 @@ export function setupAuth(app: Express) {
         }
 
         // For customers, use phone & OTP only
+        // Format phone consistently
         const formatPhone = (phone: string): string => {
           if (!phone) {
             console.error('[Auth] Empty phone number provided');
             throw new Error('Phone number is required');
           }
 
-          // Remove all non-digits
-          let clean = phone.toString().replace(/\D/g, '');
+          // Remove all non-digits and get last 10 digits
+          const clean = phone.toString().replace(/\D/g, '').slice(-10);
 
-          // Remove leading 1 if present
-          clean = clean.replace(/^1/, '');
-
-          // Validate length
           if (clean.length !== 10) {
             console.error('[Auth] Invalid phone number format:', { 
               phone, 
@@ -216,13 +213,16 @@ export function setupAuth(app: Express) {
             throw new Error('Phone number must be 10 digits');
           }
 
-          // Add +1 prefix
+          // Always format as +1XXXXXXXXXX
           const formatted = '+1' + clean;
+
           console.log('[Auth] Phone formatting successful:', { 
             original: phone, 
             formatted,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            userId: userRecord?.id
           });
+
           return formatted;
         };
 
