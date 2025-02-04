@@ -18,7 +18,7 @@ export function useSocket(merchantId: number) {
       ? process.env.DEPLOYMENT_URL
       : `${wsProtocol}//${window.location.hostname}:3001`;
 
-    socketRef.current = io(wsUrl, {
+    socketRef.current = io(window.location.origin, {
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
       secure: window.location.protocol === 'https:',

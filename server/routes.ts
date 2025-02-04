@@ -1292,7 +1292,10 @@ export function registerRoutes(app: Express): Server {
   // Initialize Socket.IO with proper configuration
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*",
+      origin: process.env.NODE_ENV === 'production' 
+        ? process.env.DEPLOYMENT_URL 
+        : true,
+      credentials: true,
       methods: ["GET", "POST"]
     },
     path: "/socket.io/",
