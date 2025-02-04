@@ -78,12 +78,6 @@ app.use(requestLogger);
   // Register API routes first
   const httpServer = registerRoutes(app); // Assumed registerRoutes returns the httpServer
 
-  // Make io globally available
-  declare global {
-    var io: Server;
-  }
-  // Global io will be initialized in routes.ts after server creation
-
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const errorId = Date.now().toString(36);
