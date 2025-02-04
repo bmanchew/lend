@@ -8,7 +8,8 @@ import path from 'path';
 import fs from 'fs';
 
 const app = express();
-const DEFAULT_PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+const DEFAULT_PORT = 5000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : DEFAULT_PORT;
 
 // Basic security middleware
 const limiter = rateLimit({
@@ -89,8 +90,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 // Server startup configuration
 async function startServer() {
   try {
-    const port = process.env.PORT || DEFAULT_PORT;
-    console.log(`[SERVER] Attempting to start on port ${port}...`);
+    console.log(`[SERVER] Attempting to start on port ${PORT}...`);
 
     const server = createServer(app);
 

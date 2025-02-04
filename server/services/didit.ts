@@ -262,6 +262,11 @@ class DiditService {
     const startTime = Date.now();
     const { session_id, status, vendor_data, decision } = payload;
 
+    if (!session_id || !status) {
+      console.error("[DiditService] Invalid webhook payload:", { payload });
+      throw new Error("Invalid webhook payload");
+    }
+
     console.log("[DiditService] Processing webhook", {
       sessionId: session_id,
       status,
