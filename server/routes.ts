@@ -18,6 +18,23 @@ export function registerRoutes(app: Express) {
   setupAuth(app);
   const apiRouter = express.Router();
 
+  // Global API error handler
+  apiRouter.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error('[API] Error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+      });
+    }
+  });
+
+  // Add request logging
+  apiRouter.use((req: Request, res: Response, next: NextFunction) => {
+    console.log(`[API] ${req.method} ${req.path}`);
+    next();
+  });
+
   // OTP functionality with enhanced phone validation
   apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {

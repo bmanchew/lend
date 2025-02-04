@@ -5,7 +5,7 @@ import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import path from 'path';
-//import portfinder from 'portfinder'; // Removed as per edited code
+import fs from 'fs';
 
 const app = express();
 const DEFAULT_PORT = 5000;
@@ -52,6 +52,7 @@ registerRoutes(app);
 const isDev = process.env.NODE_ENV !== 'production';
 const staticPath = isDev ? path.join(process.cwd(), 'client') : path.join(process.cwd(), 'dist', 'public');
 
+// Ensure static directory exists
 if (!fs.existsSync(staticPath)) {
   console.warn(`[SERVER] Static directory not found: ${staticPath}`);
   fs.mkdirSync(staticPath, { recursive: true });
