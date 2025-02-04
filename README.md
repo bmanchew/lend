@@ -1,4 +1,28 @@
-# Copy environment template
+├── client/               # Frontend React application
+│   ├── src/
+│   │   ├── components/   # Reusable UI components
+│   │   ├── pages/       # Route components
+│   │   ├── hooks/       # Custom React hooks
+│   │   └── lib/         # Utility functions
+├── server/              # Backend Express application
+│   ├── routes/         # API routes
+│   ├── services/       # Business logic
+│   └── lib/           # Helper utilities
+├── db/                 # Database schemas and migrations
+└── scripts/           # Utility scripts
+```
+
+## Setup Instructions
+
+1. **Clone Repository**
+   ```bash
+   git clone <repository-url>
+   cd shifi-lend
+   ```
+
+2. **Environment Setup**
+   ```bash
+   # Copy environment template
    cp .env.example .env
 
    # Configure required variables:
@@ -8,54 +32,17 @@
    DATABASE_URL=your_postgresql_url
    ```
 
-2. **Install Dependencies**
+3. **Install Dependencies**
    ```bash
    npm install
    ```
 
-3. **Database Setup**
+4. **Database Setup**
    ```bash
    # Push schema to database
    npm run db:push
    ```
 
-4. **Start Development Server**
-   The project is configured to run automatically through Replit's workflow system.
-   Simply click the "Run" button in your Replit workspace.
-
-## Port Configuration
-
-The application uses the following ports:
-- 5000: Main application server
-- 5001: Development server
-- 5002: API server
-
-## KYC Integration Details
-
-### Mobile Verification Flow
-
-1. **Initialization**
-   - User triggers verification within the app
-   - System detects mobile platform
-   - Creates verification session with Didit
-
-2. **Mobile App Integration**
-   - Seamless deep linking to Didit app
-   - Automatic app installation prompt if needed
-   - Native platform optimizations
-
-3. **Status Monitoring**
-   - Real-time status updates via webhooks
-   - Session management and recovery
-   - Comprehensive error handling
-
-## Testing
-
-The project includes comprehensive tests for all major features:
-
-```bash
-# Run all tests
-npm test
-
-# Run KYC flow tests specifically
-npm test -- -t "KYC Flow"
+5. **Start Development Server**
+   ```bash
+   npm run dev

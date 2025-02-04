@@ -1,3 +1,13 @@
+/**
+ * Loan Application Page Component
+ * 
+ * Manages the loan application process including KYC verification:
+ * - Handles verification flow initiation
+ * - Processes URL parameters for mobile deep linking
+ * - Manages verification state and completion
+ * - Integrates with KYC verification modal
+ */
+
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { KycVerificationModal } from "../components/kyc/verification-modal";
@@ -13,7 +23,7 @@ export default function Apply() {
   const userId = localStorage.getItem('temp_user_id');
 
   useEffect(() => {
-    // Check URL parameters
+    // Parse and handle URL parameters
     const phoneNumber = searchParams.get('phone');
     const isVerification = searchParams.get('verification') === 'true';
     const fromLogin = searchParams.get('from') === 'login';
@@ -26,19 +36,20 @@ export default function Apply() {
       currentUrl: window.location.href 
     });
 
+    // Handle different entry points
     if (phoneNumber) {
-      // If we have a phone number, redirect to login
+      // Redirect to login if phone number provided
       const loginUrl = `/auth/customer-login?phone=${phoneNumber}`;
       console.log('[Apply] Redirecting to login:', loginUrl);
       window.location.href = loginUrl;
     } else if (userId && (fromLogin || isVerification)) {
-      // Auto-start verification if we have userId and coming from login
+      // Auto-start verification for authenticated users
       console.log('[Apply] Auto-starting verification for user:', userId);
       setShowVerification(true);
     }
   }, [searchParams, userId]);
 
-  // Separate useEffect for KYC status check
+  // Check KYC status on component mount or verification start
   useEffect(() => {
     if (!showVerification || !userId) return;
 

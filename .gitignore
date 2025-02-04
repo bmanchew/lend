@@ -21,13 +21,8 @@ cypress/videos
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Environment
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env*
+!.env.example
 
 # IDE
 .idea/
@@ -50,8 +45,39 @@ replit.nix
 .next
 *.bak
 
-# Server Public Directory (from original)
+# Server Public Directory
 server/public
 
-# Vite config (from original)
-vite.config.ts.*
+# Secrets and Configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.key
+*.pem
+*.cert
+*.crt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+combined.log
+error.log
+
+# Build artifacts
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db

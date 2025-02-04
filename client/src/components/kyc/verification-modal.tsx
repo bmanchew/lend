@@ -1,3 +1,15 @@
+/**
+ * KYC Verification Modal Component
+ * 
+ * A responsive modal component that manages the KYC verification process,
+ * optimized for both mobile and desktop platforms. Handles:
+ * - Platform-specific verification flows
+ * - Deep linking to Didit mobile app
+ * - App installation prompts
+ * - Real-time status updates
+ * - Verification state management
+ */
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -23,12 +35,14 @@ export function KycVerificationModal({
   const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
+
+  // State management for verification flow
   const [verificationStarted, setVerificationStarted] = useState(false);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [appInstallRequired, setAppInstallRequired] = useState(false);
 
-  // Enhanced platform detection
+  // Enhanced platform detection with debug logging
   const platform = isMobile ? 'mobile' : 'web';
   console.log('[KYC Modal] Platform detection:', {
     isMobile,
@@ -44,6 +58,11 @@ export function KycVerificationModal({
     }
   });
 
+  /**
+   * Real-time status polling query
+   * Implements different polling intervals for mobile/desktop
+   * Automatically stops polling on completion
+   */
   const { data: kycData, refetch: refetchStatus } = useQuery({
     queryKey: ['/api/kyc/status', userId],
     queryFn: async () => {
@@ -65,6 +84,10 @@ export function KycVerificationModal({
       data?.status === 'COMPLETED' ? false : (isMobile ? 3000 : 5000)
   });
 
+  /**
+   * Verification session initialization mutation
+   * Handles platform-specific session creation and error handling
+   */
   const startVerification = useMutation({
     mutationFn: async () => {
       if (!userId) {
@@ -115,7 +138,13 @@ export function KycVerificationModal({
     }
   });
 
-  // Handle mobile app redirection
+  /**
+   * Mobile app redirection handler
+   * Implements a multi-step deep linking strategy:
+   * 1. Try universal link
+   * 2. Fallback to custom URL scheme
+   * 3. Show app installation prompt if needed
+   */
   useEffect(() => {
     if (isMobile && redirectUrl && !redirectAttempted) {
       setRedirectAttempted(true);
@@ -162,7 +191,10 @@ export function KycVerificationModal({
     }
   }, [redirectUrl, isMobile, redirectAttempted]);
 
-  // Monitor verification status
+  /**
+   * Status monitoring and completion handler
+   * Manages verification lifecycle and triggers callbacks
+   */
   useEffect(() => {
     if (!isOpen) {
       setRedirectAttempted(false);
@@ -183,7 +215,10 @@ export function KycVerificationModal({
     }
   }, [isOpen, kycData?.status]);
 
-  // Initialize verification on open
+  /**
+   * Verification initialization handler
+   * Triggers verification process when modal opens
+   */
   useEffect(() => {
     if (!isOpen || verificationStarted || kycData?.status === 'COMPLETED') return;
 
@@ -202,6 +237,10 @@ export function KycVerificationModal({
     startVerification.mutate();
   }, [isOpen, userId, verificationStarted, kycData?.status]);
 
+  /**
+   * Retry handler for failed verifications
+   * Resets state and initiates new verification attempt
+   */
   const handleRetry = () => {
     setRedirectAttempted(false);
     setVerificationStarted(false);
@@ -210,6 +249,14 @@ export function KycVerificationModal({
     startVerification.mutate();
   };
 
+  /**
+   * Content renderer based on verification state
+   * Handles different UI states:
+   * - Not logged in
+   * - Loading
+   * - App installation required
+   * - Mobile verification in progress
+   */
   const renderContent = () => {
     if (!userId) {
       return (
