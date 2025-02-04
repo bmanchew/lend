@@ -125,34 +125,47 @@ class SMSService {
   }
 
   async sendOTP(phone: string, code: string): Promise<boolean> {
+    const startTime = new Date().toISOString();
     try {
-      logger.info('Sending OTP:', { 
-        phone, 
+      console.log('[SMS-OTP] Initiating OTP send:', { 
+        timestamp: startTime,
+        phone,
         codeLength: code.length,
-        timestamp: new Date().toISOString()
+        hasClient: !!this.client
       });
 
       const message = `Your ShiFi verification code is: ${code}\nValid for 5 minutes.`;
+
+      console.log('[SMS-OTP] Attempting SMS delivery:', {
+        timestamp: startTime,
+        phone,
+        messageLength: message.length,
+        expiryMinutes: 5
+      });
+
       const result = await this.sendSMS(phone, message);
 
-      logger.info('OTP send result:', { 
+      console.log('[SMS-OTP] SMS delivery result:', { 
+        timestamp: startTime,
         success: result,
         phone,
-        timestamp: new Date().toISOString()
+        deliveryTime: new Date().toISOString(),
+        duration: `${Date.now() - new Date(startTime).getTime()}ms`
       });
 
       return result;
     } catch (error) {
-      logger.error('Error in sendOTP:', { 
+      console.error('[SMS-OTP] Error in sendOTP:', { 
+        timestamp: startTime,
         error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         phone,
-        timestamp: new Date().toISOString()
+        duration: `${Date.now() - new Date(startTime).getTime()}ms`
       });
       return false;
     }
   }
 
-  // Test method to verify Twilio configuration
   async testConnection(): Promise<boolean> {
     try {
       if (!this.client) {
