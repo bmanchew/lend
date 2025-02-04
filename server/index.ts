@@ -8,8 +8,8 @@ import path from 'path';
 import fs from 'fs';
 
 const app = express();
-const DEFAULT_PORT = 5000;
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : DEFAULT_PORT;
+const PORT = 5000;
+const HOST = '0.0.0.0';
 
 // Basic security middleware
 const limiter = rateLimit({
