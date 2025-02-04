@@ -236,6 +236,11 @@ export function registerRoutes(app: Express): Server {
   });
 
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+  console.log("[MerchantAPI] Request received:", {
+    userId: req.params.userId,
+    headers: req.headers,
+    timestamp: new Date().toISOString()
+  });
     const requestId = Date.now().toString(36);
     try {
       const userId = parseInt(req.params.userId);

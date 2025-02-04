@@ -76,19 +76,51 @@ export default function MerchantDashboard() {
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],
     enabled: !!merchant,
     onSuccess: (data) => {
-      console.log("[MerchantDashboard] Contracts loaded:", {
-        merchantId: merchant?.id,
-        contractCount: data?.length,
+      console.log('[MerchantDashboard] Contracts loaded:', {
+        count: data?.length,
+        userId: user?.id,
         timestamp: new Date().toISOString()
       });
     },
     onError: (error) => {
-      console.error("[MerchantDashboard] Error loading contracts:", {
-        merchantId: merchant?.id,
+      console.error('[MerchantDashboard] Error loading contracts:', {
         error,
+        userId: user?.id,
         timestamp: new Date().toISOString()
       });
-    }
+    },
+    queryFn: async () => {
+      if (!merchant?.id) throw new Error('No merchant ID available');
+      console.log('[MerchantDashboard] Fetching contracts:', {
+        merchantId: merchant.id,
+        timestamp: new Date().toISOString()
+      });
+      const response = await fetch(`/api/merchants/${merchant.id}/contracts`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[MerchantDashboard] API error fetching contracts:', {
+          status: response.status,
+          error: errorText,
+          merchantId: merchant.id
+        });
+        throw new Error(`Failed to fetch contracts: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('[MerchantDashboard] Contracts fetched:', {
+        merchantId: merchant.id,
+        contractCount: data.length,
+        timestamp: new Date().toISOString()
+      });
+      return data;
+    },
   });
 
   // Polling for updates
