@@ -5,11 +5,9 @@ import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import path from 'path';
+import portfinder from 'portfinder';
 
 const app = express();
-
-// Use environment port or fallback to 5000
-const PORT = parseInt(process.env.PORT || '5000', 10);
 
 // Basic security middleware
 const limiter = rateLimit({
@@ -51,17 +49,25 @@ registerRoutes(app);
 
 // Serve static files based on environment
 const staticPath = process.env.NODE_ENV === 'production' ? 'dist/public' : 'client/dist';
-app.use(express.static(staticPath));
+
+// Ensure static directory exists
+app.use(express.static(path.join(process.cwd(), staticPath), {
+  index: false // Disable automatic serving of index.html
+}));
 
 // SPA route handling - after API routes
 app.get('/*', (req, res) => {
   if (req.path.startsWith('/api')) {
+    console.log('[SERVER] API 404:', req.path);
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  res.sendFile(path.join(process.cwd(), staticPath, 'index.html'));
+
+  const indexPath = path.join(process.cwd(), staticPath, 'index.html');
+  console.log('[SERVER] Serving index.html from:', indexPath);
+  res.sendFile(indexPath);
 });
 
-// Simple error handler
+// Error handler
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   console.error("[ERROR]", err);
   if (!res.headersSent) {
@@ -69,15 +75,55 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
-// Create and start HTTP server
-const server = createServer(app);
+// Dynamic port configuration with portfinder
+async function startServer() {
+  try {
+    // Configure portfinder
+    portfinder.basePort = parseInt(process.env.PORT || '5000');
+    portfinder.highestPort = 6000; // Set upper limit for port searching
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[SERVER] Application started: http://0.0.0.0:${PORT}`);
-  // Signal readiness to Replit
-  if (process.send) {
-    process.send('ready');
+    console.log('[SERVER] Finding available port...');
+    const port = await portfinder.getPortPromise();
+    console.log(`[SERVER] Port ${port} is available`);
+
+    // Add small delay to ensure port is clear
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const server = createServer(app);
+
+    return new Promise((resolve, reject) => {
+      server.listen(port, '0.0.0.0', () => {
+        console.log(`[SERVER] Application started: http://0.0.0.0:${port}`);
+        console.log(`[SERVER] Static files path: ${path.join(process.cwd(), staticPath)}`);
+        if (process.send) {
+          // Send port information to parent process
+          process.send({ type: 'ready', port });
+        }
+        resolve(server);
+      });
+
+      server.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+          console.error(`[SERVER] Port ${port} is already in use`);
+          reject(error);
+        } else {
+          console.error('[SERVER] Server error:', error);
+          reject(error);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('[SERVER] Failed to start server:', error);
+    process.exit(1);
   }
-});
+}
 
-export { app, server };
+// Start the server
+startServer()
+  .then(() => console.log('[SERVER] Server startup complete'))
+  .catch(error => {
+    console.error('[SERVER] Server startup failed:', error);
+    process.exit(1);
+  });
+
+export { app };
