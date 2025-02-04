@@ -546,5 +546,6 @@ class DiditService {
   }
 }
 
-// Export singleton instance
+const DEPLOYMENT_URL = process.env.DEPLOYMENT_URL || 'http://localhost:3001';
+
 export const diditService = new DiditService();
