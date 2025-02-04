@@ -5,9 +5,10 @@ import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import path from 'path';
-import portfinder from 'portfinder';
+//import portfinder from 'portfinder'; // Removed as per edited code
 
 const app = express();
+const DEFAULT_PORT = 5000;
 
 // Basic security middleware
 const limiter = rateLimit({
@@ -47,11 +48,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Register API routes first
 registerRoutes(app);
 
-// Serve static files based on environment
-const staticPath = process.env.NODE_ENV === 'production' ? 'dist/public' : 'dist/public';
+// Update static file serving configuration
+const isDev = process.env.NODE_ENV !== 'production';
+const staticPath = isDev ? path.join(process.cwd(), 'client') : path.join(process.cwd(), 'dist', 'public');
 
-// Ensure static directory exists
-app.use(express.static(path.join(process.cwd(), staticPath), {
+app.use(express.static(staticPath, {
   index: false // Disable automatic serving of index.html
 }));
 
@@ -62,7 +63,10 @@ app.get('/*', (req, res) => {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
 
-  const indexPath = path.join(process.cwd(), staticPath, 'index.html');
+  const indexPath = isDev 
+    ? path.join(process.cwd(), 'client', 'index.html')
+    : path.join(process.cwd(), 'dist', 'public', 'index.html');
+
   console.log('[SERVER] Serving index.html from:', indexPath);
   res.sendFile(indexPath);
 });
@@ -75,41 +79,31 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
-// Dynamic port configuration with portfinder
+// Server startup configuration
 async function startServer() {
   try {
-    // Configure portfinder
-    portfinder.basePort = parseInt(process.env.PORT || '5000');
-    portfinder.highestPort = 6000; // Set upper limit for port searching
-
-    console.log('[SERVER] Finding available port...');
-    const port = await portfinder.getPortPromise();
-    console.log(`[SERVER] Port ${port} is available`);
-
-    // Add small delay to ensure port is clear
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Always try DEFAULT_PORT first
+    const port = DEFAULT_PORT;
+    console.log(`[SERVER] Attempting to start on port ${port}...`);
 
     const server = createServer(app);
 
     return new Promise((resolve, reject) => {
       server.listen(port, '0.0.0.0', () => {
-        console.log(`[SERVER] Application started: http://0.0.0.0:${port}`);
-        console.log(`[SERVER] Static files path: ${path.join(process.cwd(), staticPath)}`);
+        console.log(`[SERVER] Server ready! http://0.0.0.0:${port}`);
+        console.log(`[SERVER] Static files path: ${staticPath}`);
+
+        // Signal ready state to parent process
         if (process.send) {
-          // Send port information to parent process
           process.send({ type: 'ready', port });
         }
+
         resolve(server);
       });
 
       server.on('error', (error: any) => {
-        if (error.code === 'EADDRINUSE') {
-          console.error(`[SERVER] Port ${port} is already in use`);
-          reject(error);
-        } else {
-          console.error('[SERVER] Server error:', error);
-          reject(error);
-        }
+        console.error('[SERVER] Server error:', error);
+        reject(error);
       });
     });
   } catch (error) {
