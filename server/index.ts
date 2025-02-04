@@ -28,6 +28,15 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Middleware
+// Add CSP headers
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://api.stripe.com wss:"
+  );
+  next();
+});
+
 app.use(cors({
   origin: true,
   credentials: true

@@ -113,6 +113,7 @@ export default function MerchantLogin() {
             <Button 
               type="submit" 
               className="w-full" 
+              onClick={onSubmit} //This line was changed
               disabled={loginMutation.isPending}
             >
               {loginMutation.isPending ? "Logging in..." : "Login"}
