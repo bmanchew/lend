@@ -22,11 +22,27 @@ const mockUseMobile = useMobile as ReturnType<typeof vi.fn>;
 describe('Borrower KYC Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
+    mockUseMobile.mockReturnValue(false); // Default to desktop
   });
 
   it('should handle mobile KYC flow correctly', async () => {
-    // Mock mobile device
+    // Setup mobile device simulation
     mockUseMobile.mockReturnValue(true);
+    vi.useFakeTimers();
+
+    // Mock handlers for the test
+    server.use(
+      http.post('/api/kyc/start', () => {
+        return HttpResponse.json({
+          sessionId: 'test-session',
+          redirectUrl: 'didit://verify?session=test-session'
+        });
+      }),
+      http.get('/api/kyc/status', () => {
+        return HttpResponse.json({ status: 'pending' });
+      })
+    );
 
     const onClose = vi.fn();
     const onVerificationComplete = vi.fn();
@@ -39,17 +55,14 @@ describe('Borrower KYC Flow', () => {
       />
     );
 
-    // Verify mobile-specific content is shown
-    await waitFor(() => {
-      expect(screen.getByText(/preparing mobile verification/i)).toBeInTheDocument();
-    });
+    // Check initial loading state
+    expect(await screen.findByText(/preparing mobile verification/i)).toBeInTheDocument();
 
-    // Verify app redirection attempt
-    await waitFor(() => {
-      expect(window.location.href).toContain('didit://verify');
-    });
+    // Advance timers to trigger app check
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(window.location.href).toContain('didit://verify');
 
-    // Test status polling with completed status
+    // Simulate completion
     server.use(
       http.get('/api/kyc/status', () => {
         return HttpResponse.json({ status: 'COMPLETED' });
@@ -58,30 +71,57 @@ describe('Borrower KYC Flow', () => {
 
     await waitFor(() => {
       expect(onVerificationComplete).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
     });
   });
 
-  it('should handle mobile app installation prompt', async () => {
+  it('should handle app installation prompt for mobile', async () => {
     mockUseMobile.mockReturnValue(true);
     vi.useFakeTimers();
 
-    render(
+    render(<KycVerificationModal isOpen={true} onClose={vi.fn()} />);
+
+    // Wait for initial redirect attempts
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // Should show app installation prompt
+    expect(await screen.findByText(/didit app is required/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /download app/i })).toBeInTheDocument();
+  });
+
+  it('should handle retry functionality', async () => {
+    mockUseMobile.mockReturnValue(true);
+    vi.useFakeTimers();
+
+    const { rerender } = render(
       <KycVerificationModal isOpen={true} onClose={vi.fn()} />
     );
 
-    // Fast-forward timers to trigger app store prompt
+    // Wait for app install prompt
     await vi.advanceTimersByTimeAsync(4000);
 
-    // Verify app installation prompt
-    await waitFor(() => {
-      expect(screen.getByText(/please install the didit app/i)).toBeInTheDocument();
-    });
+    // Click retry button
+    const retryButton = screen.getByRole('button', { name: /try again/i });
+    expect(retryButton).toBeInTheDocument();
 
-    vi.useRealTimers();
+    // Reset mocks and rerender to test retry
+    server.use(
+      http.post('/api/kyc/start', () => {
+        return HttpResponse.json({
+          sessionId: 'new-session',
+          redirectUrl: 'didit://verify?session=new-session'
+        });
+      })
+    );
+
+    retryButton.click();
+    rerender(<KycVerificationModal isOpen={true} onClose={vi.fn()} />);
+
+    // Should show loading state again
+    expect(await screen.findByText(/preparing mobile verification/i)).toBeInTheDocument();
   });
 
   it('should handle desktop KYC flow correctly', async () => {
-    // Mock desktop device
     mockUseMobile.mockReturnValue(false);
 
     render(
@@ -92,9 +132,7 @@ describe('Borrower KYC Flow', () => {
       />
     );
 
-    // Verify desktop-specific content is shown
-    await waitFor(() => {
-      expect(screen.getByText(/starting verification process/i)).toBeInTheDocument();
-    });
+    // Should show desktop-specific content
+    expect(await screen.findByText(/starting verification process/i)).toBeInTheDocument();
   });
 });
