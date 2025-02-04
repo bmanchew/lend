@@ -221,21 +221,12 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Enhanced user lookup with role verification
-      const user = await db
+      // User lookup with role verification
+      const [user] = await db
         .select()
         .from(users)
         .where(eq(users.id, parseInt(String(userId))))
-        .limit(1)
-        .then(rows => rows[0]);
-
-      console.log('[Routes] User lookup result:', {
-        userId,
-        found: !!user,
-        role: user?.role,
-        hasPhone: !!user?.phoneNumber,
-        timestamp: new Date().toISOString()
-      });
+        .limit(1);
 
       if (!user) {
         console.error('[Routes] User not found:', { userId });
@@ -257,7 +248,7 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Enhanced OTP validation
+      // Validate OTP presence and expiry
       if (!user.lastOtpCode || !user.otpExpiry) {
         console.error('[Routes] No active OTP found:', {
           userId: user.id,
@@ -281,7 +272,7 @@ export function registerRoutes(app: Express) {
           now: now.toISOString()
         });
 
-        // Clear expired OTP immediately
+        // Clear expired OTP
         await db
           .update(users)
           .set({
@@ -296,11 +287,10 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Enhanced timing-safe comparison with fixed-length buffers
+      // Normalize and validate OTP format
       const normalizedStoredOTP = user.lastOtpCode.trim();
       const normalizedInputOTP = otp.trim();
 
-      // Ensure both OTPs are exactly 6 digits
       if (!/^\d{6}$/.test(normalizedStoredOTP) || !/^\d{6}$/.test(normalizedInputOTP)) {
         console.error('[Routes] Invalid OTP format:', {
           userId: user.id,
@@ -312,7 +302,7 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Use timing-safe comparison
+      // Timing-safe comparison
       const isValid = timingSafeEqual(
         Buffer.from(normalizedStoredOTP),
         Buffer.from(normalizedInputOTP)
@@ -331,7 +321,7 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Clear used OTP immediately after successful verification
+      // Clear used OTP and reset attempts on success
       await db
         .update(users)
         .set({
@@ -340,7 +330,6 @@ export function registerRoutes(app: Express) {
         })
         .where(eq(users.id, user.id));
 
-      // Reset attempts on success
       req.session.otpAttempts = 0;
 
       console.log('[Routes] OTP verified successfully:', {
