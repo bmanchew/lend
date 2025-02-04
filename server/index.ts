@@ -124,7 +124,6 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  const PORT = process.env.PORT || 3000;
   httpServer.listen(PORT, "0.0.0.0", () => {
     log(`Server running at http://0.0.0.0:${PORT}`);
     console.log('Environment:', process.env.NODE_ENV);
