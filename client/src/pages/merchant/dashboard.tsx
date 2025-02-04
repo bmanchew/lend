@@ -32,6 +32,46 @@ export default function MerchantDashboard() {
         console.error('[MerchantDashboard] No user ID available for query');
         throw new Error('No user ID available');
       }
+      
+      console.log('[MerchantDashboard] Starting merchant data fetch:', {
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
+
+      try {
+        const response = await fetch(`/api/merchants/by-user/${user.id}`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[MerchantDashboard] API error:', {
+            status: response.status,
+            error: errorText,
+            userId: user.id
+          });
+          throw new Error(`Failed to fetch merchant: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('[MerchantDashboard] Merchant data loaded:', {
+          merchantId: data?.id,
+          userId: user.id,
+          timestamp: new Date().toISOString()
+        });
+        return data;
+      } catch (err) {
+        console.error('[MerchantDashboard] Fetch error:', {
+          error: err,
+          userId: user.id,
+          timestamp: new Date().toISOString()
+        });
+        throw err;
+      }
       console.log('[MerchantDashboard] Fetching merchant data:', {
         userId: user.id,
         timestamp: new Date().toISOString()
