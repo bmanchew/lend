@@ -11,6 +11,9 @@ import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { Request, Response, NextFunction } from 'express';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { timingSafeEqual } from 'crypto'; // Import for timing-safe comparison
+const logger = console; // Placeholder for a proper logger
+
 
 // Define User interface to match database schema
 interface User {
@@ -28,41 +31,7 @@ interface User {
 
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
 
-// Update phone number formatting for existing users
-const standardizePhoneNumber = async () => {
-  try {
-    const allUsers = await db
-      .select()
-      .from(users)
-      .where(eq(users.role, 'customer'));
-
-    for (const user of allUsers) {
-      if (!user.phoneNumber) continue;
-
-      const parsedPhone = parsePhoneNumberFromString(user.phoneNumber, 'US');
-      if (parsedPhone && parsedPhone.isValid()) {
-        const formattedPhone = parsedPhone.format('E.164');
-        if (formattedPhone !== user.phoneNumber) {
-          await db
-            .update(users)
-            .set({ phoneNumber: formattedPhone })
-            .where(eq(users.id, user.id));
-
-          console.log('[Routes] Standardized phone number:', {
-            userId: user.id,
-            oldPhone: user.phoneNumber,
-            newPhone: formattedPhone,
-            timestamp: new Date().toISOString()
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[Routes] Error standardizing phone numbers:', err);
-  }
-};
-
-// Add cleanup job for expired OTPs
+// Cleanup expired OTPs every 5 minutes
 const cleanupExpiredOTPs = async () => {
   try {
     const now = new Date();
@@ -78,18 +47,13 @@ const cleanupExpiredOTPs = async () => {
           lt(users.otpExpiry, now)
         )
       );
-
-    console.log('[Routes] Cleaned up expired OTPs');
+    console.log('[Routes] Cleaned up expired OTPs at:', now.toISOString());
   } catch (err) {
     console.error('[Routes] Error cleaning up expired OTPs:', err);
   }
 };
 
-// Run cleanup every 5 minutes
 setInterval(cleanupExpiredOTPs, 5 * 60 * 1000);
-
-// Run phone number standardization on startup
-standardizePhoneNumber();
 
 export function registerRoutes(app: Express) {
   setupAuth(app);
@@ -112,184 +76,219 @@ export function registerRoutes(app: Express) {
     next();
   });
 
-  // Update phone number validation logic in the send-otp endpoint
-apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { phoneNumber } = req.body;
+  // Send OTP endpoint with simplified validation
+  apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { phoneNumber } = req.body;
 
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
 
-    // Clean and normalize the phone number
-    let cleanedNumber = phoneNumber.replace(/[^\d+]/g, '');
+      // Test Twilio connection first
+      const isConnected = await smsService.testConnection();
+      if (!isConnected) {
+        console.error('[Routes] Twilio service not available');
+        return res.status(503).json({
+          error: "SMS service unavailable",
+          details: "Please try again later"
+        });
+      }
 
-    // Handle various input formats
-    if (!cleanedNumber.startsWith('+')) {
-      // Remove leading 1 if present
-      cleanedNumber = cleanedNumber.replace(/^1/, '');
-      // Add +1 prefix
-      cleanedNumber = `+1${cleanedNumber}`;
-    }
+      // Clean and format phone number
+      let cleanNumber = phoneNumber.replace(/\D/g, '');
+      if (cleanNumber.length === 10) {
+        cleanNumber = `1${cleanNumber}`; // Add country code for US numbers
+      }
+      cleanNumber = `+${cleanNumber}`;
 
-    // Parse with libphonenumber-js
-    const parsedPhone = parsePhoneNumberFromString(cleanedNumber);
+      // Basic validation
+      if (cleanNumber.length !== 12 || !cleanNumber.startsWith('+1')) {
+        console.error('[Routes] Invalid phone number:', {
+          input: phoneNumber,
+          cleaned: cleanNumber,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(400).json({
+          error: "Invalid phone number",
+          details: "Please enter a valid 10-digit US phone number"
+        });
+      }
 
-    if (!parsedPhone || !parsedPhone.isValid()) {
-      console.error('[Routes] Invalid phone number format:', {
-        input: phoneNumber,
-        cleaned: cleanedNumber,
-        timestamp: new Date().toISOString()
-      });
-      return res.status(400).json({
-        error: "Please provide a valid US phone number",
-        details: "Examples: +15551234567, (555) 123-4567, or 5551234567"
-      });
-    }
-
-    // Format to E.164 for consistency
-    const formattedPhone = parsedPhone.format('E.164');
-
-    console.log('[Routes] Phone number processed:', {
-      original: phoneNumber,
-      cleaned: cleanedNumber,
-      formatted: formattedPhone,
-      timestamp: new Date().toISOString()
-    });
-
-    // Find existing user or create new one
-    let user = await db
-      .select()
-      .from(users)
-      .where(eq(users.phoneNumber, formattedPhone))
-      .limit(1)
-      .then(rows => rows[0]);
-
-    if (user && user.role !== 'customer') {
-      console.error('[Routes] Invalid account type for OTP:', {
-        userId: user.id,
-        role: user.role,
-        timestamp: new Date().toISOString()
-      });
-      return res.status(403).json({ error: 'Invalid account type for OTP login' });
-    }
-
-    const otp = smsService.generateOTP();
-    const otpExpiry = new Date();
-    otpExpiry.setMinutes(otpExpiry.getMinutes() + 5);
-
-    if (!user) {
-      user = await db
-        .insert(users)
-        .values({
-          username: formattedPhone.replace(/\D/g, ''),
-          password: Math.random().toString(36).slice(-8),
-          email: `${formattedPhone.replace(/\D/g, '')}@temp.shifi.com`,
-          name: '',
-          role: 'customer',
-          phoneNumber: formattedPhone,
-          lastOtpCode: otp,
-          otpExpiry,
-          kycStatus: 'pending'
-        })
-        .returning()
+      // Find or create user
+      let user = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, cleanNumber))
+        .limit(1)
         .then(rows => rows[0]);
 
-      console.log('[Routes] Created new user:', {
-        userId: user.id,
-        phone: formattedPhone,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      await db
-        .update(users)
-        .set({
-          lastOtpCode: otp,
-          otpExpiry
-        })
-        .where(eq(users.id, user.id));
+      if (user && user.role !== 'customer') {
+        return res.status(403).json({ error: 'Invalid account type for OTP login' });
+      }
 
-      console.log('[Routes] Updated existing user OTP:', {
-        userId: user.id,
-        phone: formattedPhone,
-        timestamp: new Date().toISOString()
-      });
+      // Generate OTP
+      const otp = smsService.generateOTP();
+      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+
+      if (!user) {
+        // Create new user
+        user = await db
+          .insert(users)
+          .values({
+            username: cleanNumber.slice(1), // Remove + prefix
+            password: Math.random().toString(36).slice(-8),
+            email: `${cleanNumber.slice(1)}@temp.shifi.com`,
+            name: '',
+            role: 'customer',
+            phoneNumber: cleanNumber,
+            lastOtpCode: otp,
+            otpExpiry,
+            kycStatus: 'pending'
+          })
+          .returning()
+          .then(rows => rows[0]);
+
+        console.log('[Routes] Created new user:', {
+          userId: user.id,
+          phone: cleanNumber
+        });
+      } else {
+        // Update existing user's OTP
+        await db
+          .update(users)
+          .set({
+            lastOtpCode: otp,
+            otpExpiry
+          })
+          .where(eq(users.id, user.id));
+
+        console.log('[Routes] Updated OTP for user:', {
+          userId: user.id,
+          phone: cleanNumber
+        });
+      }
+
+      // Send OTP
+      const sent = await smsService.sendOTP(cleanNumber, otp);
+
+      if (sent) {
+        console.log('[Routes] OTP sent successfully:', {
+          userId: user.id,
+          phone: cleanNumber
+        });
+        res.json({
+          success: true,
+          userId: user.id
+        });
+      } else {
+        console.error('[Routes] Failed to send OTP:', {
+          userId: user.id,
+          phone: cleanNumber
+        });
+        res.status(500).json({
+          error: "Failed to send OTP",
+          details: "Please try again later"
+        });
+      }
+    } catch (err) {
+      console.error("[Routes] Error in send-otp:", err);
+      next(err);
     }
+  });
 
-    // Send OTP via SMS
-    const sent = await smsService.sendOTP(formattedPhone, otp);
-
-    if (sent) {
-      console.log('[Routes] OTP sent successfully:', {
-        userId: user.id,
-        phone: formattedPhone,
-        timestamp: new Date().toISOString()
-      });
-      res.json({
-        success: true,
-        userId: user.id
-      });
-    } else {
-      console.error('[Routes] Failed to send OTP:', {
-        phoneNumber: formattedPhone,
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      });
-      res.status(500).json({ error: "Failed to send OTP. Please try again." });
-    }
-  } catch (err) {
-    console.error("[Routes] Error sending OTP:", err);
-    next(err);
-  }
-});
-
-  // Verify OTP endpoint
+  // Verify OTP endpoint with enhanced validation and security
   apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { otp } = req.body;
+      const { userId, otp } = req.body;
 
-      if (!otp) {
-        return res.status(400).json({ error: "OTP is required" });
+      if (!userId || !otp) {
+        logger.error('[Routes] Missing verification data:', {
+          hasUserId: !!userId,
+          hasOtp: !!otp,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(400).json({
+          error: "Both user ID and verification code are required",
+          details: "Please provide all required information"
+        });
       }
 
       const user = await db
         .select()
         .from(users)
-        .where(eq(users.id, parseInt(String(req.body.userId))))
+        .where(eq(users.id, parseInt(String(userId))))
         .limit(1)
         .then(rows => rows[0]);
 
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        logger.error('[Routes] User not found for OTP verification:', {
+          userId,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(404).json({
+          error: "User not found",
+          details: "Please try the verification process again"
+        });
       }
 
-      // Check OTP validity
+      // Validate OTP
       if (!user.lastOtpCode || !user.otpExpiry) {
-        console.error('[Routes] No OTP found for user:', {
+        logger.error('[Routes] No active OTP found:', {
+          userId: user.id,
+          hasOtp: !!user.lastOtpCode,
+          hasExpiry: !!user.otpExpiry,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(400).json({
+          error: "No active verification code",
+          details: "Please request a new verification code"
+        });
+      }
+
+      const now = new Date();
+      const expiry = new Date(user.otpExpiry);
+
+      if (now > expiry) {
+        logger.error('[Routes] OTP expired:', {
+          userId: user.id,
+          expiry: expiry.toISOString(),
+          now: now.toISOString()
+        });
+
+        // Clear expired OTP
+        await db
+          .update(users)
+          .set({
+            lastOtpCode: null,
+            otpExpiry: null
+          })
+          .where(eq(users.id, user.id));
+
+        return res.status(400).json({
+          error: "Verification code has expired",
+          details: "Please request a new verification code"
+        });
+      }
+
+      // Use timing-safe comparison for OTP validation
+      const isValid = timingSafeEqual(
+        Buffer.from(user.lastOtpCode.trim()),
+        Buffer.from(otp.trim())
+      );
+
+      if (!isValid) {
+        logger.error('[Routes] Invalid OTP provided:', {
           userId: user.id,
           timestamp: new Date().toISOString()
         });
-        return res.status(400).json({ error: "No OTP found. Please request a new one." });
-      }
-
-      if (new Date() > new Date(user.otpExpiry)) {
-        console.error('[Routes] OTP expired:', {
-          userId: user.id,
-          expiry: user.otpExpiry,
-          timestamp: new Date().toISOString()
+        return res.status(400).json({
+          error: "Invalid verification code",
+          details: "Please check the code and try again"
         });
-        return res.status(400).json({ error: "OTP has expired. Please request a new one." });
       }
 
-      if (user.lastOtpCode !== otp) {
-        console.error('[Routes] Invalid OTP:', {
-          userId: user.id,
-          timestamp: new Date().toISOString()
-        });
-        return res.status(400).json({ error: "Invalid OTP" });
-      }
-
-      // Clear OTP after successful verification
+      // Clear used OTP
       await db
         .update(users)
         .set({
@@ -298,19 +297,18 @@ apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextF
         })
         .where(eq(users.id, user.id));
 
-      console.log('[Routes] OTP verified successfully:', {
+      logger.info('[Routes] OTP verified successfully:', {
         userId: user.id,
         timestamp: new Date().toISOString()
       });
 
-      // Return success with user ID
       res.json({
         success: true,
         userId: user.id,
         role: user.role
       });
     } catch (err) {
-      console.error("[Routes] Error verifying OTP:", err);
+      logger.error("[Routes] Error in verify-otp:", err);
       next(err);
     }
   });
