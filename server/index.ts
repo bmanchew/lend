@@ -48,7 +48,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 registerRoutes(app);
 
 // Serve static files based on environment
-const staticPath = process.env.NODE_ENV === 'production' ? 'dist/public' : 'client/dist';
+const staticPath = process.env.NODE_ENV === 'production' ? 'dist/public' : 'dist/public';
 
 // Ensure static directory exists
 app.use(express.static(path.join(process.cwd(), staticPath), {
