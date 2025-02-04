@@ -71,7 +71,7 @@ app.get('/*', (req, res) => {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
 
-  const indexPath = isDev 
+  const indexPath = isDev
     ? path.join(process.cwd(), 'client', 'index.html')
     : path.join(process.cwd(), 'dist', 'public', 'index.html');
 
@@ -95,13 +95,13 @@ async function startServer() {
     const server = createServer(app);
 
     return new Promise((resolve, reject) => {
-      server.listen(port, '0.0.0.0', () => {
-        console.log(`[SERVER] Server ready! http://0.0.0.0:${port}`);
+      server.listen(PORT, '0.0.0.0', () => {
+        console.log(`[SERVER] Server ready! http://0.0.0.0:${PORT}`);
         console.log(`[SERVER] Static files path: ${staticPath}`);
 
         // Signal ready state to parent process
         if (process.send) {
-          process.send({ type: 'ready', port });
+          process.send({ type: 'ready', port: PORT });
         }
 
         resolve(server);
