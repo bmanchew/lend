@@ -3,8 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
-import { Server } from 'socket.io';
-import { createServer } from 'http'; // Added import for createServer
+import { createServer } from 'http';
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -15,27 +14,6 @@ const limiter = rateLimit({
 const app = express();
 const PORT = process.env.PORT || 3001;
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.DEPLOYMENT_URL 
-      : 'https://0e0d6d78-f8a2-42fc-8518-35c15bb90a71-00-1bcvq3e56v1u5.kirk.replit.dev',
-    credentials: true,
-    methods: ['GET', 'POST']
-  },
-  path: '/socket.io/',
-  transports: ['websocket'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  path: '/socket.io/',
-  transports: ['websocket'],
-  cookie: {
-    name: 'io',
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict'
-  }
-});
 
 // Middleware
 app.use(cors({
