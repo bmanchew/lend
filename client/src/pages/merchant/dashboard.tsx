@@ -31,7 +31,15 @@ export default function MerchantDashboard() {
     queryFn: async () => {
       if (!user?.id) throw new Error('No user ID available');
       console.log('Fetching merchant data for user:', user.id);
-      const response = await fetch(`/api/merchants/by-user/${user.id}`);
+      const response = await fetch(`/api/merchants/by-user/${user.id}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch merchant data: ' + await response.text());
+      }
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to fetch merchant');
