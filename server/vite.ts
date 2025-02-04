@@ -1,4 +1,3 @@
-
 import { ViteDevServer, createServer } from 'vite';
 import express from 'express';
 import { Server } from 'http';
@@ -8,7 +7,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
     server: {
       middlewareMode: true,
       hmr: false, // Completely disable HMR and WebSocket
-      https: true,
+      https: false, //Corrected to false based on intention
       host: '0.0.0.0',
       port: process.env.PORT || 3000,
       watch: {
