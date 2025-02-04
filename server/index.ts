@@ -1,16 +1,17 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic } from "./vite";
+import { serveStatic } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
+import path from 'path';
 
 const app = express();
 
 // Use environment port or fallback to 5000
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
-// Rate limiting middleware with enterprise configuration
+// Rate limiting middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
@@ -34,7 +35,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[SERVER] Unhandled Rejection:', reason);
 });
 
-// Enterprise-grade middleware setup
+// Middleware setup
 app.use(cors({
   origin: true,
   credentials: true
@@ -78,9 +79,47 @@ app.use(requestLogger);
 // Register API routes
 registerRoutes(app);
 
+// Serve static files
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static('dist/public'));
+
+  // Handle SPA routing
+  app.get('*', (req, res, next) => {
+    if (!req.path.startsWith('/api')) {
+      try {
+        res.sendFile(path.resolve(__dirname, '../dist/public/index.html'));
+      } catch (err) {
+        next(err);
+      }
+    } else {
+      next();
+    }
+  });
+} else {
+  // In development, serve from the client directory
+  app.use(express.static('client/dist'));
+  app.get('*', (req, res, next) => {
+    if (!req.path.startsWith('/api')) {
+      try {
+        res.sendFile(path.resolve(__dirname, '../client/dist/index.html'));
+      } catch (err) {
+        next(err);
+      }
+    } else {
+      next();
+    }
+  });
+}
+
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  console.error("[ERROR]", err);
+  console.error("[ERROR]", {
+    error: err,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+
   if (!res.headersSent) {
     res.status(err.status || 500).json({
       status: "error",
@@ -92,25 +131,11 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 // Create HTTP server
 const httpServer = createServer(app);
 
-// Setup Vite in development
-if (app.get("env") === "development") {
-  setupVite(app, httpServer).then(() => {
-    httpServer.listen(PORT, '0.0.0.0', () => {
-      console.log('[SERVER] Environment:', process.env.NODE_ENV);
-      console.log(`[SERVER] Application started on port ${PORT}`);
-    });
-  }).catch(error => {
-    console.error('[SERVER] Failed to setup Vite:', error);
-    process.exit(1);
-  });
-} else {
-  // Production setup
-  serveStatic(app);
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log('[SERVER] Environment:', process.env.NODE_ENV);
-    console.log(`[SERVER] Application started on port ${PORT}`);
-  });
-}
+// Start the server
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log('[SERVER] Environment:', process.env.NODE_ENV);
+  console.log(`[SERVER] Application started on port ${PORT}`);
+});
 
 // Handle server errors
 httpServer.on('error', (error: NodeJS.ErrnoException) => {
