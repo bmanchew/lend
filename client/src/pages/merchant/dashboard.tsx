@@ -28,7 +28,14 @@ export default function MerchantDashboard() {
   const { data: merchant, isLoading, error } = useQuery<SelectMerchant>({
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
-      if (!user?.id) throw new Error('No user ID available');
+      if (!user?.id) {
+        console.error('[MerchantDashboard] No user ID available for query');
+        throw new Error('No user ID available');
+      }
+      console.log('[MerchantDashboard] Fetching merchant data:', {
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
       console.log('[MerchantDashboard] Fetching merchant data:', {
         userId: user.id,
         timestamp: new Date().toISOString()

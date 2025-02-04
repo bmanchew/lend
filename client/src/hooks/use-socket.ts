@@ -1,9 +1,3 @@
 
-// Socket functionality removed
-export const useSocket = () => {
-  return {
-    connected: false,
-    connect: () => {},
-    disconnect: () => {}
-  };
-};
+// Socket functionality removed - using REST endpoints only
+export const useSocket = () => null;

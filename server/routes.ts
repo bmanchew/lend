@@ -611,10 +611,11 @@ export function registerRoutes(app: Express): Server {
         .returning();
 
       // Emit contract update event
-      global.io.to(`merchant_${merchantId}`).emit('contract_update', {
-        type: 'new_application',
+      console.log('[Contract Creation] New contract created:', {
+        merchantId,
         contractId: newContract.id,
-        status: 'pending_review'
+        status: 'pending_review',
+        timestamp: new Date().toISOString()
       });
 
       res.json(newContract);
