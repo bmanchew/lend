@@ -21,18 +21,23 @@ export function KycVerificationModal({
   const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
-
-  // Log user info for debugging
-  console.log('[KYC Modal] User info:', { userId, user });
   const [verificationStarted, setVerificationStarted] = useState(false);
+  const [redirectAttempted, setRedirectAttempted] = useState(false);
 
-  // Platform detection
+  // Enhanced platform detection
   const platform = isMobile ? 'mobile' : 'web';
   console.log('[KYC Modal] Platform detection:', {
     isMobile,
     platform,
     userAgent: navigator.userAgent,
-    vendor: navigator.vendor
+    vendor: navigator.vendor,
+    deviceMemory: (navigator as any).deviceMemory,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    screenInfo: {
+      width: window.screen.width,
+      height: window.screen.height,
+      orientation: window.screen.orientation?.type
+    }
   });
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -52,7 +57,7 @@ export function KycVerificationModal({
       return data;
     },
     enabled: !!userId && isOpen,
-    refetchInterval: 5000
+    refetchInterval: isMobile ? 3000 : 5000 // More frequent polling on mobile
   });
 
   const startVerification = useMutation({
@@ -62,14 +67,12 @@ export function KycVerificationModal({
         throw new Error('User ID is required');
       }
 
-      const platform = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
-      console.log('[KYC Modal] Detected platform:', platform);
-
       console.log('[KYC Modal] Starting verification:', {
         userId,
         platform,
         isMobile,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
       });
 
       try {
@@ -98,34 +101,47 @@ export function KycVerificationModal({
           throw new Error('No redirect URL provided');
         }
 
-        // For mobile browsers, we need to handle the redirection differently
-        if (isMobile) {
-          console.log('[KYC Modal] Handling mobile redirection');
-          
+        // Enhanced mobile redirection with better fallback handling
+        if (isMobile && !redirectAttempted) {
+          setRedirectAttempted(true);
+          console.log('[KYC Modal] Initiating mobile redirection sequence');
+
           // Try universal link first
           const universalLink = data.redirectUrl;
           console.log('[KYC Modal] Attempting universal link:', universalLink);
-          
+
           // Create and use hidden anchor for better mobile handling
           const link = document.createElement('a');
           link.href = universalLink;
           link.style.display = 'none';
           document.body.appendChild(link);
-          link.click();
 
-          // Fallback chain: app scheme -> web URL
-          setTimeout(() => {
+          // Sequential fallback chain with timeouts
+          const tryRedirect = async () => {
+            // 1. Try universal link
+            link.click();
+
+            // 2. Try app scheme after short delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
             const appUrl = data.redirectUrl.replace('https://', 'didit://');
             console.log('[KYC Modal] Attempting app URL:', appUrl);
             window.location.href = appUrl;
 
-            setTimeout(() => {
+            // 3. Final fallback to web URL after another delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (!document.hidden) {
               console.log('[KYC Modal] Final fallback to web URL:', data.redirectUrl);
               window.location.href = data.redirectUrl;
-            }, 1500);
-          }, 1500);
+            }
+          };
+
+          tryRedirect().catch(err => {
+            console.error('[KYC Modal] Redirection sequence error:', err);
+            // Fallback to direct web URL
+            window.location.href = data.redirectUrl;
+          });
         } else {
-          console.log('[KYC Modal] Redirecting to web URL:', data.redirectUrl);
+          console.log('[KYC Modal] Using web flow:', data.redirectUrl);
           window.location.href = data.redirectUrl;
         }
 
@@ -134,7 +150,7 @@ export function KycVerificationModal({
         console.error('[KYC Modal] Verification error:', error);
         toast({
           title: "Verification Error",
-          description: "Failed to start verification. Please try again.",
+          description: error.message || "Failed to start verification. Please try again.",
           variant: "destructive"
         });
         throw error;
@@ -143,24 +159,26 @@ export function KycVerificationModal({
   });
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setRedirectAttempted(false);
+      setVerificationStarted(false);
+      return;
+    }
 
     console.log('[KYC Modal] Modal opened:', {
       isMobile,
       platform,
       status: kycData?.status,
       userId,
-      verificationStarted
+      verificationStarted,
+      redirectAttempted
     });
-
-    // Reset verification state on modal open
-    setVerificationStarted(false);
 
     if (!userId) {
       console.error('[KYC Modal] No user ID available');
       toast({
         title: "Verification Error",
-        description: "User ID not found. Please try logging in again.",
+        description: "Please log in to continue with verification.",
         variant: "destructive"
       });
       return;
@@ -172,19 +190,7 @@ export function KycVerificationModal({
       try {
         console.log('[KYC Modal] Starting new verification');
         setVerificationStarted(true);
-        const result = await startVerification.mutateAsync();
-
-        if (!result || !result.redirectUrl) {
-          console.error('[KYC Modal] Invalid verification response:', result);
-          toast({
-            title: "Verification Error",
-            description: "Unable to start verification. Please try again.",
-            variant: "destructive"
-          });
-          throw new Error('Invalid verification response');
-        }
-
-        console.log('[KYC Modal] Verification initialized:', result);
+        await startVerification.mutateAsync();
       } catch (error: any) {
         console.error('[KYC Modal] Failed to initialize verification:', error);
         toast({
@@ -208,6 +214,41 @@ export function KycVerificationModal({
     }
   }, [isOpen, kycData?.status, userId]);
 
+  const renderContent = () => {
+    if (!userId) {
+      return (
+        <p className="text-sm text-red-500">
+          Please log in to continue with verification.
+        </p>
+      );
+    }
+
+    if (startVerification.isPending) {
+      return (
+        <div className="flex items-center space-x-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>{isMobile ? "Preparing mobile verification..." : "Starting verification process..."}</span>
+        </div>
+      );
+    }
+
+    if (redirectAttempted && isMobile) {
+      return (
+        <p className="text-sm text-gray-500">
+          Opening Didit verification app... If nothing happens, please check if the app is installed or try refreshing the page.
+        </p>
+      );
+    }
+
+    return (
+      <p className="text-sm text-gray-500">
+        {isMobile 
+          ? "Initializing mobile verification..." 
+          : "Please wait while we initialize identity verification..."}
+      </p>
+    );
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
@@ -216,20 +257,7 @@ export function KycVerificationModal({
         </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 p-4">
           <div className="text-center space-y-3">
-            {!userId ? (
-              <p className="text-sm text-red-500">
-                User ID not found. Please try logging in again.
-              </p>
-            ) : startVerification.isPending ? (
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Starting verification process...</span>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">
-                Please wait while we initialize identity verification...
-              </p>
-            )}
+            {renderContent()}
           </div>
         </div>
       </DialogContent>
