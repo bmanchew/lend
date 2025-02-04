@@ -130,16 +130,9 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  const portfinder = await import('portfinder');
-
-  // Configure portfinder
-  const PORT = await portfinder.getPortPromise({
-    port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-    stopPort: 9000
-  });
+  const PORT = process.env.PORT || 3000;
   httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+    log(`Server running at http://0.0.0.0:${PORT}`);
     console.log('Environment:', process.env.NODE_ENV);
   });
 
