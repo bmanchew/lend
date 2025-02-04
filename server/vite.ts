@@ -6,15 +6,13 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: false, // Completely disable HMR and WebSocket
-      https: false, //Corrected to false based on intention
+      hmr: false,
+      https: false,
       host: '0.0.0.0',
-      port: process.env.PORT || 3000,
-      watch: {
-        usePolling: true,
-        interval: 1000,
-        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
-      }
+      port: 3000,
+      strictPort: true,
+      cors: true,
+      watch: false
     },
     optimizeDeps: {
       include: [
