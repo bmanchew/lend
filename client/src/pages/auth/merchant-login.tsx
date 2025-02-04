@@ -43,6 +43,11 @@ export default function MerchantLogin() {
       console.log('[MerchantLogin] Attempting navigation to dashboard');
 
       if (response?.role === 'merchant') {
+        console.log('[MerchantLogin] Redirecting merchant to dashboard:', {
+          userId: response.id,
+          role: response.role,
+          timestamp: new Date().toISOString()
+        });
         navigate('/merchant/dashboard', { replace: true });
       } else {
         console.warn("[MerchantLogin] Unexpected role:", response?.role);
