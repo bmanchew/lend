@@ -7,17 +7,10 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: false, // Disable HMR completely to prevent WebSocket connection attempts
+      hmr: false, // Disable HMR completely
       watch: {
-        usePolling: true, // Use polling instead of WebSocket
+        usePolling: true,
         interval: 1000,
-          errors: true,
-          warnings: true
-        },
-        clientPort: process.env.VITE_PORT || 3000
-      },
-      watch: {
-        usePolling: false,
         ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
       }
     },
