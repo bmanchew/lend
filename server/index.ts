@@ -139,7 +139,6 @@ app.use(requestLogger);
   });
   httpServer.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
-    // Log successful startup
     console.log(`Server running at http://0.0.0.0:${PORT}`);
     console.log('Environment:', process.env.NODE_ENV);
   });

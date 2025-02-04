@@ -147,6 +147,5 @@
     "vitest": "^3.0.4"
   },
   "optionalDependencies": {
-    "bufferutil": "^4.0.8"
   }
 }
