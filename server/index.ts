@@ -8,8 +8,9 @@ import path from 'path';
 import fs from 'fs';
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
+app.set('trust proxy', 1);
 
 // Basic security middleware
 const limiter = rateLimit({
