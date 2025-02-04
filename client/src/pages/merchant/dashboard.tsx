@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +33,7 @@ export default function MerchantDashboard() {
         userId: user.id,
         timestamp: new Date().toISOString()
       });
-      
+
       const response = await fetch(`/api/merchants/by-user/${user.id}`, {
         credentials: 'include',
         headers: {
@@ -50,7 +49,7 @@ export default function MerchantDashboard() {
           error: errorText,
           userId: user.id
         });
-        throw new Error(`Failed to fetch merchant data: ${errorText}`);
+        throw new Error(`Failed to fetch merchant data: ${response.status} - ${errorText}`); //More informative error message
       }
 
       const data = await response.json();
@@ -73,7 +72,7 @@ export default function MerchantDashboard() {
     }
   }, [error]);
 
-  const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
+  const { data: contracts, isLoading: contractsLoading, error: contractsError, refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],
     enabled: !!merchant,
     onSuccess: (data) => {
@@ -132,17 +131,19 @@ export default function MerchantDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">
             {merchant?.companyName} Dashboard
           </h1>
-          {isLoading ? (
+          {isLoading || contractsLoading ? (
             <div>Loading...</div>
-          ) : error ? (
+          ) : error || contractsError ? (
             <div className="text-red-500">
-              {error instanceof Error ? error.message : "Error loading merchant data"}
+              {error instanceof Error ? error.message : "Error loading merchant data"} {contractsError instanceof Error ? contractsError.message : ""}
             </div>
           ) : merchant ? (
             <div className="flex items-center gap-4">
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
-          ) : null}
+          ) : (
+            <div className="text-red-500">No merchant data found.</div> //Added a message for no merchant data
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
