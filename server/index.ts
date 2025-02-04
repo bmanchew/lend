@@ -12,8 +12,8 @@ const limiter = rateLimit({
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 const httpServer = createServer(app);
+app.set('no-websocket', true); // Added to disable WebSocket functionality
 
 // Middleware
 app.use(cors({
