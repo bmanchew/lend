@@ -1170,8 +1170,10 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: 'Invalid phone number format' });
       }
 
-      // Construct and validate application URL
-      const baseUrl = process.env.APP_URL || 'https://shi-fi-lend-brandon263.replit.app';
+      // Get host from request headers for dynamic URL generation
+      const host = req.headers.host;
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const baseUrl = `${protocol}://${host}`;
       const applicationUrl = `${baseUrl}/login/customer?phone=${encodeURIComponent(phoneDigits)}`;
 
       try {
