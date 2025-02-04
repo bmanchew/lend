@@ -252,11 +252,29 @@ export function registerRoutes(app: Express): Server {
         .where(eq(merchants.userId, userId))
         .limit(1);
 
-      console.log("[Merchant Lookup] Query results:", merchantResults);
-
-      console.log("[Merchant Lookup] Query results:", merchantResults);
+      console.log("[Merchant Lookup] Query results:", {
+        merchantResults,
+        count: merchantResults.length,
+        userId,
+        timestamp: new Date().toISOString()
+      });
 
       const [merchant] = merchantResults;
+
+      // Log the merchant details or lack thereof
+      if (!merchant) {
+        console.error("[Merchant Lookup] No merchant found for user:", {
+          userId,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log("[Merchant Lookup] Found merchant:", {
+          merchantId: merchant.id,
+          companyName: merchant.companyName,
+          userId: merchant.userId,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       if (!merchant) {
         return res.status(404).json({ error: 'Merchant not found' });
