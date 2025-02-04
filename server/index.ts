@@ -63,7 +63,7 @@ registerRoutes(app);
 
 // Update static file serving configuration
 const isDev = process.env.NODE_ENV !== 'production';
-const staticPath = isDev ? path.join(process.cwd(), 'client') : path.join(process.cwd(), 'dist', 'public');
+const staticPath = isDev ? path.join(process.cwd(), 'client') : path.join(process.cwd(), 'dist');
 
 // Ensure static directory exists
 if (!fs.existsSync(staticPath)) {
@@ -71,10 +71,24 @@ if (!fs.existsSync(staticPath)) {
   fs.mkdirSync(staticPath, { recursive: true });
 }
 
-app.use(express.static(staticPath, {
-  index: false, // Disable automatic serving of index.html
-  maxAge: isDev ? '0' : '1d' // Add caching in production
+// Enable CORS with specific options
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Serve static files
+app.use(express.static(staticPath));
+
+// Serve index.html for client-side routing
+app.get('/*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  res.sendFile(path.join(staticPath, 'index.html'));
+});
 
 // SPA route handling - after API routes
 app.get('/*', (req, res) => {
