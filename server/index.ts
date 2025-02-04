@@ -5,6 +5,8 @@ import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 
+const PORT = process.env.PORT || 3001;
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
