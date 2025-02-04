@@ -8,6 +8,9 @@ export async function setupVite(app: express.Application, httpServer: Server) {
     server: {
       middlewareMode: true,
       hmr: false,
+      https: true,
+      host: '0.0.0.0',
+      port: process.env.PORT || 3000,
       watch: {
         usePolling: true,
         interval: 1000,
