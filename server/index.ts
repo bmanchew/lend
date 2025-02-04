@@ -52,8 +52,14 @@ registerRoutes(app);
 const isDev = process.env.NODE_ENV !== 'production';
 const staticPath = isDev ? path.join(process.cwd(), 'client') : path.join(process.cwd(), 'dist', 'public');
 
+if (!fs.existsSync(staticPath)) {
+  console.warn(`[SERVER] Static directory not found: ${staticPath}`);
+  fs.mkdirSync(staticPath, { recursive: true });
+}
+
 app.use(express.static(staticPath, {
-  index: false // Disable automatic serving of index.html
+  index: false, // Disable automatic serving of index.html
+  maxAge: isDev ? '0' : '1d' // Add caching in production
 }));
 
 // SPA route handling - after API routes
@@ -82,8 +88,7 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 // Server startup configuration
 async function startServer() {
   try {
-    // Always try DEFAULT_PORT first
-    const port = DEFAULT_PORT;
+    const port = process.env.PORT || DEFAULT_PORT;
     console.log(`[SERVER] Attempting to start on port ${port}...`);
 
     const server = createServer(app);
