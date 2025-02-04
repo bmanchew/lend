@@ -70,30 +70,16 @@ export default function MerchantDashboard() {
     }
   });
 
-  // Connect to socket for real-time updates
-  const socket = useSocket(merchant?.id);
-
-  // Listen for real-time contract updates
+  // Polling for updates
   useEffect(() => {
-    if (socket && merchant?.id) {
-      socket.on('contract_update', (data) => {
-        if (data.merchantId === merchant.id) {
-          refetchContracts();
-        }
-      });
+    if (merchant?.id) {
+      const pollInterval = setInterval(() => {
+        refetchContracts();
+      }, 30000); // Poll every 30 seconds
 
-      socket.on('application_update', (data) => {
-        if (data.merchantId === merchant.id) {
-          refetchContracts();
-        }
-      });
-
-      return () => {
-        socket.off('contract_update');
-        socket.off('application_update');
-      };
+      return () => clearInterval(pollInterval);
     }
-  }, [socket, merchant?.id, refetchContracts]);
+  }, [merchant?.id, refetchContracts]);
 
   useEffect(() => {
     if (contracts) {
