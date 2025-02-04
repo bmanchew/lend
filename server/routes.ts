@@ -82,32 +82,28 @@ export function registerRoutes(app: Express) {
       const { phoneNumber } = req.body;
 
       if (!phoneNumber) {
+        console.error('[Routes] Missing phone number');
         return res.status(400).json({ error: "Phone number is required" });
       }
 
-      // Test Twilio connection first
-      const isConnected = await smsService.testConnection();
-      if (!isConnected) {
-        console.error('[Routes] Twilio service not available');
-        return res.status(503).json({
-          error: "SMS service unavailable",
-          details: "Please try again later"
-        });
-      }
-
-      // Clean and format phone number
+      // Basic phone formatting
       let cleanNumber = phoneNumber.replace(/\D/g, '');
       if (cleanNumber.length === 10) {
         cleanNumber = `1${cleanNumber}`; // Add country code for US numbers
       }
       cleanNumber = `+${cleanNumber}`;
 
+      console.log('[Routes] Processing OTP request:', {
+        originalNumber: phoneNumber,
+        cleanNumber,
+        timestamp: new Date().toISOString()
+      });
+
       // Basic validation
       if (cleanNumber.length !== 12 || !cleanNumber.startsWith('+1')) {
-        console.error('[Routes] Invalid phone number:', {
+        console.error('[Routes] Invalid phone number format:', {
           input: phoneNumber,
-          cleaned: cleanNumber,
-          timestamp: new Date().toISOString()
+          cleaned: cleanNumber
         });
         return res.status(400).json({
           error: "Invalid phone number",
@@ -115,7 +111,11 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Find or create user
+      // Generate OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+      // Find or create user with minimal fields
       let user = await db
         .select()
         .from(users)
@@ -123,38 +123,26 @@ export function registerRoutes(app: Express) {
         .limit(1)
         .then(rows => rows[0]);
 
-      if (user && user.role !== 'customer') {
-        return res.status(403).json({ error: 'Invalid account type for OTP login' });
-      }
-
-      // Generate OTP
-      const otp = smsService.generateOTP();
-      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
-
       if (!user) {
-        // Create new user
-        user = await db
+        [user] = await db
           .insert(users)
           .values({
-            username: cleanNumber.slice(1), // Remove + prefix
+            username: cleanNumber.slice(1),
             password: Math.random().toString(36).slice(-8),
             email: `${cleanNumber.slice(1)}@temp.shifi.com`,
             name: '',
             role: 'customer',
             phoneNumber: cleanNumber,
             lastOtpCode: otp,
-            otpExpiry,
-            kycStatus: 'pending'
+            otpExpiry
           })
-          .returning()
-          .then(rows => rows[0]);
+          .returning();
 
         console.log('[Routes] Created new user:', {
           userId: user.id,
           phone: cleanNumber
         });
       } else {
-        // Update existing user's OTP
         await db
           .update(users)
           .set({
@@ -163,13 +151,13 @@ export function registerRoutes(app: Express) {
           })
           .where(eq(users.id, user.id));
 
-        console.log('[Routes] Updated OTP for user:', {
+        console.log('[Routes] Updated existing user OTP:', {
           userId: user.id,
           phone: cleanNumber
         });
       }
 
-      // Send OTP
+      // Send OTP via SMS
       const sent = await smsService.sendOTP(cleanNumber, otp);
 
       if (sent) {
@@ -177,19 +165,13 @@ export function registerRoutes(app: Express) {
           userId: user.id,
           phone: cleanNumber
         });
-        res.json({
-          success: true,
-          userId: user.id
-        });
+        res.json({ success: true, userId: user.id });
       } else {
         console.error('[Routes] Failed to send OTP:', {
           userId: user.id,
           phone: cleanNumber
         });
-        res.status(500).json({
-          error: "Failed to send OTP",
-          details: "Please try again later"
-        });
+        res.status(500).json({ error: "Failed to send OTP" });
       }
     } catch (err) {
       console.error("[Routes] Error in send-otp:", err);
@@ -197,23 +179,49 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Verify OTP endpoint with enhanced validation and security
   apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId, otp } = req.body;
 
       if (!userId || !otp) {
-        logger.error('[Routes] Missing verification data:', {
+        console.error('[Routes] Missing verification data:', {
           hasUserId: !!userId,
           hasOtp: !!otp,
           timestamp: new Date().toISOString()
         });
-        return res.status(400).json({
-          error: "Both user ID and verification code are required",
-          details: "Please provide all required information"
+        return res.status(400).json({ 
+          success: false,
+          message: "User ID and verification code are required" 
         });
       }
 
+      // Enhanced session validation
+      if (!req.session) {
+        console.error('[Routes] Invalid session state');
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid session state" 
+        });
+      }
+
+      // Rate limiting
+      const otpAttempts = (req.session.otpAttempts || 0) + 1;
+      req.session.otpAttempts = otpAttempts;
+
+      if (otpAttempts > 5) {
+        console.error('[Routes] Too many OTP attempts:', {
+          userId,
+          attempts: otpAttempts,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(429).json({ 
+          success: false,
+          message: "Too many attempts. Please request a new code.",
+          attemptsRemaining: 0
+        });
+      }
+
+      // Enhanced user lookup with role verification
       const user = await db
         .select()
         .from(users)
@@ -221,28 +229,45 @@ export function registerRoutes(app: Express) {
         .limit(1)
         .then(rows => rows[0]);
 
+      console.log('[Routes] User lookup result:', {
+        userId,
+        found: !!user,
+        role: user?.role,
+        hasPhone: !!user?.phoneNumber,
+        timestamp: new Date().toISOString()
+      });
+
       if (!user) {
-        logger.error('[Routes] User not found for OTP verification:', {
-          userId,
-          timestamp: new Date().toISOString()
-        });
-        return res.status(404).json({
-          error: "User not found",
-          details: "Please try the verification process again"
+        console.error('[Routes] User not found:', { userId });
+        return res.status(404).json({ 
+          success: false,
+          message: "User not found" 
         });
       }
 
-      // Validate OTP
+      // Verify user is a customer/borrower
+      if (user.role !== 'customer') {
+        console.error('[Routes] Invalid user role for OTP verification:', {
+          userId: user.id,
+          role: user.role
+        });
+        return res.status(403).json({ 
+          success: false,
+          message: "Invalid account type for OTP verification" 
+        });
+      }
+
+      // Enhanced OTP validation
       if (!user.lastOtpCode || !user.otpExpiry) {
-        logger.error('[Routes] No active OTP found:', {
+        console.error('[Routes] No active OTP found:', {
           userId: user.id,
           hasOtp: !!user.lastOtpCode,
           hasExpiry: !!user.otpExpiry,
           timestamp: new Date().toISOString()
         });
-        return res.status(400).json({
-          error: "No active verification code",
-          details: "Please request a new verification code"
+        return res.status(400).json({ 
+          success: false,
+          message: "No active verification code" 
         });
       }
 
@@ -250,13 +275,13 @@ export function registerRoutes(app: Express) {
       const expiry = new Date(user.otpExpiry);
 
       if (now > expiry) {
-        logger.error('[Routes] OTP expired:', {
+        console.error('[Routes] OTP expired:', {
           userId: user.id,
           expiry: expiry.toISOString(),
           now: now.toISOString()
         });
 
-        // Clear expired OTP
+        // Clear expired OTP immediately
         await db
           .update(users)
           .set({
@@ -265,30 +290,48 @@ export function registerRoutes(app: Express) {
           })
           .where(eq(users.id, user.id));
 
-        return res.status(400).json({
-          error: "Verification code has expired",
-          details: "Please request a new verification code"
+        return res.status(400).json({ 
+          success: false,
+          message: "Verification code has expired" 
         });
       }
 
-      // Use timing-safe comparison for OTP validation
-      const isValid = timingSafeEqual(
-        Buffer.from(user.lastOtpCode.trim()),
-        Buffer.from(otp.trim())
-      );
+      // Enhanced timing-safe comparison with fixed-length buffers
+      const normalizedStoredOTP = user.lastOtpCode.trim();
+      const normalizedInputOTP = otp.trim();
 
-      if (!isValid) {
-        logger.error('[Routes] Invalid OTP provided:', {
+      // Ensure both OTPs are exactly 6 digits
+      if (!/^\d{6}$/.test(normalizedStoredOTP) || !/^\d{6}$/.test(normalizedInputOTP)) {
+        console.error('[Routes] Invalid OTP format:', {
           userId: user.id,
           timestamp: new Date().toISOString()
         });
-        return res.status(400).json({
-          error: "Invalid verification code",
-          details: "Please check the code and try again"
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid verification code format" 
         });
       }
 
-      // Clear used OTP
+      // Use timing-safe comparison
+      const isValid = timingSafeEqual(
+        Buffer.from(normalizedStoredOTP),
+        Buffer.from(normalizedInputOTP)
+      );
+
+      if (!isValid) {
+        console.error('[Routes] Invalid OTP provided:', {
+          userId: user.id,
+          attempts: otpAttempts,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid verification code",
+          attemptsRemaining: 5 - otpAttempts
+        });
+      }
+
+      // Clear used OTP immediately after successful verification
       await db
         .update(users)
         .set({
@@ -297,8 +340,12 @@ export function registerRoutes(app: Express) {
         })
         .where(eq(users.id, user.id));
 
-      logger.info('[Routes] OTP verified successfully:', {
+      // Reset attempts on success
+      req.session.otpAttempts = 0;
+
+      console.log('[Routes] OTP verified successfully:', {
         userId: user.id,
+        role: user.role,
         timestamp: new Date().toISOString()
       });
 
@@ -308,7 +355,7 @@ export function registerRoutes(app: Express) {
         role: user.role
       });
     } catch (err) {
-      logger.error("[Routes] Error in verify-otp:", err);
+      console.error("[Routes] Error in verify-otp:", err);
       next(err);
     }
   });
