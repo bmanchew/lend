@@ -29,10 +29,10 @@ export default function MerchantDashboard() {
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
       if (!user?.id) {
-        console.error('[MerchantDashboard] No user ID available for query');
+        console.error('[MerchantDashboard] No user ID available for merchant query');
         throw new Error('No user ID available');
       }
-      
+
       console.log('[MerchantDashboard] Starting merchant data fetch:', {
         userId: user.id,
         timestamp: new Date().toISOString()
@@ -49,7 +49,7 @@ export default function MerchantDashboard() {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[MerchantDashboard] API error:', {
+          console.error('[MerchantDashboard] Merchant data fetch error:', {
             status: response.status,
             error: errorText,
             userId: user.id
@@ -72,40 +72,6 @@ export default function MerchantDashboard() {
         });
         throw err;
       }
-      console.log('[MerchantDashboard] Fetching merchant data:', {
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      });
-      console.log('[MerchantDashboard] Fetching merchant data:', {
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      });
-
-      const response = await fetch(`/api/merchants/by-user/${user.id}`, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[MerchantDashboard] API error:', {
-          status: response.status,
-          error: errorText,
-          userId: user.id
-        });
-        throw new Error(`Failed to fetch merchant data: ${response.status} - ${errorText}`); //More informative error message
-      }
-
-      const data = await response.json();
-      console.log('[MerchantDashboard] Merchant data loaded:', {
-        merchantId: data?.id,
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      });
-      return data;
     },
     enabled: !!user?.id,
     retry: 3,
