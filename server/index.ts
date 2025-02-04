@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
+import { createServer } from 'http';
 
 // Use environment port or fallback to 5000
 const PORT = parseInt(process.env.PORT || '5000', 10);
@@ -10,8 +11,17 @@ const PORT = parseInt(process.env.PORT || '5000', 10);
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later'
+  message: 'Too many requests from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => req.headers['x-forwarded-for'] as string || req.ip
 });
+
+// Apply rate limiting to auth routes
+app.use('/api/auth', limiter);
+app.use('/api/login', limiter);
+app.use('/api/register', limiter);
 
 const app = express();
 
@@ -111,22 +121,34 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
+// Create HTTP server
+const httpServer = createServer(app);
+
 // Setup Vite/static serving last
 if (app.get("env") === "development") {
-  setupVite(app);
+  setupVite(app, httpServer).then(() => {
+    // Start server after Vite is set up
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log('[SERVER] Environment:', process.env.NODE_ENV);
+      console.log(`[SERVER] Application started on port ${PORT}`);
+      console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
+    });
+  }).catch(error => {
+    console.error('[SERVER] Failed to setup Vite:', error);
+    process.exit(1);
+  });
 } else {
   serveStatic(app);
+  // Start server directly in production
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log('[SERVER] Environment:', process.env.NODE_ENV);
+    console.log(`[SERVER] Application started on port ${PORT}`);
+    console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
+  });
 }
 
-// Start the server with enhanced logging
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log('[SERVER] Environment:', process.env.NODE_ENV);
-  console.log(`[SERVER] Application started on port ${PORT}`);
-  console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
-});
-
 // Handle server errors
-server.on('error', (error: NodeJS.ErrnoException) => {
+httpServer.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {
     console.error(`[SERVER] Port ${PORT} is already in use`);
     process.exit(1);
@@ -135,4 +157,4 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 });
 
 // Export for testing
-export { app, server };
+export { app, httpServer as server };

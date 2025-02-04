@@ -17,55 +17,6 @@ export function registerRoutes(app: Express) {
   setupAuth(app);
   const apiRouter = express.Router();
 
-  // Essential routes for contracts
-  apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const customerContracts = await db.query.contracts.findMany({
-        where: eq(contracts.customerId, parseInt(req.params.id)),
-        orderBy: desc(contracts.createdAt)
-      });
-      res.json(customerContracts);
-    } catch (err: any) {
-      console.error("Error fetching customer contracts:", err);
-      next(err);
-    }
-  });
-
-  // Essential merchant route
-  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
-    try {
-      const userId = parseInt(req.params.userId);
-      if (isNaN(userId)) {
-        return res.status(400).json({ error: 'Invalid user ID' });
-      }
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!user || user.role !== 'merchant') {
-        return res.status(403).json({ error: 'User is not a merchant' });
-      }
-
-      const [merchant] = await db
-        .select()
-        .from(merchants)
-        .where(eq(merchants.userId, userId))
-        .limit(1);
-
-      if (!merchant) {
-        return res.status(404).json({ error: 'Merchant not found' });
-      }
-
-      res.json(merchant);
-    } catch (err:any) {
-      console.error("Error fetching merchant by user:", err); 
-      next(err);
-    }
-  });
-
   // OTP functionality
   apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -125,6 +76,55 @@ export function registerRoutes(app: Express) {
       }
     } catch (err) {
       console.error("Error sending OTP:", err);
+      next(err);
+    }
+  });
+
+  // Essential routes for contracts
+  apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const customerContracts = await db.query.contracts.findMany({
+        where: eq(contracts.customerId, parseInt(req.params.id)),
+        orderBy: desc(contracts.createdAt)
+      });
+      res.json(customerContracts);
+    } catch (err: any) {
+      console.error("Error fetching customer contracts:", err);
+      next(err);
+    }
+  });
+
+  // Essential merchant route
+  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user || user.role !== 'merchant') {
+        return res.status(403).json({ error: 'User is not a merchant' });
+      }
+
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.userId, userId))
+        .limit(1);
+
+      if (!merchant) {
+        return res.status(404).json({ error: 'Merchant not found' });
+      }
+
+      res.json(merchant);
+    } catch (err:any) {
+      console.error("Error fetching merchant by user:", err); 
       next(err);
     }
   });

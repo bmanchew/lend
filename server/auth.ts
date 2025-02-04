@@ -65,6 +65,46 @@ class AuthService {
       return false;
     }
   }
+
+  async validateOTP(phoneNumber: string, otp: string): Promise<boolean> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, phoneNumber))
+        .limit(1);
+
+      if (!user || !user.lastOtpCode || !user.otpExpiry) {
+        console.error('[AuthService] Invalid OTP validation attempt:', {
+          userId: user?.id,
+          phone: phoneNumber,
+          hasOtp: !!user?.lastOtpCode,
+          hasExpiry: !!user?.otpExpiry
+        });
+        return false;
+      }
+
+      const now = new Date();
+      const expiry = new Date(user.otpExpiry);
+      if (now > expiry) {
+        console.error('[AuthService] OTP expired:', {
+          userId: user.id,
+          phone: phoneNumber,
+          expiry: expiry.toISOString(),
+          now: now.toISOString()
+        });
+        return false;
+      }
+
+      return timingSafeEqual(
+        Buffer.from(user.lastOtpCode.trim()),
+        Buffer.from(otp.trim())
+      );
+    } catch (error) {
+      console.error('[AuthService] OTP validation error:', error);
+      return false;
+    }
+  }
 }
 
 export const authService = new AuthService();
@@ -149,7 +189,7 @@ export function setupAuth(app: Express) {
   app.use('/api/register', authLimiter);
 
   // Session setup with enhanced security
-  const store = new PostgresSessionStore({ 
+  const store = new PostgresSessionStore({
     pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
@@ -172,17 +212,20 @@ export function setupAuth(app: Express) {
     })
   );
 
-  // Session security middleware
+  // Enhanced session security middleware
   app.use((req, res, next) => {
-    if (req.session && req.session.userId) {
-      // Regenerate session ID periodically
-      if (!req.session.created || Date.now() - req.session.created > 3600000) {
-        req.session.regenerate(() => {
-          req.session.created = Date.now();
-          next();
-        });
-        return;
-      }
+    if (req.session && !req.session.created) {
+      req.session.created = Date.now();
+      req.session.otpAttempts = 0;
+    }
+
+    // Regenerate session ID periodically
+    if (req.session.created && Date.now() - req.session.created > 3600000) {
+      req.session.regenerate(() => {
+        req.session.created = Date.now();
+        next();
+      });
+      return;
     }
     next();
   });
@@ -253,10 +296,10 @@ export function setupAuth(app: Express) {
           const clean = phone.toString().replace(/\D/g, '').slice(-10);
 
           if (clean.length !== 10) {
-            console.error('[Auth] Invalid phone number format:', { 
-              phone, 
+            console.error('[Auth] Invalid phone number format:', {
+              phone,
               clean,
-              length: clean.length 
+              length: clean.length
             });
             throw new Error('Phone number must be 10 digits');
           }
@@ -264,8 +307,8 @@ export function setupAuth(app: Express) {
           // Always format as +1XXXXXXXXXX
           const formatted = '+1' + clean;
 
-          console.log('[Auth] Phone formatting successful:', { 
-            original: phone, 
+          console.log('[Auth] Phone formatting successful:', {
+            original: phone,
             formatted,
             timestamp: new Date().toISOString(),
             userId: userRecord?.id
@@ -362,7 +405,7 @@ export function setupAuth(app: Express) {
             .insert(users)
             .values({
               username: fullPhone.replace(/\D/g, ''),
-              password: await hashPassword(Math.random().toString(36).slice(-8)),
+              password: await authService.hashPassword(Math.random().toString(36).slice(-8)),
               email: `${fullPhone.replace(/\D/g, '')}@temp.shifi.com`,
               name: '',
               role: 'customer',
@@ -567,7 +610,7 @@ export function setupAuth(app: Express) {
       }
 
       // Hash password and create user
-      const hashedPassword = await hashPassword(parsed.data.password);
+      const hashedPassword = await authService.hashPassword(parsed.data.password);
       const [user] = await dbInstance
         .insert(users)
         .values({
@@ -631,7 +674,7 @@ export function setupAuth(app: Express) {
 
   // Added OTP related endpoints
   app.post('/api/sendOTP', async (req, res) => {
-    console.log('[AUTH] Received OTP request:', { 
+    console.log('[AUTH] Received OTP request:', {
       body: req.body,
       headers: req.headers,
       timestamp: new Date().toISOString()
@@ -661,9 +704,9 @@ export function setupAuth(app: Express) {
       // Update user with new OTP
       const updateResult = await dbInstance
         .update(users)
-        .set({ 
-          lastOtpCode: otp, 
-          otpExpiry: expiry 
+        .set({
+          lastOtpCode: otp,
+          otpExpiry: expiry
         })
         .where(eq(users.phoneNumber, phoneNumber))
         .returning();
