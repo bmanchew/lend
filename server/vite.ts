@@ -7,13 +7,16 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: false,
+      hmr: {
+        port: 443,
+        protocol: 'wss',
+        clientPort: 443,
+        host: '0.0.0.0'
+      },
       https: true,
       host: '0.0.0.0',
       port: process.env.PORT || 3000,
-      watch: {
-        usePolling: true,
-        interval: 1000,
+      watch: false,
         ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
       }
     },

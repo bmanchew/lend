@@ -1,4 +1,11 @@
-// Empty implementation - socket functionality removed
-export function useSocket() {
-  return null;
-}
+
+export const useSocket = () => {
+  return {
+    connected: false,
+    connect: () => {},
+    disconnect: () => {},
+    on: () => {},
+    off: () => {},
+    emit: () => {}
+  };
+};
