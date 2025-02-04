@@ -142,7 +142,6 @@ app.use(requestLogger);
     // Log successful startup
     console.log(`Server running at http://0.0.0.0:${PORT}`);
     console.log('Environment:', process.env.NODE_ENV);
-    console.log('WebSocket status: enabled');
   });
 
   //Improve error handling - already added above.
