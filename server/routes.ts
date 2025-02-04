@@ -226,5 +226,54 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Add contract status update endpoint
+  apiRouter.put("/contracts/:contractId/status", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const contractId = parseInt(req.params.contractId);
+      const { status } = req.body;
+
+      if (!contractId || !status) {
+        return res.status(400).json({ error: "Contract ID and status are required" });
+      }
+
+      // Validate status
+      const validStatuses = ['pending_review', 'approved', 'rejected', 'active'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      // Update contract status
+      const [updatedContract] = await db
+        .update(contracts)
+        .set({ 
+          status,
+          // Add timestamp for status change
+          updatedAt: new Date()
+        })
+        .where(eq(contracts.id, contractId))
+        .returning();
+
+      if (!updatedContract) {
+        return res.status(404).json({ error: "Contract not found" });
+      }
+
+      console.log('[Routes] Contract status updated:', {
+        contractId,
+        oldStatus: updatedContract.status,
+        newStatus: status,
+        timestamp: new Date().toISOString()
+      });
+
+      res.json(updatedContract);
+    } catch (err) {
+      console.error("[Routes] Error updating contract status:", {
+        error: err,
+        contractId: req.params.contractId,
+        timestamp: new Date().toISOString()
+      });
+      next(err);
+    }
+  });
+
   app.use("/api", apiRouter);
 }
