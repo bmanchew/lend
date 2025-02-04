@@ -2,6 +2,8 @@ import { ViteDevServer, createServer } from 'vite';
 import express from 'express';
 import { Server } from 'http';
 
+const PORT = process.env.PORT || 3000;
+
 export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
