@@ -1,3 +1,4 @@
+
 import { ViteDevServer, createServer } from 'vite';
 import express from 'express';
 import { Server } from 'http';
@@ -8,12 +9,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: {
-        protocol: 'ws',
-        host: '0.0.0.0',
-        port: Number(process.env.WEBSOCKET_PORT) || 24678,
-        clientPort: 443
-      },
+      hmr: false,
       https: false,
       host: '0.0.0.0',
       port: PORT,
