@@ -16,7 +16,9 @@ export async function setupVite(app: express.Application, httpServer: Server) {
       https: true,
       host: '0.0.0.0',
       port: process.env.PORT || 3000,
-      watch: false,
+      watch: {
+        usePolling: true,
+        interval: 1000,
         ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/coverage/**']
       }
     },
