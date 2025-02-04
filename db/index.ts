@@ -1,9 +1,11 @@
-import { Pool } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
 
-const POOL_CONFIG = {
-  connectionString: process.env.DATABASE_URL?.replace('postgres://', 'postgresql://'),
+const connectionString = process.env.DATABASE_URL!;
+
+const poolConfig = {
+  connectionString: connectionString,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -14,7 +16,8 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL must be set');
 }
 
-const pool = new Pool(POOL_CONFIG);
+
+const pool = new Pool(poolConfig);
 const db = drizzle(pool, { schema });
 
 // Health check function
