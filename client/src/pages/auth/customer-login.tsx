@@ -44,15 +44,12 @@ export default function CustomerLogin() {
 
       const phoneNumber = sanitizePhone(rawPhone);
 
-      console.log('[CustomerLogin] Formatted phone:', {
-        original: form.getValues("phoneNumber"),
-        formatted: phoneNumber
-      });
       console.log('[CustomerLogin] Attempting to send OTP:', {
         formattedPhone: phoneNumber,
         timestamp: new Date().toISOString()
       });
 
+      // Use relative URL to automatically use the correct port
       const response = await axios.post("/api/sendOTP", { phoneNumber });
       console.log('[CustomerLogin] OTP Response:', response.data);
 
@@ -76,7 +73,6 @@ export default function CustomerLogin() {
         description: error.response?.data?.message || "Failed to send code",
         variant: "destructive"
       });
-      console.error("OTP send error:", error);
     }
   };
 
@@ -275,7 +271,6 @@ export default function CustomerLogin() {
     //     //Handle error
     //   })
   };
-
 
   return (
     <div className="container flex min-h-screen items-center justify-center">

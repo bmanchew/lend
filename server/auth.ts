@@ -143,14 +143,14 @@ const loginSchema = z.object({
 export function setupAuth(app: Express) {
   // Security headers
   app.use(helmet());
-  
+
   // Apply rate limiting to auth routes
   app.use('/api/login', authLimiter);
   app.use('/api/register', authLimiter);
-  
+
   // Session setup with enhanced security
   const store = new PostgresSessionStore({ 
-    pool: dbInstance.pool, // Use dbInstance.pool here
+    pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
@@ -161,7 +161,7 @@ export function setupAuth(app: Express) {
       secret: process.env.REPL_ID!,
       resave: false,
       saveUninitialized: false,
-      name: '_sid', // Custom session ID name
+      name: '_sid',
       cookie: {
         secure: app.get("env") === "production",
         httpOnly: true,
@@ -223,7 +223,7 @@ export function setupAuth(app: Express) {
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
-          let [userRecord] = await dbInstance // Use dbInstance here
+          let [userRecord] = await dbInstance
             .select()
             .from(users)
             .where(eq(users.username, username))
@@ -490,7 +490,7 @@ export function setupAuth(app: Express) {
 
 
         // Clear used OTP
-        await dbInstance // Use dbInstance here
+        await dbInstance
           .update(users)
           .set({ lastOtpCode: null, otpExpiry: null })
           .where(eq(users.id, userRecord.id));
@@ -509,7 +509,7 @@ export function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: number, done) => {
     try {
-      const [user] = await dbInstance // Use dbInstance here
+      const [user] = await dbInstance
         .select()
         .from(users)
         .where(eq(users.id, id))
@@ -530,7 +530,7 @@ export function setupAuth(app: Express) {
       }
 
       // First, check for existing username or email to prevent unnecessary admin checks
-      const [existingUser] = await dbInstance // Use dbInstance here
+      const [existingUser] = await dbInstance
         .select()
         .from(users)
         .where(
@@ -553,7 +553,7 @@ export function setupAuth(app: Express) {
       // If registering as admin, check if it's the first admin or if user has admin privileges
       if (parsed.data.role === "admin") {
         // Check for existing admins
-        const adminCount = await dbInstance // Use dbInstance here
+        const adminCount = await dbInstance
           .select({ count: sql`count(*)` })
           .from(users)
           .where(eq(users.role, "admin"));
@@ -568,7 +568,7 @@ export function setupAuth(app: Express) {
 
       // Hash password and create user
       const hashedPassword = await hashPassword(parsed.data.password);
-      const [user] = await dbInstance // Use dbInstance here
+      const [user] = await dbInstance
         .insert(users)
         .values({
           ...parsed.data,
@@ -636,6 +636,7 @@ export function setupAuth(app: Express) {
       headers: req.headers,
       timestamp: new Date().toISOString()
     });
+
     const { phoneNumber } = req.body;
 
     if (!phoneNumber) {
@@ -650,7 +651,7 @@ export function setupAuth(app: Express) {
       expiry.setMinutes(expiry.getMinutes() + 5); // OTP expires in 5 minutes
 
       console.log('[AUTH] Attempting to send OTP');
-      const sent = await SMSService.sendOTP(phoneNumber, otp); // Send OTP via Twilio
+      const sent = await SMSService.sendOTP(phoneNumber, otp);
 
       if (!sent) {
         console.error('[AUTH] SMS service failed to send OTP');
@@ -679,6 +680,4 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: 'Failed to send OTP' });
     }
   });
-
-
 }

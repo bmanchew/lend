@@ -5,7 +5,8 @@ import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 
-const PORT = process.env.PORT || 3001;
+// Use environment port or fallback based on .replit configuration
+const PORT = process.env.PORT || 5000;
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -15,7 +16,6 @@ const limiter = rateLimit({
 
 const app = express();
 const httpServer = createServer(app);
-app.set('no-websocket', true); // Added to disable WebSocket functionality
 
 // Global error handler
 process.on('uncaughtException', (error) => {
@@ -88,7 +88,7 @@ app.use(requestLogger);
 
 (async () => {
   // Register API routes first
-  const httpServer = registerRoutes(app); // Assumed registerRoutes returns the httpServer
+  registerRoutes(app);
 
   // Enterprise error handling middleware
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -117,18 +117,6 @@ app.use(requestLogger);
     }
   });
 
-  // Error handling for HTTP server
-  httpServer.on('error', (error) => {
-    console.error('Server error:', error);
-    // Attempt recovery
-    setTimeout(() => {
-      httpServer.close(() => {
-        httpServer.listen(PORT, '0.0.0.0');
-      });
-    }, 1000);
-  });
-
-
   // Setup Vite/static serving last
   if (app.get("env") === "development") {
     await setupVite(app, httpServer);
@@ -136,11 +124,19 @@ app.use(requestLogger);
     serveStatic(app);
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`Server running at http://0.0.0.0:${PORT}`);
-    console.log('Environment:', process.env.NODE_ENV);
+  // Start the server with enhanced logging
+  const server = httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log('[SERVER] Environment:', process.env.NODE_ENV);
+    console.log(`[SERVER] Application started on port ${PORT}`);
+    console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
   });
 
-  //Improve error handling - already added above.
-
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`[SERVER] Port ${PORT} is already in use`);
+      process.exit(1);
+    } else {
+      console.error('[SERVER] Server error:', error);
+    }
+  });
 })();
