@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "@db";
 import { contracts, merchants, users, verificationSessions } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, lt, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
 import express from 'express';
@@ -12,54 +12,31 @@ import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan
 import { Request, Response, NextFunction } from 'express';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
+// Define User interface to match database schema
+interface User {
+  id: number;
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+  role: string;
+  phoneNumber: string | null;
+  lastOtpCode: string | null;
+  otpExpiry: Date | null;
+  kycStatus: string;
+}
+
 const apiCache = new NodeCache({ stdTTL: 300 }); // 5 min cache
-
-// Add role validation middleware
-const validateCustomerRole = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.body.userId || req.query.userId || req.user?.id; // Added req.user?.id for flexibility
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
-
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, parseInt(String(userId)))) // Handle potential string userId
-      .limit(1)
-      .then(rows => rows[0]);
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (user.role !== 'customer') {
-      console.error('[Routes] Invalid role access attempt:', {
-        userId: user.id,
-        role: user.role,
-        timestamp: new Date().toISOString()
-      });
-      return res.status(403).json({ error: "Access denied. Only customers can perform this action." });
-    }
-
-    // Add user to request for downstream use
-    req.user = user;
-    next();
-  } catch (err) {
-    console.error('[Routes] Error in customer role validation:', err);
-    next(err);
-  }
-};
 
 // Update phone number formatting for existing users
 const standardizePhoneNumber = async () => {
   try {
-    const users = await db
+    const allUsers = await db
       .select()
       .from(users)
       .where(eq(users.role, 'customer'));
 
-    for (const user of users) {
+    for (const user of allUsers) {
       if (!user.phoneNumber) continue;
 
       const parsedPhone = parsePhoneNumberFromString(user.phoneNumber, 'US');
@@ -88,6 +65,7 @@ const standardizePhoneNumber = async () => {
 // Add cleanup job for expired OTPs
 const cleanupExpiredOTPs = async () => {
   try {
+    const now = new Date();
     await db
       .update(users)
       .set({
@@ -97,7 +75,7 @@ const cleanupExpiredOTPs = async () => {
       .where(
         and(
           eq(users.role, 'customer'),
-          users.otpExpiry.lt(new Date())
+          lt(users.otpExpiry, now)
         )
       );
 
@@ -113,7 +91,6 @@ setInterval(cleanupExpiredOTPs, 5 * 60 * 1000);
 // Run phone number standardization on startup
 standardizePhoneNumber();
 
-
 export function registerRoutes(app: Express) {
   setupAuth(app);
   const apiRouter = express.Router();
@@ -122,7 +99,7 @@ export function registerRoutes(app: Express) {
   apiRouter.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error('[API] Error:', err);
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal Server Error',
         message: process.env.NODE_ENV === 'development' ? err.message : undefined
       });
@@ -135,129 +112,139 @@ export function registerRoutes(app: Express) {
     next();
   });
 
-  apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { phoneNumber } = req.body;
+  // Update phone number validation logic in the send-otp endpoint
+apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { phoneNumber } = req.body;
 
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "Phone number is required" });
-      }
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
 
-      // Enhanced phone number parsing and validation
-      const parsedPhone = parsePhoneNumberFromString(phoneNumber, 'US');
-      if (!parsedPhone || !parsedPhone.isValid()) {
-        console.error('[Routes] Invalid phone number format:', {
-          input: phoneNumber,
-          timestamp: new Date().toISOString()
-        });
-        return res.status(400).json({ error: "Invalid phone number format. Please use format: +1 (XXX) XXX-XXXX" });
-      }
+    // Clean and normalize the phone number
+    let cleanedNumber = phoneNumber.replace(/[^\d+]/g, '');
 
-      // Ensure number is US-based
-      if (parsedPhone.country !== 'US') {
-        return res.status(400).json({ error: "Only US phone numbers are supported" });
-      }
+    // Handle various input formats
+    if (!cleanedNumber.startsWith('+')) {
+      // Remove leading 1 if present
+      cleanedNumber = cleanedNumber.replace(/^1/, '');
+      // Add +1 prefix
+      cleanedNumber = `+1${cleanedNumber}`;
+    }
 
-      // Format to E.164 format for Twilio
-      const formattedPhone = parsedPhone.format('E.164');
+    // Parse with libphonenumber-js
+    const parsedPhone = parsePhoneNumberFromString(cleanedNumber);
 
-      // Log the formatted number for debugging
-      console.log('[Routes] Phone number formatted:', {
-        original: phoneNumber,
-        formatted: formattedPhone,
+    if (!parsedPhone || !parsedPhone.isValid()) {
+      console.error('[Routes] Invalid phone number format:', {
+        input: phoneNumber,
+        cleaned: cleanedNumber,
         timestamp: new Date().toISOString()
       });
+      return res.status(400).json({
+        error: "Invalid phone number format",
+        details: "Please provide a valid US phone number"
+      });
+    }
 
-      // Check if user exists and is not a merchant/admin
-      let user = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, formattedPhone))
-        .limit(1)
+    // Format to E.164 for consistency
+    const formattedPhone = parsedPhone.format('E.164');
+
+    console.log('[Routes] Phone number processed:', {
+      original: phoneNumber,
+      cleaned: cleanedNumber,
+      formatted: formattedPhone,
+      timestamp: new Date().toISOString()
+    });
+
+    // Find existing user or create new one
+    let user = await db
+      .select()
+      .from(users)
+      .where(eq(users.phoneNumber, formattedPhone))
+      .limit(1)
+      .then(rows => rows[0]);
+
+    if (user && user.role !== 'customer') {
+      console.error('[Routes] Invalid account type for OTP:', {
+        userId: user.id,
+        role: user.role,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ error: 'Invalid account type for OTP login' });
+    }
+
+    const otp = smsService.generateOTP();
+    const otpExpiry = new Date();
+    otpExpiry.setMinutes(otpExpiry.getMinutes() + 5);
+
+    if (!user) {
+      user = await db
+        .insert(users)
+        .values({
+          username: formattedPhone.replace(/\D/g, ''),
+          password: Math.random().toString(36).slice(-8),
+          email: `${formattedPhone.replace(/\D/g, '')}@temp.shifi.com`,
+          name: '',
+          role: 'customer',
+          phoneNumber: formattedPhone,
+          lastOtpCode: otp,
+          otpExpiry,
+          kycStatus: 'pending'
+        })
+        .returning()
         .then(rows => rows[0]);
 
-      if (user && user.role !== 'customer') {
-        console.error('[Routes] Invalid account type for OTP:', {
-          userId: user.id,
-          role: user.role,
-          timestamp: new Date().toISOString()
-        });
-        return res.status(403).json({ error: 'Invalid account type for OTP login' });
-      }
+      console.log('[Routes] Created new user:', {
+        userId: user.id,
+        phone: formattedPhone,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      await db
+        .update(users)
+        .set({
+          lastOtpCode: otp,
+          otpExpiry
+        })
+        .where(eq(users.id, user.id));
 
-      const otp = smsService.generateOTP();
-      const otpExpiry = new Date();
-      otpExpiry.setMinutes(otpExpiry.getMinutes() + 5);
-
-      if (!user) {
-        // Create new user with properly formatted phone number
-        user = await db
-          .insert(users)
-          .values({
-            username: formattedPhone.replace(/\D/g, ''),
-            password: Math.random().toString(36).slice(-8),
-            email: `${formattedPhone.replace(/\D/g, '')}@temp.shifi.com`,
-            name: '',
-            role: 'customer',
-            phoneNumber: formattedPhone,
-            lastOtpCode: otp,
-            otpExpiry,
-            kycStatus: 'pending'
-          })
-          .returning()
-          .then(rows => rows[0]);
-
-        console.log('[Routes] Created new user:', {
-          userId: user.id,
-          phone: formattedPhone,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        // Update existing user's OTP
-        await db
-          .update(users)
-          .set({
-            lastOtpCode: otp,
-            otpExpiry
-          })
-          .where(eq(users.id, user.id));
-
-        console.log('[Routes] Updated existing user OTP:', {
-          userId: user.id,
-          phone: formattedPhone,
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      // Send OTP via SMS
-      const sent = await smsService.sendOTP(formattedPhone, otp);
-
-      if (sent) {
-        console.log('[Routes] OTP sent successfully:', {
-          userId: user.id,
-          phone: formattedPhone,
-          timestamp: new Date().toISOString()
-        });
-        res.json({ 
-          success: true,
-          userId: user.id // Include userId in response for tracking
-        });
-      } else {
-        console.error('[Routes] Failed to send OTP:', {
-          phoneNumber: formattedPhone,
-          userId: user.id,
-          timestamp: new Date().toISOString()
-        });
-        res.status(500).json({ error: "Failed to send OTP. Please try again." });
-      }
-    } catch (err) {
-      console.error("[Routes] Error sending OTP:", err);
-      next(err);
+      console.log('[Routes] Updated existing user OTP:', {
+        userId: user.id,
+        phone: formattedPhone,
+        timestamp: new Date().toISOString()
+      });
     }
-  });
+
+    // Send OTP via SMS
+    const sent = await smsService.sendOTP(formattedPhone, otp);
+
+    if (sent) {
+      console.log('[Routes] OTP sent successfully:', {
+        userId: user.id,
+        phone: formattedPhone,
+        timestamp: new Date().toISOString()
+      });
+      res.json({
+        success: true,
+        userId: user.id
+      });
+    } else {
+      console.error('[Routes] Failed to send OTP:', {
+        phoneNumber: formattedPhone,
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
+      res.status(500).json({ error: "Failed to send OTP. Please try again." });
+    }
+  } catch (err) {
+    console.error("[Routes] Error sending OTP:", err);
+    next(err);
+  }
+});
 
   // Verify OTP endpoint
-  apiRouter.post("/auth/verify-otp", validateCustomerRole, async (req: Request, res: Response, next: NextFunction) => { // Added middleware
+  apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { otp } = req.body;
 
@@ -265,7 +252,16 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ error: "OTP is required" });
       }
 
-      const user = req.user; // Get user from middleware
+      const user = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, parseInt(String(req.body.userId))))
+        .limit(1)
+        .then(rows => rows[0]);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
       // Check OTP validity
       if (!user.lastOtpCode || !user.otpExpiry) {
@@ -308,7 +304,7 @@ export function registerRoutes(app: Express) {
       });
 
       // Return success with user ID
-      res.json({ 
+      res.json({
         success: true,
         userId: user.id,
         role: user.role
@@ -320,7 +316,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Essential routes for contracts
-  apiRouter.get("/customers/:id/contracts", validateCustomerRole, async (req: Request, res: Response, next: NextFunction) => { // Added middleware
+  apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const customerContracts = await db.query.contracts.findMany({
         where: eq(contracts.customerId, parseInt(req.params.id)),
@@ -428,7 +424,7 @@ export function registerRoutes(app: Express) {
       // Update contract status
       const [updatedContract] = await db
         .update(contracts)
-        .set({ 
+        .set({
           status,
           // Add timestamp for status change
           updatedAt: new Date()
@@ -462,14 +458,14 @@ export function registerRoutes(app: Express) {
   apiRouter.post("/merchants/:merchantId/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const merchantId = parseInt(req.params.merchantId);
-      const { 
-        firstName, 
-        lastName, 
-        email, 
-        phone, 
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
         program,
         amount,
-        salesRepEmail 
+        salesRepEmail
       } = req.body;
 
       if (!merchantId || !email || !phone || !amount) {
