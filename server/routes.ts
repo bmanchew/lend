@@ -221,7 +221,7 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // User lookup with role verification
+      // User lookup with role and KYC verification
       const [user] = await db
         .select()
         .from(users)
@@ -245,6 +245,20 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ 
           success: false,
           message: "Invalid account type for OTP verification" 
+        });
+      }
+
+      // Check KYC status for borrowers
+      if (user.kycStatus !== 'approved' && user.kycStatus !== 'pending') {
+        console.error('[Routes] Invalid KYC status for borrower:', {
+          userId: user.id,
+          kycStatus: user.kycStatus,
+          timestamp: new Date().toISOString()
+        });
+        return res.status(403).json({
+          success: false,
+          message: "Please complete your identity verification first",
+          requiresKyc: true
         });
       }
 
@@ -332,17 +346,28 @@ export function registerRoutes(app: Express) {
 
       req.session.otpAttempts = 0;
 
+      // Set enhanced session data
+      req.session.userId = user.id;
+      req.session.userRole = user.role;
+      req.session.kycStatus = user.kycStatus;
+      req.session.verified = true;
+      req.session.verifiedAt = new Date().toISOString();
+
       console.log('[Routes] OTP verified successfully:', {
         userId: user.id,
         role: user.role,
+        kycStatus: user.kycStatus,
         timestamp: new Date().toISOString()
       });
 
       res.json({
         success: true,
         userId: user.id,
-        role: user.role
+        role: user.role,
+        kycStatus: user.kycStatus,
+        requiresKyc: user.kycStatus === 'pending'
       });
+
     } catch (err) {
       console.error("[Routes] Error in verify-otp:", err);
       next(err);
