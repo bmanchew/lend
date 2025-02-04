@@ -7,13 +7,10 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: {
-        server: httpServer,
-        port: process.env.VITE_PORT || 3000,
-        protocol: 'ws',
-        host: '0.0.0.0',
-        timeout: 120000,
-        overlay: {
+      hmr: false, // Disable HMR completely to prevent WebSocket connection attempts
+      watch: {
+        usePolling: true, // Use polling instead of WebSocket
+        interval: 1000,
           errors: true,
           warnings: true
         },
