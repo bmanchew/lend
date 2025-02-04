@@ -651,7 +651,7 @@ apiRouter.put("/contracts/:contractId/status", async (req: Request, res: Respons
   }
 });
 
-// Update the loan application endpoint to set initial KYC status
+// Update the loan application endpoint to send SMS notification
 apiRouter.post("/merchants/:merchantId/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const merchantId = parseInt(req.params.merchantId);
@@ -734,7 +734,49 @@ apiRouter.post("/merchants/:merchantId/send-loan-application", async (req: Reque
       contractNumber
     });
 
-    res.json(contract);
+    // Get merchant details for SMS
+    const [merchant] = await db
+      .select()
+      .from(merchants)
+      .where(eq(merchants.id, merchantId))
+      .limit(1);
+
+    if (!merchant) {
+      throw new Error('Merchant not found');
+    }
+
+    // Generate application URL
+    const applicationUrl = `${process.env.APP_URL || 'https://shi-fi-lend-brandon263.replit.app'}/application/${contract.id}`;
+
+    // Send SMS notification with application link
+    const smsResult = await smsService.sendLoanApplicationLink(
+      phone,
+      merchant.businessName || 'ShiFi',
+      applicationUrl,
+      existingUser.id
+    );
+
+    console.log('[Loan-App] SMS notification result:', {
+      timestamp: new Date().toISOString(),
+      success: smsResult.success,
+      phone,
+      userId: existingUser.id,
+      contractId: contract.id
+    });
+
+    if (!smsResult.success) {
+      console.error('[Loan-App] Failed to send SMS notification:', {
+        timestamp: new Date().toISOString(),
+        error: smsResult.error,
+        phone,
+        userId: existingUser.id
+      });
+    }
+
+    res.json({
+      ...contract,
+      smsNotification: smsResult.success
+    });
   } catch (err) {
     console.error("[Loan-App] Error creating application:", {
       timestamp: new Date().toISOString(),
