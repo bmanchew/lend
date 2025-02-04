@@ -12,13 +12,21 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract, SelectMerchant } from "@db/schema";
 import { LoanApplicationDialog } from "@/components/merchant/loan-application-dialog";
-import { useSocket } from "@/hooks/use-socket";
+import { LoanProgramManager } from "@/components/merchant/loan-program-manager";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ApplicationTracker } from "@/components/merchant/application-tracker";
+
+interface ContractStats {
+  active: number;
+  pending: number;
+  completed: number;
+  total: number;
+}
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
-  const [contractStats, setContractStats] = useState({
+  const [contractStats, setContractStats] = useState<ContractStats>({
     active: 0,
     pending: 0,
     completed: 0,
@@ -27,101 +35,34 @@ export default function MerchantDashboard() {
 
   const { data: merchant, isLoading, error } = useQuery<SelectMerchant>({
     queryKey: ['merchant', user?.id],
-    onError: (err) => {
-      console.error('[MerchantDashboard] Query error:', {
-        error: err,
-        userId: user?.id,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onSuccess: (data) => {
-      console.log('[MerchantDashboard] Query success:', {
-        merchantId: data?.id,
-        userId: user?.id,
-        timestamp: new Date().toISOString()
-      });
-    },
     queryFn: async () => {
       if (!user?.id) {
-        console.error('[MerchantDashboard] No user ID available for merchant query');
         throw new Error('No user ID available');
       }
 
-      console.log('[MerchantDashboard] Starting merchant data fetch:', {
-        userId: user.id,
-        timestamp: new Date().toISOString()
+      const response = await fetch(`/api/merchants/by-user/${user.id}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
       });
 
-      try {
-        const response = await fetch(`/api/merchants/by-user/${user.id}`, {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache'
-          }
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[MerchantDashboard] Merchant data fetch error:', {
-            status: response.status,
-            error: errorText,
-            userId: user.id
-          });
-          throw new Error(`Failed to fetch merchant: ${response.status} - ${errorText}`);
-        }
-
-        const data = await response.json();
-        console.log('[MerchantDashboard] Merchant data loaded:', {
-          merchantId: data?.id,
-          userId: user.id,
-          timestamp: new Date().toISOString()
-        });
-        return data;
-      } catch (err) {
-        console.error('[MerchantDashboard] Fetch error:', {
-          error: err,
-          userId: user.id,
-          timestamp: new Date().toISOString()
-        });
-        throw err;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch merchant: ${response.status} - ${errorText}`);
       }
-    },
-    enabled: !!user?.id,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * (2 ** attemptIndex), 5000),
-    staleTime: 30000,
-  });
 
-  useEffect(() => {
-    if (error) {
-      console.error('Error fetching merchant:', error);
-    }
-  }, [error]);
+      return response.json();
+    },
+    enabled: !!user?.id
+  });
 
   const { data: contracts, isLoading: contractsLoading, error: contractsError, refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],
-    enabled: !!merchant,
-    onSuccess: (data) => {
-      console.log('[MerchantDashboard] Contracts loaded:', {
-        count: data?.length,
-        userId: user?.id,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onError: (error) => {
-      console.error('[MerchantDashboard] Error loading contracts:', {
-        error,
-        userId: user?.id,
-        timestamp: new Date().toISOString()
-      });
-    },
+    enabled: !!merchant?.id,
     queryFn: async () => {
       if (!merchant?.id) throw new Error('No merchant ID available');
-      console.log('[MerchantDashboard] Fetching contracts:', {
-        merchantId: merchant.id,
-        timestamp: new Date().toISOString()
-      });
       const response = await fetch(`/api/merchants/${merchant.id}/contracts`, {
         credentials: 'include',
         headers: {
@@ -132,21 +73,10 @@ export default function MerchantDashboard() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[MerchantDashboard] API error fetching contracts:', {
-          status: response.status,
-          error: errorText,
-          merchantId: merchant.id
-        });
         throw new Error(`Failed to fetch contracts: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log('[MerchantDashboard] Contracts fetched:', {
-        merchantId: merchant.id,
-        contractCount: data.length,
-        timestamp: new Date().toISOString()
-      });
-      return data;
+      return response.json();
     },
   });
 
@@ -172,23 +102,23 @@ export default function MerchantDashboard() {
     }
   }, [contracts]);
 
-  const chartData = contracts?.reduce((acc, contract) => {
-    const month = new Date(contract.createdAt).toLocaleString('default', { month: 'short' });
+  const chartData = contracts?.reduce((acc: { name: string; value: number }[], contract) => {
+    const month = new Date(contract.createdAt || new Date()).toLocaleString('default', { month: 'short' });
     const existing = acc.find(d => d.name === month);
     if (existing) {
-      existing.value += Number(contract.amount);
+      existing.value += Number(contract.amount) || 0;
     } else {
-      acc.push({ name: month, value: Number(contract.amount) });
+      acc.push({ name: month, value: Number(contract.amount) || 0 });
     }
     return acc;
-  }, [] as { name: string; value: number }[]) || [];
+  }, []) || [];
 
   return (
     <PortalLayout>
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold tracking-tight">
-            {merchant?.companyName} Dashboard
+            {merchant?.companyName || 'Loading...'} Dashboard
           </h1>
           {isLoading || contractsLoading ? (
             <div>Loading...</div>
@@ -201,7 +131,7 @@ export default function MerchantDashboard() {
               <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
             </div>
           ) : (
-            <div className="text-red-500">No merchant data found.</div> //Added a message for no merchant data
+            <div className="text-red-500">No merchant data found.</div>
           )}
         </div>
 
@@ -221,7 +151,7 @@ export default function MerchantDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts?.filter(c => c.status === 'active').reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
+                ${contracts?.reduce((sum, c) => sum + (Number(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
               </p>
             </CardContent>
           </Card>
@@ -268,35 +198,19 @@ export default function MerchantDashboard() {
             </CardContent>
           </Card>
 
+          {merchant && <ApplicationTracker merchantId={merchant.id} />}
+        </div>
+
+        {merchant && (
           <Card>
             <CardHeader>
-              <CardTitle>Recent Applications</CardTitle>
+              <CardTitle>Loan Programs</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {contracts?.slice(0, 5).map(contract => (
-                  <div key={contract.id} className="flex items-center justify-between p-2 border rounded">
-                    <div>
-                      <p className="font-medium">Contract #{contract.contractNumber}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Amount: ${Number(contract.amount).toFixed(2)}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
-                        contract.status === "active" ? "success" :
-                        contract.status === "draft" ? "secondary" :
-                        contract.status === "completed" ? "default" : "destructive"
-                      }
-                    >
-                      {contract.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+              <LoanProgramManager merchantId={merchant.id} />
             </CardContent>
           </Card>
-        </div>
+        )}
       </div>
     </PortalLayout>
   );

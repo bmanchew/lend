@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { SelectProgram } from "@db/schema";
 
 const applicationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -16,9 +17,9 @@ const applicationSchema = z.object({
   email: z.string().email("Valid email is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   program: z.string().min(1, "Program is required"),
-  fundingAmount: z.string().min(1, "Funding amount is required").transform(val => parseFloat(val)),
+  fundingAmount: z.number().min(0, "Funding amount must be positive"),
   salesRepEmail: z.string().email("Valid sales rep email is required")
-}).required();
+});
 
 type ApplicationFormData = z.infer<typeof applicationSchema>;
 
@@ -32,7 +33,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: programs } = useQuery({
+  const { data: programs } = useQuery<SelectProgram[]>({
     queryKey: ['programs', merchantId],
     queryFn: async () => {
       console.log('Fetching programs for merchant:', merchantId);
@@ -55,7 +56,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       email: "",
       phone: "",
       program: "",
-      fundingAmount: "",
+      fundingAmount: 0,
       salesRepEmail: ""
     }
   });
@@ -67,16 +68,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         timestamp: new Date().toISOString(),
         merchantId,
         merchantName
-      });
-      const debugLog = (message: string, data?: any) => {
-        console.log(`[LoanDialog][${Date.now().toString(36)}] ${message}`, data || '');
-      };
-
-      debugLog('Starting mutation', {
-        ...data,
-        merchantId,
-        merchantName,
-        timestamp: new Date().toISOString()
       });
 
       if (!merchantId) {
@@ -90,8 +81,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         throw new Error('Invalid phone number format');
       }
 
-      const fundingAmount = parseFloat(data.fundingAmount);
-      if (isNaN(fundingAmount) || fundingAmount <= 0) {
+      if (data.fundingAmount <= 0) {
         throw new Error('Invalid funding amount');
       }
 
@@ -103,8 +93,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         body: JSON.stringify({
           ...data,
           merchantName,
-          amount: fundingAmount,
-          fundingAmount: data.fundingAmount,
+          amount: data.fundingAmount,
           phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),
           rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)
         }),
@@ -120,37 +109,30 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         });
         throw new Error(errorData.error || "Failed to send invitation");
       }
-      
+
       console.log('[LoanApplication] API Success Response:', {
         status: response.status,
         timestamp: new Date().toISOString()
       });
 
-      const responseData = await response.json();
-      debugLog('Application submission successful', responseData);
-      return responseData;
+      return response.json();
     },
     onSuccess: (data) => {
       console.log('[LoanApplication] Submission successful:', {
         data,
         timestamp: new Date().toISOString()
       });
-      
-      toast({
-        title: "Success",
-        description: "Loan application sent successfully",
-      });
-      
-      // Reset form and update UI state
-      setOpen(false);
-      form.reset();
-      queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
-      
+
       toast({
         title: "Success",
         description: "Application sent successfully",
         variant: "default"
       });
+
+      // Reset form and update UI state
+      setOpen(false);
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
     },
     onError: (error: any) => {
       console.error('[LoanDialog] Error:', error);
@@ -242,8 +224,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               />
             </div>
 
-
-
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -257,7 +237,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                           <SelectValue placeholder="Select program" />
                         </SelectTrigger>
                         <SelectContent>
-                          {programs?.map((program) => (
+                          {programs?.map((program: SelectProgram) => (
                             <SelectItem key={program.id} value={program.id.toString()}>
                               {program.name} ({program.term} months @ {program.interestRate}%)
                             </SelectItem>
@@ -276,7 +256,15 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                   <FormItem>
                     <FormLabel>Funding Amount Needed</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" min="0" step="0.01" placeholder="9800" />
+                      <Input 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        placeholder="9800"
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        value={field.value || ''}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

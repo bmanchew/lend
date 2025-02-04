@@ -94,7 +94,7 @@ export function registerRoutes(app: Express) {
         // Update existing user's OTP
         await db
           .update(users)
-          .set({ 
+          .set({
             lastOtpCode: otp,
             otpExpiry
           })
@@ -151,7 +151,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Essential merchant route
-  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/by-user/:userId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = parseInt(req.params.userId);
       if (isNaN(userId)) {
@@ -179,8 +179,49 @@ export function registerRoutes(app: Express) {
       }
 
       res.json(merchant);
-    } catch (err:any) {
-      console.error("Error fetching merchant by user:", err); 
+    } catch (err: any) {
+      console.error("Error fetching merchant by user:", err);
+      next(err);
+    }
+  });
+
+  // Add new route for fetching merchant applications
+  apiRouter.get("/merchants/:merchantId/applications", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const merchantId = parseInt(req.params.merchantId);
+      if (isNaN(merchantId)) {
+        return res.status(400).json({ error: 'Invalid merchant ID' });
+      }
+
+      const applications = await db.query.contracts.findMany({
+        where: eq(contracts.merchantId, merchantId),
+        orderBy: [desc(contracts.createdAt)],
+        with: {
+          merchant: true,
+          customer: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              phoneNumber: true
+            }
+          }
+        }
+      });
+
+      console.log('[Routes] Fetched applications for merchant:', {
+        merchantId,
+        count: applications.length,
+        timestamp: new Date().toISOString()
+      });
+
+      res.json(applications);
+    } catch (err) {
+      console.error("[Routes] Error fetching merchant applications:", {
+        error: err,
+        merchantId: req.params.merchantId,
+        timestamp: new Date().toISOString()
+      });
       next(err);
     }
   });
