@@ -1,17 +1,8 @@
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { vi, beforeAll, afterEach, afterAll } from 'vitest';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { QueryClient } from '@tanstack/react-query';
-
-// Create query client for tests
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: false,
-    },
-  },
-});
 
 // Mock Service Worker setup
 export const handlers = [
@@ -28,21 +19,13 @@ export const handlers = [
 
 export const server = setupServer(...handlers);
 
+// Start server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterAll(() => server.close());
-afterEach(() => server.resetHandlers());
-
-
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-  length: 0,
-  key: vi.fn()
-};
-Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+afterEach(() => {
+  server.resetHandlers();
+  vi.clearAllMocks();
+});
 
 // Mock window features
 Object.defineProperty(window, 'matchMedia', {
@@ -87,12 +70,23 @@ Object.defineProperty(window, 'navigator', {
   }
 });
 
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+  length: 0,
+  key: vi.fn()
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
 beforeEach(() => {
+  // Reset all mocks
   vi.clearAllMocks();
-
-  // Reset mocks
-  Object.values(localStorageMock).forEach(mockFn => vi.isMockFunction(mockFn) && mockFn.mockClear());
+  Object.values(localStorageMock).forEach(mockFn => 
+    vi.isMockFunction(mockFn) && mockFn.mockClear()
+  );
 
   // Reset window.location
   Object.defineProperty(window, 'location', {
@@ -103,6 +97,7 @@ beforeEach(() => {
       hash: '',
       assign: vi.fn(),
       replace: vi.fn(),
+      reload: vi.fn(),
     },
     writable: true
   });
@@ -112,9 +107,4 @@ beforeEach(() => {
     configurable: true,
     get: () => false
   });
-});
-
-afterEach(() => {
-  vi.clearAllMocks();
-  vi.useRealTimers();
 });

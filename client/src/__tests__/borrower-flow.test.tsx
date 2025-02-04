@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
-import { AuthProvider } from '../hooks/use-auth';
-import { useMobile } from '../hooks/use-mobile';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { render } from '../test/test-utils';
+import { useMobile } from '../hooks/use-mobile';
+import { http, HttpResponse } from 'msw';
+import { server } from '../test/setup';
 
 // Mock the hooks
 vi.mock('../hooks/use-mobile', () => ({
@@ -19,14 +20,6 @@ vi.mock('../hooks/use-auth', () => ({
 const mockUseMobile = useMobile as ReturnType<typeof vi.fn>;
 
 describe('Borrower KYC Flow', () => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false
-      }
-    }
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -39,15 +32,11 @@ describe('Borrower KYC Flow', () => {
     const onVerificationComplete = vi.fn();
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <KycVerificationModal
-            isOpen={true}
-            onClose={onClose}
-            onVerificationComplete={onVerificationComplete}
-          />
-        </AuthProvider>
-      </QueryClientProvider>
+      <KycVerificationModal
+        isOpen={true}
+        onClose={onClose}
+        onVerificationComplete={onVerificationComplete}
+      />
     );
 
     // Verify mobile-specific content is shown
@@ -77,11 +66,7 @@ describe('Borrower KYC Flow', () => {
     vi.useFakeTimers();
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <KycVerificationModal isOpen={true} onClose={vi.fn()} />
-        </AuthProvider>
-      </QueryClientProvider>
+      <KycVerificationModal isOpen={true} onClose={vi.fn()} />
     );
 
     // Fast-forward timers to trigger app store prompt
@@ -100,15 +85,11 @@ describe('Borrower KYC Flow', () => {
     mockUseMobile.mockReturnValue(false);
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <KycVerificationModal
-            isOpen={true}
-            onClose={vi.fn()}
-            onVerificationComplete={vi.fn()}
-          />
-        </AuthProvider>
-      </QueryClientProvider>
+      <KycVerificationModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onVerificationComplete={vi.fn()}
+      />
     );
 
     // Verify desktop-specific content is shown
