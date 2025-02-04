@@ -17,6 +17,16 @@ const app = express();
 const httpServer = createServer(app);
 app.set('no-websocket', true); // Added to disable WebSocket functionality
 
+// Global error handler
+process.on('uncaughtException', (error) => {
+  console.error('[SERVER] Uncaught Exception:', error);
+  // Keep server running despite uncaught exceptions
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER] Unhandled Rejection:', reason);
+});
+
 // Middleware
 app.use(cors({
   origin: true,

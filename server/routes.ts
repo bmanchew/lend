@@ -1290,6 +1290,19 @@ export function registerRoutes(app: Express): Server {
     next();
   });
 
+  // Request timeout middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    req.setTimeout(30000, () => {
+      console.error('[SERVER] Request timeout:', {
+        method: req.method,
+        url: req.url,
+        headers: req.headers
+      });
+      res.status(408).send('Request Timeout');
+    });
+    next();
+  });
+
   // Error handling middleware with improved logging and types
   app.use((err: Error | APIError, req: Request, res: Response, _next: NextFunction) => {
     const requestId = req.headers['x-request-id'] || Date.now().toString(36);
