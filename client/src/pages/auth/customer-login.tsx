@@ -50,7 +50,7 @@ export default function CustomerLogin() {
       });
 
       // Use relative URL to automatically use the correct port
-      const response = await axios.post("/api/sendOTP", { phoneNumber });
+      const response = await axios.post("/api/auth/send-otp", { phoneNumber });
       console.log('[CustomerLogin] OTP Response:', response.data);
 
       if (response.data?.message === 'OTP sent successfully') {
@@ -257,7 +257,6 @@ export default function CustomerLogin() {
       });
     }
   };
-
 
   const initiateKYC = (userId) => {
     // Replace this with your actual KYC initiation logic.  This is a placeholder.

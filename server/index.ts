@@ -18,7 +18,10 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.headers['x-forwarded-for'] as string || req.ip
+  keyGenerator: (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    return (typeof forwarded === 'string' ? forwarded : req.ip) || req.ip;
+  }
 });
 
 // Apply rate limiting to auth routes
@@ -79,11 +82,9 @@ app.use(requestLogger);
 // Register API routes
 registerRoutes(app);
 
-// Serve static files
+// Static file serving and SPA handling
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static('dist/public'));
-
-  // Handle SPA routing
   app.get('*', (req, res, next) => {
     if (!req.path.startsWith('/api')) {
       try {
@@ -96,7 +97,6 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
 } else {
-  // In development, serve from the client directory
   app.use(express.static('client/dist'));
   app.get('*', (req, res, next) => {
     if (!req.path.startsWith('/api')) {
@@ -131,19 +131,69 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 // Create HTTP server
 const httpServer = createServer(app);
 
-// Start the server
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('[SERVER] Environment:', process.env.NODE_ENV);
-  console.log(`[SERVER] Application started on port ${PORT}`);
-});
+// Function to check if port is ready
+const checkPort = (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const testServer = createServer()
+      .once('error', () => {
+        testServer.close();
+        resolve(false);
+      })
+      .once('listening', () => {
+        testServer.close();
+        resolve(true);
+      })
+      .listen(port, '0.0.0.0');
+  });
+};
 
-// Handle server errors
-httpServer.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`[SERVER] Port ${PORT} is already in use`);
+// Start the server with port availability check
+const startServer = async () => {
+  try {
+    console.log(`[SERVER] Checking port ${PORT} availability...`);
+    const isPortAvailable = await checkPort(PORT);
+    if (!isPortAvailable) {
+      console.error(`[SERVER] Port ${PORT} is already in use`);
+      process.exit(1);
+    }
+
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log('[SERVER] Environment:', process.env.NODE_ENV);
+      console.log(`[SERVER] Application started on port ${PORT}`);
+      console.log(`[SERVER] Server is ready to accept connections`);
+
+      // Signal that the server is ready
+      if (process.send) {
+        process.send('ready');
+      }
+    });
+
+    // Handle server errors
+    httpServer.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`[SERVER] Port ${PORT} is already in use`);
+        process.exit(1);
+      }
+      console.error('[SERVER] Server error:', error);
+    });
+
+    // Signal readiness after a short delay to ensure everything is initialized
+    setTimeout(() => {
+      if (process.send) {
+        process.send('ready');
+      }
+    }, 1000);
+
+  } catch (error) {
+    console.error('[SERVER] Failed to start server:', error);
     process.exit(1);
   }
-  console.error('[SERVER] Server error:', error);
+};
+
+// Start the server
+startServer().catch(error => {
+  console.error('[SERVER] Failed to start server:', error);
+  process.exit(1);
 });
 
 export { app, httpServer as server };
