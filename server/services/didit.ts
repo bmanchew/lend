@@ -65,7 +65,7 @@ class DiditService {
     console.log("[DiditService] Attempting to get access token");
 
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-      console.log("[DiditService] Using cached token, expires in", 
+      console.log("[DiditService] Using cached token, expires in",
         Math.round((this.tokenExpiry - Date.now()) / 1000), "seconds");
       return this.accessToken;
     }
@@ -76,7 +76,7 @@ class DiditService {
       ).toString('base64');
 
       console.log("[DiditService] Requesting new access token");
-      const response = await axios.post('https://apx.didit.me/auth/v2/token/', 
+      const response = await axios.post('https://apx.didit.me/auth/v2/token/',
         'grant_type=client_credentials',
         {
           headers: {
@@ -128,8 +128,8 @@ class DiditService {
       console.log("[DiditService] Using webhook URL:", callbackUrl.toString());
 
       // Ensure return URL is absolute and includes domain
-      const completeReturnUrl = returnUrl?.startsWith('http') 
-        ? returnUrl 
+      const completeReturnUrl = returnUrl?.startsWith('http')
+        ? returnUrl
         : new URL(returnUrl || '/', replitDomain).toString();
 
       const isMobile = platform === 'mobile' || (userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent));
@@ -165,7 +165,7 @@ class DiditService {
       };
 
       const response = await axios.post(
-        'https://verification.didit.me/v1/session/', 
+        'https://verification.didit.me/v1/session/',
         sessionData,
         {
           headers: {
@@ -222,7 +222,7 @@ class DiditService {
         console.error('[DiditService] Missing webhook headers');
         return false;
       }
-      
+
       const timestamp = parseInt(timestampHeader);
       const currentTime = Math.floor(Date.now() / 1000);
 
@@ -292,7 +292,6 @@ class DiditService {
           .update(verificationSessions)
           .set({
             status,
-            documentData: decision?.kyc?.document_data || null,
             updatedAt: new Date(),
           })
           .where(eq(verificationSessions.sessionId, session_id));

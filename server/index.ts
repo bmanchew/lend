@@ -1,12 +1,11 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, serveStatic } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
 
-// Use environment port or fallback based on .replit configuration
-const PORT = process.env.PORT || 5000;
+// Use environment port or fallback to 5000
+const PORT = parseInt(process.env.PORT || '5000', 10);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -15,12 +14,10 @@ const limiter = rateLimit({
 });
 
 const app = express();
-const httpServer = createServer(app);
 
 // Global error handler
 process.on('uncaughtException', (error) => {
   console.error('[SERVER] Uncaught Exception:', error);
-  // Keep server running despite uncaught exceptions
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -64,20 +61,18 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      const memoryUsage = process.memoryUsage();
       const logData = {
         method: req.method,
         path,
         status: res.statusCode,
         duration: `${duration}ms`,
         memory: {
-          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
-          rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB'
+          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+          rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB'
         },
         response: capturedResponse
       };
-
-      log(JSON.stringify(logData));
+      console.log(JSON.stringify(logData));
     }
   });
 
@@ -86,57 +81,58 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 
 app.use(requestLogger);
 
-(async () => {
-  // Register API routes first
-  registerRoutes(app);
+// Register API routes first
+registerRoutes(app);
 
-  // Enterprise error handling middleware
-  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-    const errorId = Date.now().toString(36);
-    const errorInfo = {
-      id: errorId,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      userId: req.body?.userId || 'anonymous',
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
-      }
-    };
-
-    console.error("[ERROR]", JSON.stringify(errorInfo));
-
-    if (!res.headersSent) {
-      res.status(err.status || 500).json({
-        status: "error",
-        message: err.message || "Internal Server Error",
-        errorId
-      });
+// Enterprise error handling middleware
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const errorId = Date.now().toString(36);
+  const errorInfo = {
+    id: errorId,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+    userId: req.body?.userId || 'anonymous',
+    error: {
+      name: err.name,
+      message: err.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
     }
-  });
+  };
 
-  // Setup Vite/static serving last
-  if (app.get("env") === "development") {
-    await setupVite(app, httpServer);
-  } else {
-    serveStatic(app);
+  console.error("[ERROR]", JSON.stringify(errorInfo));
+
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({
+      status: "error",
+      message: err.message || "Internal Server Error",
+      errorId
+    });
   }
+});
 
-  // Start the server with enhanced logging
-  const server = httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log('[SERVER] Environment:', process.env.NODE_ENV);
-    console.log(`[SERVER] Application started on port ${PORT}`);
-    console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
-  });
+// Setup Vite/static serving last
+if (app.get("env") === "development") {
+  setupVite(app);
+} else {
+  serveStatic(app);
+}
 
-  server.on('error', (error: NodeJS.ErrnoException) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`[SERVER] Port ${PORT} is already in use`);
-      process.exit(1);
-    } else {
-      console.error('[SERVER] Server error:', error);
-    }
-  });
-})();
+// Start the server with enhanced logging
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log('[SERVER] Environment:', process.env.NODE_ENV);
+  console.log(`[SERVER] Application started on port ${PORT}`);
+  console.log(`[SERVER] Server URL: http://0.0.0.0:${PORT}`);
+});
+
+// Handle server errors
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[SERVER] Port ${PORT} is already in use`);
+    process.exit(1);
+  }
+  console.error('[SERVER] Server error:', error);
+});
+
+// Export for testing
+export { app, server };
