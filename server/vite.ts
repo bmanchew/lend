@@ -7,12 +7,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: {
-        port: 443,
-        protocol: 'wss',
-        clientPort: 443,
-        host: '0.0.0.0'
-      },
+      hmr: false, // Completely disable HMR and WebSocket
       https: true,
       host: '0.0.0.0',
       port: process.env.PORT || 3000,
