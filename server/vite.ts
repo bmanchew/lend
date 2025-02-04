@@ -7,7 +7,7 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: false, // Disable HMR completely
+      hmr: false,
       watch: {
         usePolling: true,
         interval: 1000,
