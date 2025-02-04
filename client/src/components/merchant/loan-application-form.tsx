@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +36,7 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
           interestRate: 24.99, // Fixed interest rate
         }),
       });
-      
+
       if (response.ok) {
         onSuccess?.();
       }
@@ -90,24 +89,23 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
               phone = phone.replace(/^1/, '');
               // Only take first 10 digits
               phone = phone.slice(0, 10);
-              
-              // Store raw digits for submission
-              const rawPhone = phone;
-              
+
               // Format for display as (XXX) XXX-XXXX
-              if (phone.length >= 6) {
+              if (phone.length === 10) {
+                phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
+              } else if (phone.length >= 6) {
                 phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
               } else if (phone.length >= 3) {
                 phone = `(${phone.slice(0,3)}) ${phone.slice(3)}`;
               } else if (phone.length > 0) {
                 phone = `(${phone}`;
               }
-              
-              // Store both formatted display value and raw digits
-              setFormData({...formData, phone, rawPhone});
+
+              setFormData({...formData, phone});
             }}
             maxLength={14}
             required
+            pattern="\(\d{3}\)\s\d{3}-\d{4}"
           />
         </div>
       </div>

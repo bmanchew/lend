@@ -36,14 +36,14 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const { data: programs } = useQuery<SelectProgram[]>({
     queryKey: ['programs', merchantId],
     queryFn: async () => {
-      console.log('Fetching programs for merchant:', merchantId);
+      console.log('[LoanDialog] Fetching programs for merchant:', merchantId);
       const response = await fetch(`/api/merchants/${merchantId}/programs`);
       if (!response.ok) {
-        console.error('Failed to fetch programs:', response.statusText);
+        console.error('[LoanDialog] Failed to fetch programs:', response.statusText);
         throw new Error('Failed to fetch programs');
       }
       const data = await response.json();
-      console.log('Fetched programs:', data);
+      console.log('[LoanDialog] Fetched programs:', data);
       return data;
     },
   });
@@ -92,6 +92,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         },
         body: JSON.stringify({
           ...data,
+          merchantId,
           merchantName,
           amount: data.fundingAmount,
           phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),
@@ -132,7 +133,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       // Reset form and update UI state
       setOpen(false);
       form.reset();
-      queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
+      queryClient.invalidateQueries({ queryKey: ['applications', merchantId] });
     },
     onError: (error: any) => {
       console.error('[LoanDialog] Error:', error);

@@ -1,7 +1,7 @@
-
 import twilio from 'twilio';
 const { Twilio } = twilio;
 import { logger } from '../lib/logger';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -13,26 +13,21 @@ export const smsService = {
   formatPhoneNumber(phone: string): string {
     if (!phone) throw new Error('Phone number is required');
 
-    // Remove all non-numeric characters and spaces
-    const cleanNumber = phone.replace(/\D/g, '');
-
-    // Handle different formats
-    if (cleanNumber.length === 10) {
-      return `+1${cleanNumber}`;
-    } else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
-      return `+${cleanNumber}`;
-    } else if (cleanNumber.length === 12 && cleanNumber.startsWith('1')) {
-      return `+${cleanNumber.slice(1)}`;
+    // Use libphonenumber-js for robust parsing
+    const parsedNumber = parsePhoneNumberFromString(phone, 'US');
+    if (!parsedNumber || !parsedNumber.isValid()) {
+      logger.error('Invalid phone number format:', { received: phone });
+      throw new Error('Invalid phone number format. Please use format: (XXX) XXX-XXXX');
     }
 
-    logger.error('Invalid phone number format:', { received: phone, cleaned: cleanNumber });
-    throw new Error('Phone number must be 10 digits excluding country code');
+    // Always return E.164 format for Twilio
+    return parsedNumber.format('E.164');
   },
 
   async sendSMS(to: string, message: string): Promise<boolean> {
     try {
       const formattedPhone = this.formatPhoneNumber(to);
-      
+
       if (!twilioPhone || !accountSid || !authToken) {
         logger.error('Missing Twilio configuration');
         return false;
@@ -70,14 +65,14 @@ export const smsService = {
       // Add userId to URL if provided
       const finalUrl = userId ? `${url}&userId=${userId}` : url;
       const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${finalUrl}`;
-      
+
       const sent = await this.sendSMS(phone, message);
       logger.info('Loan application SMS sent:', {
         phone,
         userId,
         success: sent
       });
-      
+
       return { success: sent };
     } catch (error) {
       logger.error('Error sending loan application link:', {
