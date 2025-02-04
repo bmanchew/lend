@@ -23,6 +23,7 @@ export function KycVerificationModal({
   const isMobile = useMobile();
   const [verificationStarted, setVerificationStarted] = useState(false);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
 
   // Enhanced platform detection
   const platform = isMobile ? 'mobile' : 'web';
@@ -71,7 +72,6 @@ export function KycVerificationModal({
         userId,
         platform,
         isMobile,
-        userAgent: navigator.userAgent,
         timestamp: new Date().toISOString()
       });
 
@@ -96,56 +96,9 @@ export function KycVerificationModal({
 
         const data = await response.json();
         console.log('[KYC Modal] Received verification URL:', data);
-
-        if (!data.redirectUrl) {
-          throw new Error('No redirect URL provided');
-        }
-
-        // Enhanced mobile redirection with better fallback handling
-        if (isMobile && !redirectAttempted) {
-          setRedirectAttempted(true);
-          console.log('[KYC Modal] Initiating mobile redirection sequence');
-
-          // Try universal link first
-          const universalLink = data.redirectUrl;
-          console.log('[KYC Modal] Attempting universal link:', universalLink);
-
-          // Create and use hidden anchor for better mobile handling
-          const link = document.createElement('a');
-          link.href = universalLink;
-          link.style.display = 'none';
-          document.body.appendChild(link);
-
-          // Sequential fallback chain with timeouts
-          const tryRedirect = async () => {
-            // 1. Try universal link
-            link.click();
-
-            // 2. Try app scheme after short delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const appUrl = data.redirectUrl.replace('https://', 'didit://');
-            console.log('[KYC Modal] Attempting app URL:', appUrl);
-            window.location.href = appUrl;
-
-            // 3. Final fallback to web URL after another delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (!document.hidden) {
-              console.log('[KYC Modal] Final fallback to web URL:', data.redirectUrl);
-              window.location.href = data.redirectUrl;
-            }
-          };
-
-          tryRedirect().catch(err => {
-            console.error('[KYC Modal] Redirection sequence error:', err);
-            // Fallback to direct web URL
-            window.location.href = data.redirectUrl;
-          });
-        } else {
-          console.log('[KYC Modal] Using web flow:', data.redirectUrl);
-          window.location.href = data.redirectUrl;
-        }
-
+        setRedirectUrl(data.redirectUrl);
         return data;
+
       } catch (error: any) {
         console.error('[KYC Modal] Verification error:', error);
         toast({
@@ -162,6 +115,7 @@ export function KycVerificationModal({
     if (!isOpen) {
       setRedirectAttempted(false);
       setVerificationStarted(false);
+      setRedirectUrl(null);
       return;
     }
 
@@ -171,7 +125,8 @@ export function KycVerificationModal({
       status: kycData?.status,
       userId,
       verificationStarted,
-      redirectAttempted
+      redirectAttempted,
+      redirectUrl
     });
 
     if (!userId) {
@@ -204,15 +159,48 @@ export function KycVerificationModal({
 
     if (!kycData?.status || kycData?.status === 'not_started') {
       initializeVerification();
-    } else if (kycData?.status === 'Approved') {
+    } else if (kycData?.status === 'COMPLETED') {
       console.log('[KYC Modal] User already verified');
       toast({
         title: "Verification Complete",
         description: "Your identity has been verified successfully."
       });
       onVerificationComplete?.();
+      onClose();
     }
   }, [isOpen, kycData?.status, userId]);
+
+  // Handle mobile app redirection
+  useEffect(() => {
+    if (isMobile && redirectUrl && !redirectAttempted) {
+      setRedirectAttempted(true);
+
+      const tryRedirect = async () => {
+        // Try universal link first
+        window.location.href = redirectUrl;
+
+        // If still here after 2 seconds, try app scheme
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (!document.hidden) {
+          const appUrl = redirectUrl.replace('https://', 'didit://');
+          window.location.href = appUrl;
+
+          // If still here after 2 more seconds, show app store prompt
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (!document.hidden) {
+            toast({
+              title: "Didit App Required",
+              description: "Please install the Didit app to complete verification.",
+              variant: "default"
+            });
+            // Could add app store links here
+          }
+        }
+      };
+
+      tryRedirect().catch(console.error);
+    }
+  }, [redirectUrl, isMobile, redirectAttempted]);
 
   const renderContent = () => {
     if (!userId) {
@@ -235,7 +223,7 @@ export function KycVerificationModal({
     if (redirectAttempted && isMobile) {
       return (
         <p className="text-sm text-gray-500">
-          Opening Didit verification app... If nothing happens, please check if the app is installed or try refreshing the page.
+          Opening Didit verification app... If nothing happens, please make sure the Didit app is installed.
         </p>
       );
     }

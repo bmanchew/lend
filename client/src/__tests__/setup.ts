@@ -1,14 +1,19 @@
 import '@testing-library/jest-dom';
-import { beforeAll, vi } from 'vitest';
+import { beforeAll, afterEach, vi } from 'vitest';
 import { server } from '../test/server';
 
 beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
 
 // Mock IntersectionObserver
-class IntersectionObserverMock {
+class IntersectionObserverMock implements IntersectionObserver {
+  readonly root: Element | null = null;
+  readonly rootMargin: string = '';
+  readonly thresholds: ReadonlyArray<number> = [];
+  disconnect() { return null; }
   observe() { return null; }
   unobserve() { return null; }
-  disconnect() { return null; }
+  takeRecords(): IntersectionObserverEntry[] { return []; }
 }
 
 window.IntersectionObserver = IntersectionObserverMock;

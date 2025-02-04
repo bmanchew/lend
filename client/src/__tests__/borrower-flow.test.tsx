@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { KycVerificationModal } from '../components/kyc/verification-modal';
 import { AuthProvider } from '../hooks/use-auth';
 import { useMobile } from '../hooks/use-mobile';
@@ -10,77 +10,30 @@ vi.mock('../hooks/use-mobile', () => ({
   useMobile: vi.fn()
 }));
 
+vi.mock('../hooks/use-auth', () => ({
+  useAuth: vi.fn().mockReturnValue({
+    user: { id: 1 }
+  })
+}));
+
 const mockUseMobile = useMobile as ReturnType<typeof vi.fn>;
 
 describe('Borrower KYC Flow', () => {
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
 
   beforeEach(() => {
-    // Reset all mocks before each test
     vi.clearAllMocks();
-
-    // Mock fetch globally
-    global.fetch = vi.fn();
-
-    // Mock browser APIs
-    Object.defineProperty(global, 'screen', {
-      value: {
-        width: 375,
-        height: 812,
-        orientation: {
-          type: 'portrait-primary'
-        }
-      }
-    });
-
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)',
-        platform: 'iPhone',
-        vendor: 'Apple Computer, Inc.',
-        maxTouchPoints: 5,
-        hardwareConcurrency: 6,
-        deviceMemory: undefined,
-      },
-      writable: true
-    });
-
-    // Mock window location and other properties
-    Object.defineProperty(window, 'location', {
-      value: {
-        href: 'http://localhost',
-        protocol: 'http:',
-        host: 'localhost',
-        hostname: 'localhost',
-        pathname: '/',
-        search: '',
-        hash: ''
-      },
-      writable: true
-    });
-
-    Object.defineProperty(window, 'matchMedia', {
-      value: vi.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-      writable: true
-    });
   });
 
   it('should handle mobile KYC flow correctly', async () => {
     // Mock mobile device
     mockUseMobile.mockReturnValue(true);
-
-    const mockUser = {
-      id: 1,
-      role: 'borrower',
-      kycStatus: 'pending'
-    };
 
     const onClose = vi.fn();
     const onVerificationComplete = vi.fn();
@@ -102,9 +55,44 @@ describe('Borrower KYC Flow', () => {
       expect(screen.getByText(/preparing mobile verification/i)).toBeInTheDocument();
     });
 
-    // Verify API calls
-    expect(fetch).toHaveBeenCalledWith('/api/kyc/status?userId=1', expect.any(Object));
-    expect(fetch).toHaveBeenCalledWith('/api/kyc/start', expect.any(Object));
+    // Verify app redirection attempt
+    await waitFor(() => {
+      expect(window.location.href).toContain('didit://verify');
+    });
+
+    // Test status polling with completed status
+    server.use(
+      http.get('/api/kyc/status', () => {
+        return HttpResponse.json({ status: 'COMPLETED' });
+      })
+    );
+
+    await waitFor(() => {
+      expect(onVerificationComplete).toHaveBeenCalled();
+    });
+  });
+
+  it('should handle mobile app installation prompt', async () => {
+    mockUseMobile.mockReturnValue(true);
+    vi.useFakeTimers();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <KycVerificationModal isOpen={true} onClose={vi.fn()} />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    // Fast-forward timers to trigger app store prompt
+    await vi.advanceTimersByTimeAsync(4000);
+
+    // Verify app installation prompt
+    await waitFor(() => {
+      expect(screen.getByText(/please install the didit app/i)).toBeInTheDocument();
+    });
+
+    vi.useRealTimers();
   });
 
   it('should handle desktop KYC flow correctly', async () => {

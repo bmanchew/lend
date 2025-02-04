@@ -76,7 +76,7 @@ export const contractRelations = relations(contracts, ({ one }) => ({
     references: [merchants.id],
   }),
   customer: one(users, {
-    fields: [contracts.customerId], 
+    fields: [contracts.customerId],
     references: [users.id],
   }),
 }));
@@ -86,6 +86,8 @@ export const verificationSessions = pgTable('verification_sessions', {
   userId: integer('user_id').references(() => users.id),
   sessionId: varchar('session_id', { length: 255 }).notNull(),
   status: varchar('status', { length: 50 }),
+  platform: varchar('platform', { length: 50 }).notNull(), 
+  userAgent: text('user_agent'), 
   features: text('features'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
@@ -94,7 +96,7 @@ export const verificationSessions = pgTable('verification_sessions', {
 export const webhookEvents = pgTable('webhook_events', {
   id: serial('id').primaryKey(),
   eventType: varchar('event_type', { length: 255 }).notNull(),
-  sessionId: varchar('session_id', { length: 255 }).notNull().default('app'),
+  sessionId: varchar('session_id', { length: 255 }).notNull(),
   status: varchar('status', { length: 50 }).default('pending'),
   payload: json('payload'),
   error: text('error'),
