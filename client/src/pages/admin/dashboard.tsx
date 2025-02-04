@@ -12,7 +12,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Phone, Mail, FileText, UserCheck, Clock } from "lucide-react";
+import { ChevronDown, Phone, Mail, FileText, UserCheck, Clock, Check, X } from "lucide-react";
 import { useState } from "react";
 
 export default function AdminDashboard() {
@@ -44,14 +44,29 @@ export default function AdminDashboard() {
     }
   });
 
+  const updateContractStatus = useMutation({
+    mutationFn: async ({ contractId, status }: { contractId: number; status: string }) => {
+      console.log('[AdminDashboard] Updating contract status:', { contractId, status });
+      const response = await fetch(`/api/contracts/${contractId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to update status: ${error}`);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+    },
+  });
+
   const contractColumns: ColumnDef<SelectContract>[] = [
     {
       accessorKey: "contractNumber",
       header: "Contract #",
-    },
-    {
-      accessorKey: "merchants.companyName",
-      header: "Merchant",
     },
     {
       accessorKey: "amount",
@@ -61,42 +76,61 @@ export default function AdminDashboard() {
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ getValue }) => (
-        <Badge variant={getValue() === "active" ? "success" : "secondary"}>
-          {getValue()}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const status = row.getValue("status") as string;
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={status === "active" ? "default" : status === "rejected" ? "destructive" : "secondary"}>
+              {status}
+            </Badge>
+            {status === "pending_review" && (
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateContractStatus.mutate({
+                    contractId: row.original.id,
+                    status: "approved"
+                  })}
+                >
+                  <Check className="h-4 w-4 text-green-500" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateContractStatus.mutate({
+                    contractId: row.original.id,
+                    status: "rejected"
+                  })}
+                >
+                  <X className="h-4 w-4 text-red-500" />
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "createdAt",
       header: "Created",
       cell: ({ getValue }) => {
-        const value = getValue();
+        const value = getValue() as string;
         return value ? format(new Date(value), "MMM d, yyyy") : "N/A";
       },
+    },
+    {
+      accessorKey: "merchants.companyName",
+      header: "Merchant",
     },
   ];
 
   const filteredContracts = contracts?.filter(contract => {
-    const matchesSearch = 
+    const matchesSearch =
       (contract?.contractNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (contract?.merchants?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === "all" || contract?.status === selectedStatus;
     return matchesSearch && matchesStatus;
-  });
-
-  const updateContractStatus = useMutation({
-    mutationFn: async ({ contractId, status }: { contractId: number; status: string }) => {
-      const response = await fetch(`/api/contracts/${contractId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
-    },
   });
 
   console.log("[AdminDashboard] Rendering with:", {
@@ -188,9 +222,10 @@ export default function AdminDashboard() {
                       className="border rounded p-2"
                     >
                       <option value="all">All Statuses</option>
+                      <option value="pending_review">Pending Review</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
                       <option value="active">Active</option>
-                      <option value="pending">Pending</option>
-                      <option value="completed">Completed</option>
                     </select>
                   </div>
                 </div>
@@ -199,9 +234,6 @@ export default function AdminDashboard() {
                 <DataTable
                   columns={contractColumns}
                   data={filteredContracts || []}
-                  onRowClick={(row) => {
-                    // Open contract details dialog
-                  }}
                 />
               </CardContent>
             </Card>
