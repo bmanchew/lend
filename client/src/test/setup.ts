@@ -4,17 +4,25 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { QueryClient } from '@tanstack/react-query';
 
-// Mock Service Worker setup
+// Mock Service Worker handlers for testing mobile KYC flow
 export const handlers = [
+  // Initial KYC session creation
   http.post('/api/kyc/start', () => {
     return HttpResponse.json({
       sessionId: 'test-session',
       redirectUrl: 'didit://verify?session=test-session'
     });
   }),
+
+  // KYC status check endpoint
   http.get('/api/kyc/status', () => {
     return HttpResponse.json({ status: 'pending' });
   }),
+
+  // Webhook endpoint for status updates
+  http.post('/api/kyc/webhook', () => {
+    return HttpResponse.json({ success: true });
+  })
 ];
 
 export const server = setupServer(...handlers);
@@ -27,7 +35,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// Mock window features
+// Mock mobile device features
 Object.defineProperty(window, 'matchMedia', {
   value: vi.fn().mockImplementation(query => ({
     matches: false,
@@ -41,7 +49,7 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-// Mock window.screen
+// Mock mobile screen dimensions
 Object.defineProperty(window, 'screen', {
   writable: true,
   value: {
@@ -54,7 +62,7 @@ Object.defineProperty(window, 'screen', {
   }
 });
 
-// Mock navigator
+// Mock mobile navigator
 Object.defineProperty(window, 'navigator', {
   writable: true,
   value: {
@@ -70,7 +78,7 @@ Object.defineProperty(window, 'navigator', {
   }
 });
 
-// Mock localStorage
+// Mock localStorage for persisting KYC session state
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -88,7 +96,7 @@ beforeEach(() => {
     vi.isMockFunction(mockFn) && mockFn.mockClear()
   );
 
-  // Reset window.location
+  // Reset window.location for deep linking tests
   Object.defineProperty(window, 'location', {
     value: {
       href: 'http://localhost',
@@ -102,7 +110,7 @@ beforeEach(() => {
     writable: true
   });
 
-  // Reset document.hidden
+  // Reset document.hidden for app state detection
   Object.defineProperty(document, 'hidden', {
     configurable: true,
     get: () => false

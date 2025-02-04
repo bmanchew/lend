@@ -1,3 +1,13 @@
+/**
+ * DiditService: Core service for handling KYC verification flows
+ * 
+ * This service manages the complete lifecycle of KYC verification sessions including:
+ * - Mobile-first verification flows
+ * - Session management and status tracking
+ * - Webhook handling and retry mechanisms
+ * - Error recovery and logging
+ */
+
 import { users, verificationSessions, webhookEvents } from "@db/schema";
 import { db } from "@db";
 import { eq, and, lt, desc } from "drizzle-orm";
@@ -46,20 +56,32 @@ class DiditService {
     };
 
     console.log("[DiditService] Initialized with configuration", {
-      webhookUrl: 'https://shi-fi-lend-brandon263.replit.app/api/kyc/webhook',
+      webhookUrl: this.config.webhookUrl,
       clientId: this.config.clientId.substring(0, 4) + '***'
     });
   }
 
+  /**
+   * Calculate exponential backoff delay for retries
+   * Ensures gradual increase in retry intervals up to 1 minute
+   */
   private calculateRetryDelay(attempt: number): number {
     return Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), 60000);
   }
 
+  /**
+   * Log API call metrics for monitoring and debugging
+   * Tracks API performance and helps identify bottlenecks
+   */
   private logAPICall(method: string, endpoint: string, startTime: number) {
     const duration = Date.now() - startTime;
     console.log(`[DiditService] ${method} ${endpoint} completed in ${duration}ms`);
   }
 
+  /**
+   * Retrieve or refresh Didit API access token
+   * Implements caching and automatic refresh mechanism
+   */
   public async getAccessToken(): Promise<string> {
     const startTime = Date.now();
     console.log("[DiditService] Attempting to get access token");
@@ -105,6 +127,16 @@ class DiditService {
     }
   }
 
+  /**
+   * Initialize KYC verification session
+   * 
+   * Creates a new verification session optimized for the user's platform:
+   * - Mobile: Configures deep linking and app detection
+   * - Web: Sets up redirect flow with fallback options
+   * 
+   * @param config Session configuration including platform and user details
+   * @returns Verification URL for redirecting the user
+   */
   async initializeKycSession({ userId, platform, userAgent, returnUrl }: DiditSessionConfig): Promise<string> {
     const startTime = Date.now();
     console.log("[DiditService] Initializing KYC session for user", userId);
@@ -215,6 +247,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Verify webhook signature for secure status updates
+   * Implements timing-safe comparison and timestamp validation
+   */
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     console.log("[DiditService] Verifying webhook signature");
     try {
@@ -258,6 +294,16 @@ class DiditService {
     }
   }
 
+  /**
+   * Process webhook events for verification status updates
+   * 
+   * Handles various verification outcomes:
+   * - Approved: Updates user KYC status
+   * - Declined: Records verification failure
+   * - Abandoned: Manages incomplete verifications
+   * 
+   * Implements retry mechanism for failed webhook processing
+   */
   async processWebhook(payload: any): Promise<void> {
     const startTime = Date.now();
     const { session_id, status, vendor_data, decision } = payload;
@@ -345,6 +391,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Schedule retry for failed webhook processing
+   * Implements exponential backoff strategy
+   */
   private async scheduleWebhookRetry(sessionId: string): Promise<void> {
     console.log("[DiditService] Scheduling webhook retry for session", sessionId);
     try {
@@ -390,6 +440,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Retry processing of failed webhooks
+   * Runs periodically to recover from temporary failures
+   */
   async retryFailedWebhooks(): Promise<void> {
     const startTime = Date.now();
     console.log("[DiditService] Starting retry of failed webhooks");
@@ -433,6 +487,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Check verification status for a user
+   * Provides real-time status updates with fallback to stored state
+   */
   async checkVerificationStatus(userId: number): Promise<string> {
     const startTime = Date.now();
     console.log("[DiditService] Checking verification status for user", userId);
@@ -490,6 +548,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Update user's KYC verification status
+   * Manages state transitions and maintains audit trail
+   */
   async updateUserKycStatus(userId: number, status: string): Promise<void> {
     console.log("[DiditService] Updating user KYC status", {
       userId,
@@ -516,6 +578,10 @@ class DiditService {
     }
   }
 
+  /**
+   * Get detailed status for a specific verification session
+   * Used for debugging and support purposes
+   */
   async getSessionStatus(sessionId: string): Promise<string> {
     const startTime = Date.now();
     console.log("[DiditService] Getting session status", sessionId);

@@ -1,3 +1,15 @@
+/**
+ * KYC Routes Module
+ * 
+ * Handles all KYC verification related endpoints including:
+ * - Session initialization
+ * - Status checking
+ * - Webhook processing
+ * 
+ * Supports both mobile and web verification flows with
+ * platform-specific optimizations and fallbacks.
+ */
+
 import express from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -7,14 +19,34 @@ import { eq } from 'drizzle-orm';
 
 const router = express.Router();
 
-// Validate session creation request
+/**
+ * Session creation request validation schema
+ * Ensures required fields for initiating verification
+ */
 const createSessionSchema = z.object({
   userId: z.number(),
   platform: z.string(),
   userAgent: z.string()
 });
 
-// Create a new KYC verification session
+/**
+ * Create KYC Verification Session
+ * POST /api/kyc/start
+ * 
+ * Initializes a new verification session with Didit:
+ * 1. Validates request parameters
+ * 2. Creates session with platform-specific configuration
+ * 3. Stores session details for tracking
+ * 4. Returns appropriate redirect URL based on platform
+ * 
+ * Mobile Flow:
+ * - Generates deep link URL for Didit app
+ * - Includes fallback for app installation
+ * 
+ * Web Flow:
+ * - Returns standard verification URL
+ * - Configures desktop-optimized experience
+ */
 router.post('/start', async (req, res) => {
   try {
     const { userId, platform, userAgent } = createSessionSchema.parse(req.body);
@@ -77,7 +109,22 @@ router.post('/start', async (req, res) => {
   }
 });
 
-// Get current KYC status
+/**
+ * Check KYC Status
+ * GET /api/kyc/status
+ * 
+ * Provides real-time verification status:
+ * 1. Retrieves latest session for user
+ * 2. Checks current status with Didit API
+ * 3. Updates local status if changed
+ * 4. Returns current verification state
+ * 
+ * Status Flow:
+ * - not_started: No verification attempted
+ * - pending: Verification in progress
+ * - completed: Verification successful
+ * - failed: Verification unsuccessful
+ */
 router.get('/status', async (req, res) => {
   try {
     const userId = parseInt(req.query.userId as string);
@@ -126,7 +173,20 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// Webhook handler for session updates
+/**
+ * Webhook Handler
+ * POST /api/kyc/webhook
+ * 
+ * Processes verification status updates from Didit:
+ * 1. Validates webhook signature
+ * 2. Updates session status
+ * 3. Triggers relevant business logic
+ * 
+ * Security:
+ * - Implements HMAC signature verification
+ * - Validates webhook timestamp
+ * - Prevents replay attacks
+ */
 router.post('/webhook', async (req, res) => {
   try {
     const signature = req.headers['x-didit-signature'];
