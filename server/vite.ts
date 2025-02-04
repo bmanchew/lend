@@ -6,15 +6,10 @@ export async function setupVite(app: express.Application, httpServer: Server) {
   const vite = await createServer({
     server: {
       middlewareMode: true,
-      hmr: {
-        protocol: 'wss',
-        host: '0.0.0.0',
-        port: 3000,
-        clientPort: 443
-      },
-      https: true,
+      hmr: false,
+      https: false,
       host: '0.0.0.0',
-      port: 3000,
+      port: PORT,
       strictPort: true,
       cors: true,
       watch: false

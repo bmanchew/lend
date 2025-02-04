@@ -13,11 +13,7 @@ const limiter = rateLimit({
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const httpsOptions = {
-  secure: true,
-  rejectUnauthorized: false
-};
-const httpServer = createServer(httpsOptions, app);
+const httpServer = createServer(app);
 
 // Middleware
 app.use(cors({
