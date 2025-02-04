@@ -142,8 +142,8 @@ apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextF
         timestamp: new Date().toISOString()
       });
       return res.status(400).json({
-        error: "Invalid phone number format",
-        details: "Please provide a valid US phone number"
+        error: "Please provide a valid US phone number",
+        details: "Examples: +15551234567, (555) 123-4567, or 5551234567"
       });
     }
 
