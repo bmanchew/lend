@@ -236,16 +236,44 @@ export function registerRoutes(app: Express): Server {
   });
 
   apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+    const requestId = Date.now().toString(36);
     try {
       const userId = parseInt(req.params.userId);
-      console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
+      console.log("[Merchant Lookup] Request started:", {
+        requestId,
+        userId,
+        timestamp: new Date().toISOString()
+      });
 
       if (isNaN(userId)) {
-        console.log("[Merchant Lookup] Invalid userId provided:", req.params.userId);
+        console.error("[Merchant Lookup] Invalid userId:", {
+          requestId,
+          providedId: req.params.userId
+        });
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      console.log("[Merchant Lookup] Executing query for userId:", userId);
+      // Verify user exists and is a merchant
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user || user.role !== 'merchant') {
+        console.error("[Merchant Lookup] Invalid user or role:", {
+          requestId,
+          userId,
+          role: user?.role
+        });
+        return res.status(403).json({ error: 'User is not a merchant' });
+      }
+
+      console.log("[Merchant Lookup] Executing merchant query:", {
+        requestId,
+        userId
+      });
+      
       const merchantResults = await db
         .select()
         .from(merchants)

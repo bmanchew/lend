@@ -30,27 +30,41 @@ export default function MerchantDashboard() {
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error('No user ID available');
-      console.log('Fetching merchant data for user:', user.id);
+      console.log('[MerchantDashboard] Fetching merchant data:', {
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch(`/api/merchants/by-user/${user.id}`, {
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
         }
       });
+
       if (!response.ok) {
-        throw new Error('Failed to fetch merchant data: ' + await response.text());
+        const errorText = await response.text();
+        console.error('[MerchantDashboard] API error:', {
+          status: response.status,
+          error: errorText,
+          userId: user.id
+        });
+        throw new Error(`Failed to fetch merchant data: ${errorText}`);
       }
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch merchant');
-      }
+
       const data = await response.json();
-      console.log('Merchant data:', data);
+      console.log('[MerchantDashboard] Merchant data loaded:', {
+        merchantId: data?.id,
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
       return data;
     },
     enabled: !!user?.id,
-    retry: 2,
-    retryDelay: 1000,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * (2 ** attemptIndex), 5000),
+    staleTime: 30000,
   });
 
   useEffect(() => {
