@@ -1,5 +1,4 @@
-
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
@@ -29,27 +28,29 @@ export function ContractVerificationModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otp })
       });
-      
+
       if (!response.ok) {
-        throw new Error('Invalid verification code');
+        const error = await response.json();
+        throw new Error(error.message || 'Invalid verification code');
       }
-      
+
       return response.json();
     },
     onSuccess: (data) => {
       toast({
         title: "Contract Verified",
-        description: "Proceeding to identity verification..."
+        description: "Proceeding to identity verification...",
+        variant: "default"
       });
       onVerified();
       if (data.redirectUrl) {
         window.location.href = data.redirectUrl;
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Verification Failed",
-        description: "Please check the code and try again",
+        description: error.message || "Please check the code and try again",
         variant: "destructive"
       });
     }
@@ -57,19 +58,28 @@ export function ContractVerificationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent aria-describedby="verification-description">
         <DialogHeader>
           <DialogTitle>Verify Contract</DialogTitle>
+          <DialogDescription id="verification-description">
+            Please enter the verification code sent to your registered phone number.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <Input 
             placeholder="Enter verification code"
             value={otp}
             onChange={(e) => setOtp(e.target.value)}
+            aria-label="Verification code input"
+            type="text"
+            pattern="[0-9]*"
+            inputMode="numeric"
+            maxLength={6}
           />
           <Button 
             onClick={() => verifyContract.mutate()}
-            disabled={verifyContract.isPending}
+            disabled={verifyContract.isPending || !otp}
+            aria-busy={verifyContract.isPending}
           >
             {verifyContract.isPending ? "Verifying..." : "Verify"}
           </Button>
