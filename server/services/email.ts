@@ -33,7 +33,8 @@ const FROM_EMAIL = 'merchant@shifi.io'; // Sender email
 const validation = validateApiKey(apiKey || '');
 if (!validation.isValid) {
   console.error('SendGrid API key validation failed:', validation.error);
-  throw new Error(validation.error);
+  console.warn('Email functionality will be disabled');
+  return;
 }
 
 mailService.setApiKey(apiKey!);
