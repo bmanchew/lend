@@ -157,7 +157,11 @@ export const smsService = {
         timestamp: new Date().toISOString()
       };
 
-      logger.error('[SMS] Failed to send message', errorDetails);
+      logger.error('[SMS] Failed to send message', {
+        ...errorDetails,
+        timestamp: new Date().toISOString(),
+        rawError: error instanceof Error ? error.toString() : 'Unknown error type'
+      });
 
       await slackService.notifySMSFailure({
         phone: to,

@@ -983,7 +983,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
-      constformattedPhone = smsService.formatPhoneNumber(phone);
+      const formattedPhone = smsService.formatPhoneNumber(phone);
       const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
 
       debugLog('Generated application URL', {
