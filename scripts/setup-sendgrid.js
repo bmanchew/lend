@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+
+const { MailService } = require('@sendgrid/mail');
 
 // Read the API key
 const apiKey = process.env.SENDGRID_API_KEY;
@@ -9,23 +9,28 @@ if (!apiKey) {
 }
 
 // Test it's in the right format
-if (!apiKey.startsWith('SG.') || apiKey.length < 50) {
-  console.error('Invalid SendGrid API key format. It should start with "SG." and be at least 50 characters long');
+if (!apiKey.startsWith('SG.')) {
+  console.error('Invalid SendGrid API key format. It should start with "SG."');
   process.exit(1);
 }
 
-// Additional validation for key structure
-const [prefix, encoded] = apiKey.split('.');
-if (!encoded || encoded.length < 40) {
-  console.error('Invalid SendGrid API key structure. The key appears to be malformed');
-  process.exit(1);
+const mailService = new MailService();
+mailService.setApiKey(apiKey);
+
+// Test connection
+async function testConnection() {
+  try {
+    await mailService.send({
+      to: 'test@example.com',
+      from: 'merchant@shifi.io',
+      subject: 'SendGrid Test',
+      text: 'Testing SendGrid configuration',
+    });
+    console.log('SendGrid configuration verified successfully');
+  } catch (error) {
+    console.error('SendGrid verification failed:', error.message);
+    process.exit(1);
+  }
 }
 
-try {
-  // Verify the key is base64 encoded after the SG. prefix
-  Buffer.from(encoded, 'base64');
-  console.log('SendGrid API key is properly formatted and set in the environment');
-} catch (error) {
-  console.error('Invalid SendGrid API key encoding. The key appears to be malformed');
-  process.exit(1);
-}
+testConnection();
