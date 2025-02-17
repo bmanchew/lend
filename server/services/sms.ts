@@ -32,23 +32,16 @@ export const smsService = {
       throw new Error('Phone number is required');
     }
 
-    // Remove all non-numeric characters and spaces
+    // Remove all non-numeric characters
     const cleanNumber = phone.replace(/\D/g, '');
 
-    // Validate length
-    if (cleanNumber.length < 10 || cleanNumber.length > 15) {
-      throw new Error('Invalid phone number length');
+    // Enforce 10-digit US numbers only
+    if (cleanNumber.length !== 10) {
+      throw new Error('Phone number must be exactly 10 digits');
     }
 
-    // Handle US numbers
-    if (cleanNumber.length === 10) {
-      return `+1${cleanNumber}`;
-    } else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
-      return `+${cleanNumber}`;
-    }
-
-    // For international numbers
-    return `+${cleanNumber}`;
+    // Format as +1XXXXXXXXXX
+    return `+1${cleanNumber}`;
   },
 
   async tryUrlShortening(url: string, retries = 3): Promise<string> {
