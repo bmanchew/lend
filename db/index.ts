@@ -160,7 +160,7 @@ process.on('SIGINT', () => {
 
 // Initialize the database connection
 console.log('[Database] Starting initial database connection');
-dbInstance.initialize().catch(error => {
+await dbInstance.initialize().catch(error => {
   console.error('[Database] Failed to initialize database:', error);
   process.exit(1);
 });

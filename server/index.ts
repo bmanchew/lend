@@ -72,7 +72,7 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 app.use(requestLogger);
 
 // Initialize auth before routes
-setupAuth(app);
+await setupAuth(app);
 
 const startServer = async () => {
   try {
