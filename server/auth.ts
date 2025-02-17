@@ -200,7 +200,7 @@ export async function setupAuth(app: Express): Promise<void> {
 
         // Format phone consistently
         const formattedPhone = formatPhone(username);
-        const [userRecord] = await db.select().from(users)
+        let [userRecord] = await db.select().from(users)
           .where(eq(users.phoneNumber, formattedPhone))
           .limit(1);
 
