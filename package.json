@@ -108,6 +108,7 @@
     "react-router-dom": "^7.1.5",
     "recharts": "^2.13.0",
     "resend": "^4.1.1",
+    "shorturl": "^0.0.3",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",

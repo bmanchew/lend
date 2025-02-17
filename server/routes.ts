@@ -964,14 +964,17 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Generate application URL
-      const applicationUrl = `${process.env.APP_URL || ''}/apply/${phone}`;
+      // Generate application URL with proper encoding
+      const appUrl = process.env.APP_URL || '';
+      const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
+      const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(phone)}`;
 
       // Send SMS with enhanced error handling
       const smsResult = await smsService.sendLoanApplicationLink(
         phone,
         merchant.companyName,
-        applicationUrl
+        applicationUrl,
+        requestId
       );
 
       if (!smsResult.success) {
@@ -980,6 +983,12 @@ export function registerRoutes(app: Express): Server {
           phone,
           merchantId: merchant.id,
           requestId
+        });
+
+        await slackService.notifySMSFailure({
+          phone,
+          error: smsResult.error || 'Unknown error',
+          context: 'loan_application'
         });
 
         return res.status(500).json({
@@ -996,39 +1005,34 @@ export function registerRoutes(app: Express): Server {
       });
 
       // Store application attempt in webhook_events table
-      const [event] = await db.insert(webhookEvents).values({
-        eventType: 'loan_application_attempt',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          phone: req.body.phone,
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
-          amount: req.body.amount || req.body.fundingAmount,
-          timestamp: new Date().toISOString(),
-          userAgent: req.headers['user-agent'],
-          stage: 'initiation',
-          requestId
-        }),
-        status: 'sent'
-      }).returning();
+      await db.insert(webhookEvents).values({
+  eventType: 'loan_application_attempt',
+  payload: JSON.stringify({
+    merchantId: req.params.id,
+    phone: req.body.phone,
+    timestamp: new Date().toISOString(),
+    requestId
+  }),
+  status: 'sent'
+}).returning();
 
-      // Emit socket event for real-time updates
-      global.io?.to(`merchant_${req.params.id}`).emit('application_update', {
-        type: 'loan_application_attempt',
-        data: event
-      });
-
-      res.json({
+      return res.json({
         success: true,
         message: 'Application link sent successfully'
       });
+
     } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error occurred');
       logger.error('[LoanApplication] Unexpected error', {
-        error: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined,
+        error: error.message,
+        stack: error.stack,
         requestId
       });
-      next(err);
+
+      return res.status(500).json({
+        success: false,
+        error: 'An unexpected error occurred. Please try again later.'
+      });
     }
   });
 

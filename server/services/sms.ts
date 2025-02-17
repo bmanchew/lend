@@ -1,7 +1,11 @@
 import twilio from 'twilio';
 const { Twilio } = twilio;
+import shorturl from 'shorturl';
+import { promisify } from 'util';
 import { logger } from '../lib/logger';
 import { slackService } from './slack';
+
+const shortenUrl = promisify(shorturl);
 
 // Configuration validation
 const validateConfig = () => {
@@ -45,6 +49,61 @@ export const smsService = {
 
     // For international numbers
     return `+${cleanNumber}`;
+  },
+
+  async tryUrlShortening(url: string, retries = 3): Promise<string> {
+    const services = [
+      async (u: string) => {
+        try {
+          const shortUrl = await shortenUrl(u);
+          return shortUrl;
+        } catch (e) {
+          logger.error('[SMS] Primary shortening failed:', e);
+          throw e;
+        }
+      },
+      async (u: string) => {
+        try {
+          // Fallback to tinyurl method from shorturl
+          const shortUrl = await shortenUrl(u, 'tinyurl');
+          return shortUrl;
+        } catch (e) {
+          logger.error('[SMS] Tinyurl fallback failed:', e);
+          throw e;
+        }
+      }
+    ];
+
+    let lastError;
+    for (let i = 0; i < retries; i++) {
+      for (const service of services) {
+        try {
+          const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+          const shortened = await service(fullUrl);
+
+          logger.info('[SMS] URL shortened successfully:', {
+            originalUrl: fullUrl,
+            shortUrl: shortened,
+            attempt: i + 1,
+            service: service.name
+          });
+
+          return shortened;
+        } catch (error) {
+          lastError = error;
+          continue;
+        }
+      }
+    }
+
+    logger.error('[SMS] All URL shortening attempts failed:', {
+      url,
+      error: lastError,
+      timestamp: new Date().toISOString()
+    });
+
+    // Return original URL if all shortening attempts fail
+    return url;
   },
 
   async sendSMS(to: string, message: string): Promise<boolean> {
@@ -138,27 +197,38 @@ export const smsService = {
     phone: string, 
     merchantName: string, 
     url: string, 
-    userId?: number
+    requestId: string
   ): Promise<{success: boolean, error?: string}> {
-    const requestId = Date.now().toString(36);
     try {
       logger.info('[SMS] Preparing loan application link', {
         requestId,
         phone,
         merchantName,
-        userId,
         urlLength: url.length
       });
 
-      // Add userId to URL if provided
-      const finalUrl = userId ? `${url}&userId=${userId}` : url;
-      const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${finalUrl}`;
+      // Try to shorten the URL
+      const shortUrl = await this.tryUrlShortening(url);
+
+      // Format the message with proper spacing and formatting for better link detection
+      const message = [
+        `${merchantName} Loan Application`,
+        '------------------------',
+        'You have been invited to complete a loan application.',
+        '',
+        'ACTION REQUIRED:',
+        `Click here → ${shortUrl}`, // Using arrow emoji for better visibility
+        '',
+        '------------------------',
+        'Link expires in 24 hours.',
+        `Ref: ${requestId.slice(-6).toUpperCase()}`
+      ].join('\n');
 
       logger.info('[SMS] Sending loan application message', {
         requestId,
         phone,
         messageLength: message.length,
-        urlLength: finalUrl.length
+        urlLength: shortUrl.length
       });
 
       const sent = await this.sendSMS(phone, message);
@@ -166,8 +236,7 @@ export const smsService = {
       logger.info('[SMS] Loan application message status', {
         requestId,
         success: sent,
-        phone,
-        userId
+        phone
       });
 
       return { success: sent };
@@ -177,7 +246,6 @@ export const smsService = {
         requestId,
         error: errorMessage,
         phone,
-        userId,
         stack: error instanceof Error ? error.stack : undefined
       });
 
