@@ -1225,26 +1225,6 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-  const io = new SocketIOServer(httpServer, {
-    path: '/socket.io/',
-    cors: { origin: '*' }
-  });
-
-  // Make io globally available
-  global.io = io;
-
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('join_merchant_room', (merchantId: number) => {
-      socket.join(`merchant_${merchantId}`);
-      console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
-  });
 
   const errorHandlingMiddleware: ErrorHandlingMiddleware = (err, req, res, _next) => {
     const requestId = req.headers['x-request-id'] as string || Date.now().toString(36);
