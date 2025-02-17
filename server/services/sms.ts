@@ -241,10 +241,10 @@ export const smsService = {
       }
 
       // Use minimal format with URL on its own line
-      // This format has highest chance of link detection
+      // This format has the highest chance of link detection
       const message = [
-        `${merchantName} loan application:`,
-        '',
+        `${merchantName} loan application link:`,
+        'Link:',
         shortUrl
       ].join('\n');
 
@@ -265,7 +265,8 @@ export const smsService = {
             logger.info('[SMS] Successfully sent loan application message', {
               requestId,
               phone,
-              attempt
+              attempt,
+              messageFormat: 'minimal-with-link-keyword'
             });
             return { success: true };
           }
