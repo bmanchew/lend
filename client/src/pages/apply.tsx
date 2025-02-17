@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 
 export default function Apply() {
   const [location] = useLocation();
-  const [, params] = useRoute("/apply/:token");
+  // Support both token and phone number routes
+  const [, params] = useRoute("/apply/:identifier");
   const searchParams = new URLSearchParams(window.location.search);
   const [started, setStarted] = useState(false);
   const [kycCompleted, setKycCompleted] = useState(false);
@@ -13,32 +14,37 @@ export default function Apply() {
   const userId = localStorage.getItem('temp_user_id');
 
   useEffect(() => {
-    // Check URL parameters
-    const phoneNumber = searchParams.get('phone');
+    const identifier = params?.identifier;
     const isVerification = searchParams.get('verification') === 'true';
     const fromLogin = searchParams.get('from') === 'login';
 
-    console.log('[Apply] Page loaded with params:', { 
-      phoneNumber, 
-      isVerification, 
+    console.log('[Apply] Page loaded with params:', {
+      identifier,
+      isVerification,
       fromLogin,
       userId,
-      currentUrl: window.location.href 
+      currentUrl: window.location.href
     });
 
-    if (phoneNumber) {
-      // If we have a phone number, redirect to login
-      const loginUrl = `/auth/customer-login?phone=${phoneNumber}`;
-      console.log('[Apply] Redirecting to login:', loginUrl);
-      window.location.href = loginUrl;
-    } else if (userId && (fromLogin || isVerification)) {
-      // Auto-start verification if we have userId and coming from login
-      console.log('[Apply] Auto-starting verification for user:', userId);
+    // Handle phone number route
+    if (identifier && !isVerification && !fromLogin) {
+      const phoneNumber = decodeURIComponent(identifier);
+      if (phoneNumber.match(/^\+?[\d-]+$/)) {
+        const loginUrl = `/auth/customer-login?phone=${encodeURIComponent(phoneNumber)}`;
+        console.log('[Apply] Redirecting to login:', loginUrl);
+        window.location.href = loginUrl;
+        return;
+      }
+    }
+
+    // Handle verification flow
+    if (userId && (fromLogin || isVerification)) {
+      console.log('[Apply] Starting verification for user:', userId);
       setShowVerification(true);
     }
-  }, [searchParams, userId]);
+  }, [params, searchParams, userId]);
 
-  // Separate useEffect for KYC status check
+  // KYC status check
   useEffect(() => {
     if (!showVerification || !userId) return;
 

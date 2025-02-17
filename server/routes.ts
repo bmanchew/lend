@@ -21,20 +21,22 @@ import { slackService } from "./services/slack"; // Add import for slack service
 // Global type declarations
 declare global {
   namespace Express {
+    interface User {
+      id: number;
+      role: string;
+      email?: string;
+      name?: string;
+      phoneNumber?: string;
+      platform?: string;
+      kycStatus?: string;
+      otpExpiry?: Date | null;
+      lastOtpCode?: string | null;
+      createdAt?: Date;
+      updatedAt?: Date;
+    }
+
     interface Request {
-      user?: {
-        id: number;
-        role: string;
-        email?: string;
-        name?: string;
-        phoneNumber?: string;
-        platform?: string;
-        kycStatus?: string;
-        otpExpiry?: Date | null;
-        lastOtpCode?: string | null;
-        createdAt?: Date;
-        updatedAt?: Date;
-      };
+      user?: User;
     }
   }
   var io: SocketIOServer;
@@ -354,6 +356,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Fix the merchant creation endpoint with proper types
   apiRouter.post("/merchants/create", async (req: Request, res: Response, next: NextFunction) => {
     try {
       console.log("[Merchant Creation] Received request:", {
@@ -362,6 +365,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       const { companyName, email, phoneNumber, address, website } = req.body;
+      const tempPassword = Math.random().toString(36).slice(-8);
 
       // Validate required fields
       if (!email || !companyName) {
@@ -388,8 +392,6 @@ export function registerRoutes(app: Express): Server {
         console.log("[Merchant Creation] Updated existing user to merchant:", merchantUser);
       } else {
 
-        // Generate random password for new users
-        const tempPassword = Math.random().toString(36).slice(-8);
         console.log("[Merchant Creation] Generated temporary password");
         const hashedPassword = await authService.hashPassword(tempPassword);
 
@@ -403,7 +405,7 @@ export function registerRoutes(app: Express): Server {
             name: companyName,
             role: 'merchant',
             phoneNumber
-          })
+          } as typeof users.$inferInsert)
           .returning();
       }
 
@@ -422,11 +424,11 @@ export function registerRoutes(app: Express): Server {
           address,
           website,
           status: 'active'
-        })
+        } as typeof merchants.$inferInsert)
         .returning();
 
       // Send login credentials via email
-      await sendMerchantCredentials(email, merchantUser.username, tempPassword);
+      await sendMerchantCredentials(email, email, tempPassword);
 
       res.status(201).json({ merchant, user: merchantUser });
     } catch (err) {
@@ -482,7 +484,7 @@ export function registerRoutes(app: Express): Server {
         name,
         term,
         interestRate,
-      }).returning();
+      } as typeof programs.$inferInsert).returning();
 
       res.json(program);
     } catch (err: any) {
@@ -534,7 +536,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix contract creation endpoint with Slack notifications
+  // Fix contract creation endpoint with proper types
   apiRouter.post("/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
@@ -547,15 +549,18 @@ export function registerRoutes(app: Express): Server {
         notes = ''
       } = req.body;
 
-      // Create customer user record
+      // Create customer user record with proper types
       const [customer] = await db.insert(users).values({
+        username: customerDetails.email, // Required field
+        password: Math.random().toString(36).slice(-8), // Required temp password
         email: customerDetails.email,
         name: `${customerDetails.firstName} ${customerDetails.lastName}`,
         role: 'customer',
-        phoneNumber: customerDetails.phone,
+        phone_number: customerDetails.phone,
         platform: 'web',
-        kycStatus: 'pending'
-      }).returning();
+        kyc_status: 'pending',
+        active: true
+      } as typeof users.$inferInsert).returning();
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
@@ -572,22 +577,24 @@ export function registerRoutes(app: Express): Server {
         throw new Error('Merchant not found');
       }
 
+      // Convert values to match database types
       const [newContract] = await db.insert(contracts).values({
-        merchantId,
-        customerId: customer.id,
-        contractNumber,
-        amount,
-        term,
-        interestRate,
-        downPayment: amount * 0.05,
-        monthlyPayment,
-        totalInterest,
+        merchant_id: merchantId,
+        customer_id: customer.id,
+        contract_number: contractNumber,
+        amount: amount.toString(), // Convert to string for numeric type
+        term: parseInt(term.toString()),
+        interest_rate: interestRate.toString(),
+        down_payment: downPayment.toString(),
+        monthly_payment: monthlyPayment.toString(),
+        total_interest: totalInterest.toString(),
         status: 'pending_review',
         notes,
-        underwritingStatus: 'pending',
-        borrowerEmail: customerDetails.email,
-        borrowerPhone: customerDetails.phone
-      }).returning();
+        underwriting_status: 'pending',
+        borrower_email: customerDetails.email,
+        borrower_phone: customerDetails.phone,
+        active: true
+      } as typeof contracts.$inferInsert).returning();
 
       // Send Slack notifications
       await slackService.notifyLoanApplication({
@@ -739,7 +746,7 @@ export function registerRoutes(app: Express): Server {
             otpExpiry: otpExpiry,
             platform: 'mobile',
             kycStatus: 'pending'
-          })
+          } as typeof users.$inferInsert)
           .returning()
           .then(rows => rows[0]);
       } else {
@@ -976,17 +983,18 @@ export function registerRoutes(app: Express): Server {
       }
 
       const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
-      const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(phone)}`;
+      constformattedPhone = smsService.formatPhoneNumber(phone);
+      const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
 
       debugLog('Generated application URL', {
         baseUrl,
         applicationUrl,
-        phone
+        phone: formattedPhone
       });
 
       // Send SMS with enhanced error handling
       const smsResult = await smsService.sendLoanApplicationLink(
-        phone,
+        formattedPhone,
         merchant.companyName,
         applicationUrl,
         requestId
@@ -995,31 +1003,33 @@ export function registerRoutes(app: Express): Server {
       if (!smsResult.success) {
         logger.error('[LoanApplication] Failed to send SMS', {
           error: smsResult.error,
-          phone,
+          phone: formattedPhone,
           merchantId: merchant.id,
           requestId
         });
-
         return res.status(500).json({
           success: false,
-          error: 'Failed to send application link via SMS. Please try again later.'
+          error: smsResult.error || 'Failed to send application link'
         });
       }
 
       // Store application attempt in webhook_events table
-      await db.insert(webhookEvents).values({eventType: 'loan_application_attempt',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          phone: req.body.phone,
+      await db.insert(webhookEvents).values({
+        event_type: 'loan_application_attempt',
+        status: 'sent',
+        payload: {
+          merchantId: parseInt(req.params.id),
+          phone: formattedPhone,
+          url: applicationUrl,
           timestamp: new Date().toISOString(),
-          requestId,
-          applicationUrl
-        }),
-        status: 'sent'
-      });
+          requestId
+        },
+        created_at: new Date(),
+        retry_count: 0
+      } as typeof webhookEvents.$inferInsert);
 
       debugLog('Successfully sent application link', {
-        phone,
+        phone: formattedPhone,
         merchantId: merchant.id,
         timestamp: new Date().toISOString()
       });
@@ -1028,15 +1038,12 @@ export function registerRoutes(app: Express): Server {
         success: true,
         message: 'Application link sent successfully'
       });
-
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error occurred');
+    } catch (error) {
       logger.error('[LoanApplication] Unexpected error', {
-        error: error.message,
-        stack: error.stack,
-        requestId
+        error: error instanceof Error ? error.message : 'Unknown error',
+        requestId,
+        stack: error instanceof Error ? error.stack : undefined
       });
-
       next(error);
     }
   });
@@ -1107,7 +1114,7 @@ export function registerRoutes(app: Express): Server {
       const hashedPassword = await authService.hashPassword(password);
       const user = await db.insert(users).values({
         username, password: hashedPassword, email, name, role, phoneNumber
-      }).returning();
+      } as typeof users.$inferInsert).returning();
       res.json(user);
     } catch (err) {
       next(err);
