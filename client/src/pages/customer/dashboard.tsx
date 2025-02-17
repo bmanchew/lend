@@ -8,16 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import type { SelectContract } from "@db/schema";
-import { VerificationModal } from "@/components/kyc/verification-modal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Import Dialog components
-
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DebitCardForm } from '@/components/payment/debit-card-form';
-
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
-  const [showDownPayment, setShowDownPayment] = useState(false); // State for down payment dialog
+  const [showDownPayment, setShowDownPayment] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
@@ -98,18 +94,10 @@ export default function CustomerDashboard() {
                     </div>
                     <Button 
                       className="w-full mt-6" 
-                      onClick={(e) => {
-                        console.log('Click event triggered on Accept Offer button', e);
+                      onClick={() => {
                         if (contracts?.[0]?.id) {
                           setShowDownPayment(true);
                         }
-                      }}
-                      onTouchStart={(e) => {
-                        console.log('Touch start event triggered on Accept Offer button', e);
-                      }}
-                      onTouchEnd={(e) => {
-                        console.log('Touch end event triggered on Accept Offer button', e);
-                        e.preventDefault();
                       }}
                     >
                       Accept Offer

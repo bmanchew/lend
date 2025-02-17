@@ -3,6 +3,7 @@ import { db } from "@db";
 import { eq, and, lt, desc } from "drizzle-orm";
 import axios from "axios";
 import crypto from 'crypto';
+import { VerificationStatus, DiditWebhookPayload } from "../routes";
 
 interface DiditConfig {
   clientId: string;
@@ -11,11 +12,23 @@ interface DiditConfig {
   webhookSecret: string;
 }
 
-interface DiditSessionConfig {
+export interface DiditSessionConfig {
   userId: number;
   platform: 'mobile' | 'web';
   userAgent?: string;
   returnUrl?: string;
+}
+
+interface VerificationSessionData {
+  sessionId: string;
+  userId: number;
+  status: VerificationStatus;
+  features: string;
+  returnUrl?: string;
+  documentData?: Record<string, any> | null;
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date;
 }
 
 interface DiditAuthResponse {
@@ -44,11 +57,6 @@ class DiditService {
       webhookUrl: DIDIT_WEBHOOK_URL,
       webhookSecret: DIDIT_WEBHOOK_SECRET
     };
-
-    console.log("[DiditService] Initialized with configuration", {
-      webhookUrl: 'https://shi-fi-lend-brandon263.replit.app/api/kyc/webhook',
-      clientId: this.config.clientId.substring(0, 4) + '***'
-    });
   }
 
   private calculateRetryDelay(attempt: number): number {
@@ -65,7 +73,7 @@ class DiditService {
     console.log("[DiditService] Attempting to get access token");
 
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-      console.log("[DiditService] Using cached token, expires in", 
+      console.log("[DiditService] Using cached token, expires in",
         Math.round((this.tokenExpiry - Date.now()) / 1000), "seconds");
       return this.accessToken;
     }
@@ -76,7 +84,7 @@ class DiditService {
       ).toString('base64');
 
       console.log("[DiditService] Requesting new access token");
-      const response = await axios.post('https://apx.didit.me/auth/v2/token/', 
+      const response = await axios.post('https://apx.didit.me/auth/v2/token/',
         'grant_type=client_credentials',
         {
           headers: {
@@ -128,8 +136,8 @@ class DiditService {
       console.log("[DiditService] Using webhook URL:", callbackUrl.toString());
 
       // Ensure return URL is absolute and includes domain
-      const completeReturnUrl = returnUrl?.startsWith('http') 
-        ? returnUrl 
+      const completeReturnUrl = returnUrl?.startsWith('http')
+        ? returnUrl
         : new URL(returnUrl || '/', replitDomain).toString();
 
       const isMobile = platform === 'mobile' || (userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent));
@@ -165,7 +173,7 @@ class DiditService {
       };
 
       const response = await axios.post(
-        'https://verification.didit.me/v1/session/', 
+        'https://verification.didit.me/v1/session/',
         sessionData,
         {
           headers: {
@@ -222,7 +230,7 @@ class DiditService {
         console.error('[DiditService] Missing webhook headers');
         return false;
       }
-      
+
       const timestamp = parseInt(timestampHeader);
       const currentTime = Math.floor(Date.now() / 1000);
 
@@ -258,65 +266,47 @@ class DiditService {
     }
   }
 
-  async processWebhook(payload: any): Promise<void> {
-    const startTime = Date.now();
+  async processWebhook(payload: DiditWebhookPayload): Promise<void> {
     const { session_id, status, vendor_data, decision } = payload;
 
-    console.log("[DiditService] Processing webhook", {
-      sessionId: session_id,
-      status,
-      vendorData: vendor_data,
-      hasDecision: !!decision
-    });
-
-    // Validate status is one of the expected final states
-    const isFinalStatus = ['Approved', 'Declined', 'In Review', 'Abandoned'].includes(status);
-    if (isFinalStatus && !decision) {
-      console.warn("[DiditService] Final status received without decision field", { status });
-    }
-
     try {
-      console.log("[DiditService] Logging webhook event");
       await db.insert(webhookEvents).values({
+        id: undefined, // Let the database generate this
         sessionId: session_id,
         eventType: status,
         status: 'pending',
-        payload,
-        createdAt: new Date(),
+        payload: JSON.stringify(payload),
+        createdAt: new Date()
       });
 
-      console.log("[DiditService] Starting transaction for webhook processing");
       await db.transaction(async (tx) => {
-        console.log("[DiditService] Updating session status");
+        // Update verification session
         await tx
           .update(verificationSessions)
           .set({
             status,
-            documentData: decision?.kyc?.document_data || null,
             updatedAt: new Date(),
+            documentData: decision?.kyc?.document_data ? JSON.stringify(decision.kyc.document_data) : null
           })
           .where(eq(verificationSessions.sessionId, session_id));
 
+        // Update user KYC status if final status received
         const normStatus = status.toLowerCase();
         if (normStatus === 'approved' || normStatus === 'declined') {
-          const vendorData = JSON.parse(vendor_data);
-          const userId = vendorData.userId;
-          console.log("[DiditService] Updating user KYC status", {
-            userId,
-            username: vendorData.username,
-            status: normStatus === 'approved' ? 'verified' : 'failed',
-            originalStatus: status
-          });
+          const vendorDataParsed = JSON.parse(vendor_data || '{}');
+          const userId = parseInt(vendorDataParsed.userId);
 
-          await tx
-            .update(users)
-            .set({
-              kycStatus: normStatus === 'approved' ? 'verified' : 'failed'
-            })
-            .where(eq(users.id, userId));
+          if (!isNaN(userId)) {
+            await tx
+              .update(users)
+              .set({
+                kycStatus: normStatus === 'approved' ? 'verified' : 'failed'
+              })
+              .where(eq(users.id, userId));
+          }
         }
 
-        console.log("[DiditService] Marking webhook event as processed");
+        // Mark webhook as processed
         await tx
           .update(webhookEvents)
           .set({
@@ -326,15 +316,10 @@ class DiditService {
           .where(eq(webhookEvents.sessionId, session_id));
       });
 
-      console.log("[DiditService] Webhook processing completed", {
-        sessionId: session_id,
-        duration: Date.now() - startTime
-      });
     } catch (error) {
       console.error('[DiditService] Error processing webhook:', {
         error,
-        sessionId: session_id,
-        duration: Date.now() - startTime
+        sessionId: session_id
       });
       await this.scheduleWebhookRetry(session_id);
       throw error;
@@ -414,7 +399,7 @@ class DiditService {
             attempt: event.retryCount
           });
 
-          await this.processWebhook(event.payload);
+          await this.processWebhook(JSON.parse(event.payload));
         } catch (error) {
           console.error(`[DiditService] Retry failed for webhook event ${event.id}:`, error);
         }
@@ -486,7 +471,7 @@ class DiditService {
     }
   }
 
-  async updateUserKycStatus(userId: number, status: string): Promise<void> {
+  async updateUserKycStatus(userId: number, status: VerificationStatus): Promise<void> {
     console.log("[DiditService] Updating user KYC status", {
       userId,
       status
@@ -495,13 +480,11 @@ class DiditService {
     try {
       await db
         .update(users)
-        .set({ kycStatus: status as "pending" | "verified" | "failed" })
+        .set({
+          kycStatus: status.toLowerCase() as "pending" | "verified" | "failed"
+        })
         .where(eq(users.id, userId));
 
-      console.log("[DiditService] User KYC status updated successfully", {
-        userId,
-        status
-      });
     } catch (error) {
       console.error("[DiditService] Error updating user KYC status:", {
         userId,

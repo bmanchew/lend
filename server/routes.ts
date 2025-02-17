@@ -20,10 +20,38 @@ import { logger } from "./lib/logger";
 declare global {
   namespace Express {
     interface Request {
-      user?: any; // Define proper user type based on your auth implementation
+      user?: {
+        id: number;
+        role: string;
+        [key: string]: any;
+      };
     }
   }
-  var io: SocketIOServer | undefined;
+  var io: SocketIOServer;
+}
+
+export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+
+export interface DiditWebhookPayload {
+  session_id: string;
+  status: VerificationStatus;
+  created_at: number;
+  timestamp: number;
+  userId: string;
+  data?: {
+    verificationStatus: string;
+    documentData?: any;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+  vendor_data?: string;
+  decision?: {
+    kyc?: {
+      document_data?: any;
+    };
+  };
 }
 
 // Custom error class for API errors
@@ -37,6 +65,23 @@ class APIError extends Error {
     super(message);
     this.name = 'APIError';
   }
+}
+
+// Route type definitions with improved typing
+type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+
+interface RouteConfig {
+  path: string;
+  method: 'get' | 'post' | 'put' | 'delete';
+  handler: RouteHandler;
+  middleware?: any[];
+  description?: string;
+}
+
+// Route grouping by domain
+interface RouteGroup {
+  prefix: string;
+  routes: RouteConfig[];
 }
 
 // Middleware type declarations
@@ -58,74 +103,17 @@ const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) =>
   const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
 
-  // Log incoming request
   console.log(`[API] ${req.method} ${req.path}`, {
     requestId,
     query: req.query,
     body: req.body,
-    headers: {...req.headers, authorization: undefined}
+    headers: { ...req.headers, authorization: undefined }
   });
-
-  // Capture response
-  const originalSend = res.send;
-  res.send = function(body: any) {
-    console.log(`[API] Response for ${req.path}`, {
-      requestId,
-      statusCode: res.statusCode,
-      body: typeof body === 'string' ? JSON.parse(body) : body
-    });
-    return originalSend.call(this, body);
-  };
 
   next();
 };
 
-// Error handling middleware
-const errorHandlingMiddleware: ErrorHandlingMiddleware = (err, req, res, _next) => {
-  const requestId = req.headers['x-request-id'] as string || Date.now().toString(36);
-  const isAPIError = err instanceof APIError;
-
-  const errorDetails = {
-    requestId,
-    name: err.name,
-    message: err.message,
-    status: isAPIError ? err.status : 500,
-    code: isAPIError ? err.code : undefined,
-    path: req.path,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-    url: req.originalUrl || req.url,
-    query: req.query,
-    body: req.body,
-    headers: {...req.headers, authorization: undefined},
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    originalError: err instanceof Error ? {
-      name: err.name,
-      message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      code: (err as any).code
-    } : null
-  };
-
-  console.error("[API] Error caught:", errorDetails);
-  logger.error("API Error", errorDetails);
-
-  if (!res.headersSent) {
-    const status = errorDetails.status;
-    const message = process.env.NODE_ENV === 'development' ? 
-      err.message : 
-      'Internal Server Error';
-
-    res.status(status).json({
-      status: "error",
-      message,
-      code: errorDetails.code,
-      requestId
-    });
-  }
-};
-
-// Cache middleware with proper typing
+// Cache middleware
 const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
   const apiCache = new NodeCache({ stdTTL: duration });
 
@@ -141,7 +129,7 @@ const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
     }
 
     const originalSend = res.send;
-    res.send = function(body: any): any {
+    res.send = function (body: any): any {
       apiCache.set(key, body, duration);
       return originalSend.call(this, body);
     };
@@ -152,15 +140,51 @@ const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
 export function registerRoutes(app: Express): Server {
   const apiRouter = express.Router();
 
+  // Register error handling middleware
+  apiRouter.use(async (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
+    const errorId = Date.now().toString(36);
+    const isAPIError = err instanceof APIError;
+
+    const errorDetails = {
+      id: errorId,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      name: err.name,
+      message: err.message,
+      status: isAPIError ? err.status : 500,
+      code: isAPIError ? err.code : undefined,
+      details: isAPIError ? err.details : undefined,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    };
+
+    logger.error('API Error:', errorDetails);
+
+    if (!res.headersSent) {
+      res.status(errorDetails.status).json({
+        status: 'error',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
+        errorId
+      });
+    }
+
+    next(err);
+  });
+
   // Register middleware
   apiRouter.use(requestTrackingMiddleware);
 
+
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const customerContracts = await db.query.contracts.findMany({
-        where: eq(contracts.customerId, parseInt(req.params.id)),
-        orderBy: desc(contracts.createdAt)
-      });
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+
+      const customerContracts = await db.select().from(contracts)
+        .where(eq(contracts.customerId, userId))
+        .orderBy(desc(contracts.createdAt));
 
       console.log("Found contracts for customer:", customerContracts);
       res.json(customerContracts);
@@ -176,9 +200,9 @@ export function registerRoutes(app: Express): Server {
       const testEmail = req.body.email;
 
       if (!testEmail) {
-        return res.status(400).json({ 
-          status: "error", 
-          message: "Email address is required" 
+        return res.status(400).json({
+          status: "error",
+          message: "Email address is required"
         });
       }
 
@@ -197,80 +221,80 @@ export function registerRoutes(app: Express): Server {
 
       if (sent) {
         console.log('Email sent successfully to:', testEmail);
-        return res.json({ 
-          status: "success", 
-          message: "Verification email sent successfully" 
+        return res.json({
+          status: "success",
+          message: "Verification email sent successfully"
         });
       } else {
         console.error('Failed to send email to:', testEmail);
-        return res.status(500).json({ 
-          status: "error", 
-          message: "Failed to send verification email" 
+        return res.status(500).json({
+          status: "error",
+          message: "Failed to send verification email"
         });
       }
     } catch (err: any) {
       console.error('Test verification email error:', err);
-      return res.status(500).json({ 
-        status: "error", 
-        message: err.message || "Failed to send test email" 
+      return res.status(500).json({
+        status: "error",
+        message: err.message || "Failed to send test email"
       });
     }
   });
 
-  apiRouter.get("/verify-sendgrid", async (req:Request, res:Response) => {
+  apiRouter.get("/verify-sendgrid", async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
       if (!apiKey || !apiKey.startsWith('SG.')) {
-        return res.status(500).json({ 
-          status: "error", 
-          message: "Invalid or missing SendGrid API key." 
+        return res.status(500).json({
+          status: "error",
+          message: "Invalid or missing SendGrid API key."
         });
       }
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ 
-          status: "success", 
-          message: "SendGrid setup verified successfully." 
+        res.json({
+          status: "success",
+          message: "SendGrid setup verified successfully."
         });
       } else {
-        res.status(500).json({ 
-          status: "error", 
-          message: "SendGrid setup verification failed. Check API key and connection." 
+        res.status(500).json({
+          status: "error",
+          message: "SendGrid setup verification failed. Check API key and connection."
         });
       }
-    } catch (err:any) {
+    } catch (err: any) {
       console.error('SendGrid verification error:', err);
-      res.status(500).json({ 
-        status: "error", 
-        message: err.message || "SendGrid verification failed" 
+      res.status(500).json({
+        status: "error",
+        message: err.message || "SendGrid verification failed"
       });
     }
   });
 
-  apiRouter.get("/test-email", async (req:Request, res:Response) => {
+  apiRouter.get("/test-email", async (req: Request, res: Response) => {
     try {
       const isConnected = await testSendGridConnection();
       if (isConnected) {
-        res.json({ 
-          status: "success", 
-          message: "SendGrid connection successful" 
+        res.json({
+          status: "success",
+          message: "SendGrid connection successful"
         });
       } else {
-        res.status(500).json({ 
-          status: "error", 
-          message: "SendGrid connection failed. See logs for details." 
+        res.status(500).json({
+          status: "error",
+          message: "SendGrid connection failed. See logs for details."
         });
       }
-    } catch (err:any) {
+    } catch (err: any) {
       console.error('SendGrid test error:', err);
-      res.status(500).json({ 
-        status: "error", 
-        message: err.message || "SendGrid test failed" 
+      res.status(500).json({
+        status: "error",
+        message: err.message || "SendGrid test failed"
       });
     }
   });
 
-  apiRouter.get("/merchants/by-user/:userId", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/by-user/:userId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = parseInt(req.params.userId);
       console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
@@ -299,13 +323,13 @@ export function registerRoutes(app: Express): Server {
 
       console.log("Found merchant:", merchant);
       res.json(merchant);
-    } catch (err:any) {
-      console.error("Error fetching merchant by user:", err); 
+    } catch (err: any) {
+      console.error("Error fetching merchant by user:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants/:id/contracts", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const merchantContracts = await db.query.contracts.findMany({
         where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -314,13 +338,13 @@ export function registerRoutes(app: Express): Server {
         },
       });
       res.json(merchantContracts);
-    } catch (err:any) {
-      console.error("Error fetching merchant contracts:", err); 
+    } catch (err: any) {
+      console.error("Error fetching merchant contracts:", err);
       next(err);
     }
   });
 
-  apiRouter.post("/merchants/create", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.post("/merchants/create", async (req: Request, res: Response, next: NextFunction) => {
     try {
       console.log("[Merchant Creation] Received request:", {
         body: req.body,
@@ -354,7 +378,7 @@ export function registerRoutes(app: Express): Server {
         console.log("[Merchant Creation] Updated existing user to merchant:", merchantUser);
       } else {
 
-      // Generate random password for new users
+        // Generate random password for new users
         const tempPassword = Math.random().toString(36).slice(-8);
         console.log("[Merchant Creation] Generated temporary password");
         const hashedPassword = await authService.hashPassword(tempPassword);
@@ -401,7 +425,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/merchants", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants", async (req: Request, res: Response, next: NextFunction) => {
     console.log("[Merchants] Fetching all merchants");
     try {
       const allMerchants = await db
@@ -431,13 +455,13 @@ export function registerRoutes(app: Express): Server {
       const merchantsWithPrograms = Array.from(merchantsMap.values());
 
       res.json(merchantsWithPrograms);
-    } catch (err:any) {
-      console.error("Error fetching all merchants:", err); 
+    } catch (err: any) {
+      console.error("Error fetching all merchants:", err);
       next(err);
     }
   });
 
-  apiRouter.post("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.post("/merchants/:id/programs", async (req: Request, res: Response, next: NextFunction) => {
     try {
       console.log("[Programs] Creating new program:", req.body);
       const { name, term, interestRate } = req.body;
@@ -451,13 +475,13 @@ export function registerRoutes(app: Express): Server {
       }).returning();
 
       res.json(program);
-    } catch (err:any) {
+    } catch (err: any) {
       console.error("Error creating program:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants/:id/programs", async (req:Request, res:Response, next:NextFunction) => {
+  apiRouter.get("/merchants/:id/programs", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
       const merchantPrograms = await db
@@ -465,7 +489,7 @@ export function registerRoutes(app: Express): Server {
         .from(programs)
         .where(eq(programs.merchantId, merchantId));
       res.json(merchantPrograms);
-    } catch (err:any) {
+    } catch (err: any) {
       console.error("Error fetching merchant programs:", err);
       next(err);
     }
@@ -513,45 +537,40 @@ export function registerRoutes(app: Express): Server {
         notes = ''
       } = req.body;
 
-      const [customer] = await db
-        .insert(users)
-        .values({
-          username: customerDetails.phone,
-          password: Math.random().toString(36).slice(-8),
-          email: customerDetails.email,
-          name: `${customerDetails.firstName} ${customerDetails.lastName}`,
-          role: 'customer',
-          phoneNumber: customerDetails.phone,
-          platform: 'web',
-          kycStatus: 'pending'
-        })
-        .returning();
+      // Create customer user record
+      const [customer] = await db.insert(users).values({
+        username: customerDetails.phone,
+        password: await authService.hashPassword(Math.random().toString(36).slice(-8)),
+        email: customerDetails.email,
+        name: `${customerDetails.firstName} ${customerDetails.lastName}`,
+        role: 'customer',
+        phoneNumber: customerDetails.phone,
+        platform: 'web',
+        kycStatus: 'pending'
+      }).returning();
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
       const contractNumber = `LN${Date.now()}`;
 
-      const [newContract] = await db
-        .insert(contracts)
-        .values({
-          merchantId,
-          customerId: customer.id,
-          contractNumber,
-          amount,
-          term,
-          interestRate,
-          downPayment: amount * 0.05,
-          monthlyPayment,
-          totalInterest,
-          status: 'pending_review',
-          notes,
-          underwritingStatus: 'pending',
-          borrowerEmail: customerDetails.email,
-          borrowerPhone: customerDetails.phone
-        })
-        .returning();
+      const [newContract] = await db.insert(contracts).values({
+        merchantId,
+        customerId: customer.id,
+        contractNumber,
+        amount,
+        term,
+        interestRate,
+        downPayment: amount * 0.05,
+        monthlyPayment,
+        totalInterest,
+        status: 'pending_review',
+        notes,
+        underwritingStatus: 'pending',
+        borrowerEmail: customerDetails.email,
+        borrowerPhone: customerDetails.phone
+      }).returning();
 
-      // Emit contract update event with proper typing
+      // Emit contract update event
       global.io?.to(`merchant_${merchantId}`).emit('contract_update', {
         type: 'new_application',
         contractId: newContract.id,
@@ -559,7 +578,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       res.json(newContract);
-    } catch (err: unknown) {
+    } catch (err) {
       console.error("[Routes] Error creating contract:", err);
       next(err);
     }
@@ -632,9 +651,9 @@ export function registerRoutes(app: Express): Server {
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error('Unknown error occurred');
       console.error('Error starting KYC process:', error);
-      res.status(500).json({ 
-        error: 'Failed to start verification process', 
-        details: error.message 
+      res.status(500).json({
+        error: 'Failed to start verification process',
+        details: error.message
       });
     }
   });
@@ -700,7 +719,7 @@ export function registerRoutes(app: Express): Server {
         // Update existing user's OTP
         await db
           .update(users)
-          .set({ 
+          .set({
             lastOtpCode: otp,
             otpExpiry: otpExpiry
           })
@@ -775,7 +794,7 @@ export function registerRoutes(app: Express): Server {
         if (status !== latestSession.status) {
           await db
             .update(verificationSessions)
-            .set({ 
+            .set({
               status: status as VerificationStatus,
               updatedAt: new Date()
             })
@@ -791,7 +810,7 @@ export function registerRoutes(app: Express): Server {
         status = user?.kycStatus || 'not_started';
       }
 
-      res.json({ 
+      res.json({
         status,
         sessionId: latestSession?.sessionId,
         lastUpdated: latestSession?.updatedAt || null
@@ -901,41 +920,41 @@ export function registerRoutes(app: Express): Server {
 
     // Store application attempt in webhook_events table
     const event = await db.insert(webhookEvents).values({
-        eventType: 'loan_application_attempt',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          phone: req.body.phone,
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
+      eventType: 'loan_application_attempt',
+      payload: JSON.stringify({
+        merchantId: req.params.id,
+        phone: req.body.phone,
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        amount: req.body.amount || req.body.fundingAmount,
+        timestamp: new Date().toISOString(),
+        userAgent: req.headers['user-agent'],
+        stage: 'initiation',
+        requestId
+      }),
+      status: 'received'
+    }).returning();
+
+    // Track merchant activity
+    await db.insert(webhookEvents).values({
+      eventType: 'merchant_activity',
+      payload: JSON.stringify({
+        merchantId: req.params.id,
+        action: 'send_application',
+        timestamp: new Date().toISOString(),
+        details: {
+          borrowerPhone: req.body.phone,
           amount: req.body.amount || req.body.fundingAmount,
-          timestamp: new Date().toISOString(),
-          userAgent: req.headers['user-agent'],
-          stage: 'initiation',
           requestId
-        }),
-        status: 'received'
-      }).returning();
+        }
+      }),
+      status: 'recorded'
+    });
 
-      // Track merchant activity
-      await db.insert(webhookEvents).values({
-        eventType: 'merchant_activity',
-        payload: JSON.stringify({
-          merchantId: req.params.id,
-          action: 'send_application',
-          timestamp: new Date().toISOString(),
-          details: {
-            borrowerPhone: req.body.phone,
-            amount: req.body.amount || req.body.fundingAmount,
-            requestId
-          }
-        }),
-        status: 'recorded'
-      });
-
-      global.io.to(`merchant_${req.params.id}`).emit('application_update', {
-        type: 'loan_application_attempt',
-        data: event[0]
-      });
+    global.io.to(`merchant_${req.params.id}`).emit('application_update', {
+      type: 'loan_application_attempt',
+      data: event[0]
+    });
 
     debugLog('Starting loan application process', {
       body: req.body,
@@ -1012,8 +1031,8 @@ export function registerRoutes(app: Express): Server {
       if (existingUser) {
         // Update existing user's name if it has changed
         [customer] = await db
-          .update(users)            
-          .set({ 
+          .update(users)
+          .set({
             name: `${firstName} ${lastName}`,
             role: 'customer' // Ensure role is set
           })
@@ -1096,7 +1115,7 @@ export function registerRoutes(app: Express): Server {
           status: 'pending_review'
         });
 
-        res.json({ 
+        res.json({
           success: true,
           message: "Application link sent successfully",
           contractId: newContract.id
@@ -1120,8 +1139,8 @@ export function registerRoutes(app: Express): Server {
         status: 'error'
       });
 
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         error: errorMessage
       });
     }
@@ -1208,70 +1227,70 @@ export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
   const io = new SocketIOServer(httpServer, {
     path: '/socket.io/',
-    transports: ['websocket', 'polling'],
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST']
-    }
+    cors: { origin: '*' }
   });
 
+  // Make io globally available
   global.io = io;
 
-  return httpServer;
-}
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
 
-//Type definitions moved to top
-//This class was duplicated, removed the second declaration
-// Request tracking middleware with error handling
-// moved to middleware section
+    socket.on('join_merchant_room', (merchantId: number) => {
+      socket.join(`merchant_${merchantId}`);
+      console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+    });
 
-// Error handling middleware with improved logging and types
-// moved to middleware section
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
+  });
 
-export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+  const errorHandlingMiddleware: ErrorHandlingMiddleware = (err, req, res, _next) => {
+    const requestId = req.headers['x-request-id'] as string || Date.now().toString(36);
+    const isAPIError = err instanceof APIError;
 
-interface DiditWebhookPayload {
-  session_id: string;
-  status: VerificationStatus;
-  created_at: number;
-  timestamp: number;
-  userId: string;
-  data?: {
-    verificationStatus: string;
-    documentData?: any;
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
-  vendor_data?: string;
-  decision?: {
-    kyc?: {
-      document_data?: any;
+    const errorDetails = {
+      requestId,
+      name: err.name,
+      message: err.message,
+      status: isAPIError ? err.status : 500,
+      code: isAPIError ? err.code : undefined,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      url: req.originalUrl || req.url,
+      query: req.query,
+      body: req.body,
+      headers: { ...req.headers, authorization: undefined },
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      originalError: err instanceof Error ? {
+        name: err.name,
+        message: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        code: (err as any).code
+      } : null
     };
+
+    console.error("[API] Error caught:", errorDetails);
+    logger.error("API Error", errorDetails);
+
+    if (!res.headersSent) {
+      const status = errorDetails.status;
+      const message = process.env.NODE_ENV === 'development' ?
+        err.message :
+        'Internal Server Error';
+
+      res.status(status).json({
+        status: 'error',
+        message,
+        errorId: requestId,
+        errorCode: isAPIError ? err.code : undefined
+      });
+    }
   };
-}
 
-// Route type definitions with improved typing
-type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
-
-interface RouteConfig {
-  path: string;
-  method: 'get' | 'post' | 'put' | 'delete';
-  handler: RouteHandler;
-  middleware?: any[];
-  description?: string;
-}
-
-// Route grouping by domain
-interface RouteGroup {
-  prefix: string;
-  routes: RouteConfig[];
-}
-
-//Structured route groups remain unchanged
-//Existing route implementations remain unchanged
-// Error handling should be last
-//Existing route implementations remain unchanged
-app.use(errorHandlingMiddleware);
+  // Register error handling middleware
+  app.use(errorHandlingMiddleware);
+  return httpServer;
 }
