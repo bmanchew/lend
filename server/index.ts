@@ -4,6 +4,8 @@ import { setupVite, serveStatic, log } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { Server } from 'socket.io';
+import { setupAuth } from "./auth";
+import { logger } from "./lib/logger";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -38,9 +40,9 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   // Capture response
   let capturedResponse: Record<string, any> | undefined;
   const originalJson = res.json;
-  res.json = function(body: any, ...args) {
+  res.json = function(body: any) {
     capturedResponse = body;
-    return originalJson.apply(res, [body, ...args]);
+    return originalJson.apply(res, [body]);
   };
 
   // Log response on finish
@@ -69,68 +71,98 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 
 app.use(requestLogger);
 
-(async () => {
-  // Register API routes first
-  const httpServer = registerRoutes(app);
+// Initialize auth before routes
+setupAuth(app);
 
-  // Make io globally available
-  declare global {
-    var io: Server;
-  }
-  // Global io will be initialized in routes.ts after server creation
+const startServer = async () => {
+  try {
+    // Register API routes first
+    const httpServer = registerRoutes(app);
 
-  // Enterprise error handling middleware
-  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-    const errorId = Date.now().toString(36);
-    const errorInfo = {
-      id: errorId,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      userId: req.body?.userId || 'anonymous',
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
+    // Enterprise error handling middleware
+    app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+      const errorId = Date.now().toString(36);
+      const errorInfo = {
+        id: errorId,
+        path: req.path,
+        method: req.method,
+        timestamp: new Date().toISOString(),
+        userId: req.body?.userId || 'anonymous',
+        error: {
+          name: err.name,
+          message: err.message,
+          stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
+        }
+      };
+
+      logger.error("[ERROR]", errorInfo);
+
+      if (!res.headersSent) {
+        res.status(err.status || 500).json({
+          status: "error",
+          message: err.message || "Internal Server Error",
+          errorId
+        });
       }
-    };
+    });
 
-    console.error("[ERROR]", JSON.stringify(errorInfo));
-
-    if (!res.headersSent) {
-      res.status(err.status || 500).json({
-        status: "error",
-        message: err.message || "Internal Server Error",
-        errorId
-      });
+    // Setup Vite/static serving last
+    if (app.get("env") === "development") {
+      await setupVite(app, httpServer);
+    } else {
+      serveStatic(app);
     }
-  });
 
-  // Setup Vite/static serving last
-  if (app.get("env") === "development") {
-    await setupVite(app, httpServer);
-  } else {
-    serveStatic(app);
-  }
+    const portfinder = await import('portfinder');
 
-  const portfinder = await import('portfinder');
+    // Configure portfinder
+    const PORT = await portfinder.getPortPromise({
+      port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+      stopPort: 9000
+    });
 
-  // Configure portfinder
-  const PORT = await portfinder.getPortPromise({
-    port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-    stopPort: 9000
-  });
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-    // Log successful startup
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
-    console.log('Environment:', process.env.NODE_ENV);
-    console.log('WebSocket status: enabled');
-  });
+    // Start server and wait for port to be available
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(PORT, "0.0.0.0", () => {
+        log(`Server running at http://0.0.0.0:${PORT}`);
+        console.log('Environment:', process.env.NODE_ENV);
+        console.log('WebSocket status: enabled');
+        resolve();
+      }).on('error', reject);
+    });
 
-  // Improve error handling
-  httpServer.on('error', (error: Error) => {
-    console.error('Server error:', error);
+    // Initialize Socket.IO after server is running
+    const io = new Server(httpServer, {
+      cors: { origin: "*" },
+      path: '/socket.io/'
+    });
+
+    // Make io globally available
+    (global as any).io = io;
+
+    io.on('connection', (socket) => {
+      console.log('Client connected:', socket.id);
+
+      socket.on('join_merchant_room', (merchantId: number) => {
+        socket.join(`merchant_${merchantId}`);
+        console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+      });
+    });
+
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    logger.error('Server startup error:', error);
     process.exit(1);
-  });
-})();
+  }
+};
+
+// Start server with proper error handling
+startServer().catch((error) => {
+  console.error('Critical server error:', error);
+  logger.error('Critical server error:', error);
+  process.exit(1);
+});
