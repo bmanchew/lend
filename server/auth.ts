@@ -582,10 +582,11 @@ async function comparePasswords(supplied: string, stored: string) {
   try {
     // Validate input
     if (!supplied || !stored) {
+      console.error("[Auth] Invalid password comparison input", {
+
 
 export const authService = new AuthService();
 
-      console.error("[Auth] Invalid password comparison input", {
         suppliedExists: !!supplied,
         storedExists: !!stored
       });
