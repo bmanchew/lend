@@ -48,14 +48,17 @@ export const smsService = {
   },
 
   async sendSMS(to: string, message: string): Promise<boolean> {
+    const requestId = Date.now().toString(36);
     try {
       const { twilioPhone } = validateConfig();
       const formattedPhone = this.formatPhoneNumber(to);
 
-      logger.info('Attempting to send SMS', {
+      logger.info('[SMS] Attempting to send message', {
+        requestId,
         to: formattedPhone,
         fromNumber: twilioPhone,
-        messageLength: message.length
+        messageLength: message.length,
+        messagePreview: message.substring(0, 50)
       });
 
       const client = getClient();
@@ -65,26 +68,37 @@ export const smsService = {
         from: twilioPhone,
       });
 
-      logger.info('SMS sent successfully', {
+      logger.info('[SMS] Message sent successfully', {
+        requestId,
         messageId: result.sid,
         to: formattedPhone,
-        status: result.status
+        status: result.status,
+        direction: result.direction,
+        price: result.price,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage
       });
 
       return true;
     } catch (error: any) {
-      logger.error('SMS sending failed', {
-        error: error.message,
+      const errorDetails = {
+        requestId,
+        message: error.message,
         code: error.code,
+        status: error.status,
+        moreInfo: error.moreInfo,
+        details: error.details,
         to,
         twilioError: error.toString(),
-        stack: error.stack
-      });
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      };
 
-      // Send notification to Slack about the failure
+      logger.error('[SMS] Failed to send message', errorDetails);
+
       await slackService.notifySMSFailure({
         phone: to,
-        error: error.message,
+        error: `${error.code}: ${error.message}`,
         context: 'sendSMS'
       });
 
@@ -92,9 +106,13 @@ export const smsService = {
     }
   },
 
+  generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  },
+
   async sendOTP(phone: string, code: string): Promise<boolean> {
     try {
-      logger.info('Sending OTP', { phone, codeLength: code.length });
+      logger.info('[SMS] Sending OTP', { phone, codeLength: code.length });
       const message = `Your verification code is: ${code}`;
       const sent = await this.sendSMS(phone, message);
 
@@ -108,17 +126,12 @@ export const smsService = {
 
       return sent;
     } catch (error) {
-      logger.error('Failed to send OTP', {
+      logger.error('[SMS] Failed to send OTP', {
         error: error instanceof Error ? error.message : 'Unknown error',
         phone
       });
       return false;
     }
-  },
-
-  generateOTP(): string {
-    // Generate a 6-digit code
-    return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
   async sendLoanApplicationLink(
@@ -127,20 +140,31 @@ export const smsService = {
     url: string, 
     userId?: number
   ): Promise<{success: boolean, error?: string}> {
+    const requestId = Date.now().toString(36);
     try {
-      logger.info('Preparing to send loan application link', {
+      logger.info('[SMS] Preparing loan application link', {
+        requestId,
         phone,
         merchantName,
-        userId
+        userId,
+        urlLength: url.length
       });
 
       // Add userId to URL if provided
       const finalUrl = userId ? `${url}&userId=${userId}` : url;
       const message = `${merchantName} has invited you to complete a loan application. Click here to begin: ${finalUrl}`;
 
+      logger.info('[SMS] Sending loan application message', {
+        requestId,
+        phone,
+        messageLength: message.length,
+        urlLength: finalUrl.length
+      });
+
       const sent = await this.sendSMS(phone, message);
 
-      logger.info('Loan application SMS status', {
+      logger.info('[SMS] Loan application message status', {
+        requestId,
         success: sent,
         phone,
         userId
@@ -149,7 +173,8 @@ export const smsService = {
       return { success: sent };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Failed to send loan application link', {
+      logger.error('[SMS] Failed to send loan application link', {
+        requestId,
         error: errorMessage,
         phone,
         userId,

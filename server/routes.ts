@@ -932,244 +932,103 @@ export function registerRoutes(app: Express): Server {
       timestamp: new Date().toISOString()
     });
 
-    // Log the full application details
-    console.log("[LoanApplication] Received new application:", {
-      merchantId: req.params.id,
-      phone: req.body.phone,
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      amount: req.body.amount || req.body.fundingAmount,
-      timestamp: new Date().toISOString(),
-      requestId,
-      url: req.url,
-      userAgent: req.headers['user-agent']
-    });
-
-    // Store application attempt in webhook_events table
-    const event = await db.insert(webhookEvents).values({
-      eventType: 'loan_application_attempt',
-      payload: JSON.stringify({
-        merchantId: req.params.id,
-        phone: req.body.phone,
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        amount: req.body.amount || req.body.fundingAmount,
-        timestamp: new Date().toISOString(),
-        userAgent: req.headers['user-agent'],
-        stage: 'initiation',
-        requestId
-      }),
-      status: 'received'
-    }).returning();
-
-    // Track merchant activity
-    await db.insert(webhookEvents).values({
-      eventType: 'merchant_activity',
-      payload: JSON.stringify({
-        merchantId: req.params.id,
-        action: 'send_application',
-        timestamp: new Date().toISOString(),
-        details: {
-          borrowerPhone: req.body.phone,
-          amount: req.body.amount || req.body.fundingAmount,
-          requestId
-        }
-      }),
-      status: 'recorded'
-    });
-
-    global.io.to(`merchant_${req.params.id}`).emit('application_update', {
-      type: 'loan_application_attempt',
-      data: event[0]
-    });
-
-    debugLog('Starting loan application process', {
-      body: req.body,
-      merchantId: req.params.id,
-      timestamp: new Date().toISOString()
-    });
-
     try {
-      debugLog('Request received', {
-        body: req.body,
-        params: req.params,
-        url: req.url,
-        timestamp: new Date().toISOString()
-      });
-
-      // Initial validation
-      const { phone: borrowerPhone, firstName, lastName, amount, fundingAmount } = req.body;
-      const merchantId = parseInt(req.params.id);
-
-      if (!borrowerPhone || !firstName || !lastName || (!amount && !fundingAmount)) {
-        debugLog('Missing required fields:', { borrowerPhone, firstName, lastName, amount, fundingAmount });
-        return res.status(400).json({ error: 'Missing required fields' });
+      // Validate phone number first
+      const phone = req.body.phone?.replace(/\D/g, '');
+      if (!phone || phone.length !== 10) {
+        logger.error('[LoanApplication] Invalid phone number format', {
+          phone: req.body.phone,
+          requestId
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid phone number format. Please provide a 10-digit US phone number.'
+        });
       }
 
-      if (isNaN(merchantId)) {
-        debugLog('Invalid merchant ID:', req.params.id);
-        return res.status(400).json({ error: 'Invalid merchant ID' });
-      }
-
-      // Verify merchant exists
-      const merchantRecord = await db
+      // Get merchant info for the SMS
+      const [merchant] = await db
         .select()
         .from(merchants)
-        .where(eq(merchants.id, merchantId))
-        .limit(1)
-        .then(rows => rows[0]);
-
-      if (!merchantRecord) {
-        debugLog('Merchant not found:', merchantId);
-        return res.status(404).json({ error: 'Merchant not found' });
-      }
-
-      debugLog('Found merchant:', merchantRecord);
-      debugLog('Parsed request data:', {
-        merchantId,
-        borrowerPhone,
-        firstName,
-        lastName,
-        amount: amount || fundingAmount
-      });
-
-
-      // Validate amount
-      const parsedAmount = parseFloat(amount || fundingAmount);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        debugLog('Invalid amount:', amount || fundingAmount);
-        return res.status(400).json({ error: 'Invalid amount' });
-      }
-
-      // Normalize phone number
-      const cleanPhone = (borrowerPhone || '').toString().replace(/\D/g, '').slice(-10);
-      const formattedPhone = '+1' + cleanPhone;
-
-      // First check if user exists
-      debugLog('Looking up existing user with phone:', formattedPhone);
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, formattedPhone))
+        .where(eq(merchants.id, parseInt(req.params.id)))
         .limit(1);
 
-      debugLog('User lookup result:', existingUser || 'Not found');      // Always use existing user if found
-      let customer;
-      if (existingUser) {
-        // Update existing user's name if it has changed
-        [customer] = await db
-          .update(users)
-          .set({
-            name: `${firstName} ${lastName}`,
-            role: 'customer' // Ensure role is set
-          })
-          .where(eq(users.id, existingUser.id))
-          .returning();
-
-        logger.info('Updated existing user:', {
-          userId: customer.id,
-          phone: formattedPhone
+      if (!merchant) {
+        logger.error('[LoanApplication] Merchant not found', {
+          merchantId: req.params.id,
+          requestId
         });
-      } else {
-        // Create new user if doesn't exist
-        [customer] = await db
-          .insert(users)
-          .values({
-            username: formattedPhone,
-            password: Math.random().toString(36).slice(-8),
-            email: `${formattedPhone}@temp.customer.com`,
-            name: `${firstName} ${lastName}`,
-            role: 'customer',
-            phoneNumber: formattedPhone,
-            platform: 'web',
-            kycStatus: 'pending'
-          })
-          .returning();
-
-        logger.info('Created new user:', {
-          userId: customer.id,
-          phone: formattedPhone
+        return res.status(404).json({
+          success: false,
+          error: 'Merchant not found'
         });
       }
 
-      // Create contract for the customer
-      const [newContract] = await db
-        .insert(contracts)
-        .values({
-          merchantId,
-          customerId: customer.id,
-          contractNumber: `LN${Date.now()}`,
-          amount: parsedAmount,
-          term: 36, // Default term
-          interestRate: "24.99", // Default interest rate
-          downPayment: parsedAmount * 0.05,
-          status: 'pending_review',
-          underwritingStatus: 'pending',
-          borrowerEmail: req.body.email || customer.email,
-          borrowerPhone: formattedPhone
-        })
-        .returning();
-
       // Generate application URL
-      const applicationUrl = `/apply/${customer.id}`;
+      const applicationUrl = `${process.env.APP_URL || ''}/apply/${phone}`;
 
-      const result = await smsService.sendLoanApplicationLink(
-        formattedPhone,
-        merchantRecord.companyName,
+      // Send SMS with enhanced error handling
+      const smsResult = await smsService.sendLoanApplicationLink(
+        phone,
+        merchant.companyName,
         applicationUrl
       );
 
-      if (result.success) {
-        debugLog('SMS sent successfully');
-
-        // Track the successful application
-        await db.insert(webhookEvents).values({
-          eventType: 'loan_application_sent',
-          payload: JSON.stringify({
-            merchantId,
-            customerId: customer.id,
-            contractId: newContract.id,
-            phone: formattedPhone,
-            timestamp: new Date().toISOString()
-          }),
-          status: 'completed'
+      if (!smsResult.success) {
+        logger.error('[LoanApplication] Failed to send SMS', {
+          error: smsResult.error,
+          phone,
+          merchantId: merchant.id,
+          requestId
         });
 
-        // Notify any connected merchant clients
-        global.io?.to(`merchant_${merchantId}`).emit('application_sent', {
-          contractId: newContract.id,
-          customerId: customer.id,
-          status: 'pending_review'
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to send application link via SMS. Please try again later.'
         });
-
-        res.json({
-          success: true,
-          message: "Application link sent successfully",
-          contractId: newContract.id
-        });
-      } else {
-        debugLog('Failed to send SMS');
-        throw new Error('Failed to send application link via SMS');
       }
 
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      debugLog('Error in loan application:', errorMessage);
+      // Log successful SMS sending
+      logger.info('[LoanApplication] Successfully sent application link', {
+        phone,
+        merchantId: merchant.id,
+        requestId
+      });
 
-      await db.insert(webhookEvents).values({
-        eventType: 'loan_application_error',
+      // Store application attempt in webhook_events table
+      const [event] = await db.insert(webhookEvents).values({
+        eventType: 'loan_application_attempt',
         payload: JSON.stringify({
           merchantId: req.params.id,
-          error: errorMessage,
-          timestamp: new Date().toISOString()
+          phone: req.body.phone,
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          amount: req.body.amount || req.body.fundingAmount,
+          timestamp: new Date().toISOString(),
+          userAgent: req.headers['user-agent'],
+          stage: 'initiation',
+          requestId
         }),
-        status: 'error'
+        status: 'sent'
+      }).returning();
+
+      // Emit socket event for real-time updates
+      global.io?.to(`merchant_${req.params.id}`).emit('application_update', {
+        type: 'loan_application_attempt',
+        data: event
       });
 
-      res.status(500).json({
-        success: false,
-        error: errorMessage
+      res.json({
+        success: true,
+        message: 'Application link sent successfully'
       });
+    } catch (err) {
+      logger.error('[LoanApplication] Unexpected error', {
+        error: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+        requestId
+      });
+      next(err);
     }
   });
 

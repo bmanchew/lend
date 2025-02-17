@@ -14,9 +14,15 @@ const applicationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"), 
   email: z.string().email("Valid email is required"),
-  phone: z.string().min(10, "Valid phone number is required").transform(val => val.replace(/\D/g, '')),
+  phone: z
+    .string()
+    .min(10, "Phone number must be at least 10 digits")
+    .refine((val) => {
+      const cleaned = val.replace(/\D/g, '');
+      return cleaned.length === 10;
+    }, "Must be a valid 10-digit phone number"),
   program: z.string().min(1, "Program is required"),
-  fundingAmount: z.string().min(1, "Funding amount is required").transform(val => parseFloat(val)),
+  fundingAmount: z.number().min(1000, "Minimum funding amount is $1,000"),
   salesRepEmail: z.string().email("Valid sales rep email is required")
 }).required();
 
@@ -36,15 +42,11 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const { data: programs } = useQuery({
     queryKey: ['programs', merchantId],
     queryFn: async () => {
-      console.log('Fetching programs for merchant:', merchantId);
       const response = await fetch(`/api/merchants/${merchantId}/programs`);
       if (!response.ok) {
-        console.error('Failed to fetch programs:', response.statusText);
         throw new Error('Failed to fetch programs');
       }
-      const data = await response.json();
-      console.log('Fetched programs:', data);
-      return data;
+      return response.json();
     },
   });
 
@@ -56,7 +58,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       email: "",
       phone: "",
       program: "",
-      fundingAmount: "",
+      fundingAmount: 0,
       salesRepEmail: ""
     }
   });
@@ -65,22 +67,9 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
     mutationFn: async (data: ApplicationFormData) => {
       setIsSubmitting(true);
       try {
-        console.log('[LoanApplication] Starting submission:', {
-          data,
-          timestamp: new Date().toISOString(),
-          merchantId,
-          merchantName
-        });
-
-        // Validate phone format
-        const phone = data.phone?.replace(/\D/g, '');
-        if (!phone || phone.length !== 10) {
+        const phone = data.phone.replace(/\D/g, '');
+        if (phone.length !== 10) {
           throw new Error('Invalid phone number format');
-        }
-
-        const fundingAmount = parseFloat(data.fundingAmount);
-        if (isNaN(fundingAmount) || fundingAmount <= 0) {
-          throw new Error('Invalid funding amount');
         }
 
         const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
@@ -91,41 +80,21 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
           body: JSON.stringify({
             ...data,
             merchantName,
-            amount: fundingAmount,
-            fundingAmount: data.fundingAmount,
-            phone: phone.replace(/^1/, '').slice(-10),
-            rawPhone: phone.replace(/^1/, '').slice(-10)
+            phone: phone,
           }),
         });
 
         if (!response.ok) {
           const errorData = await response.json();
-          console.error('[LoanApplication] API Error:', {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorData,
-            timestamp: new Date().toISOString()
-          });
           throw new Error(errorData.error || "Failed to send invitation");
         }
 
-        const responseData = await response.json();
-        console.log('[LoanApplication] API Success Response:', {
-          status: response.status,
-          timestamp: new Date().toISOString()
-        });
-
-        return responseData;
+        return response.json();
       } finally {
         setIsSubmitting(false);
       }
     },
-    onSuccess: (data) => {
-      console.log('[LoanApplication] Submission successful:', {
-        data,
-        timestamp: new Date().toISOString()
-      });
-
+    onSuccess: () => {
       toast({
         title: "Success",
         description: "Loan application sent successfully",
@@ -138,10 +107,9 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
     },
     onError: (error: any) => {
       console.error('[LoanDialog] Error:', error);
-      const errorMessage = error.response?.data?.error || error.message || "Failed to send loan application invitation";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: error.message || "Failed to send loan application invitation",
         variant: "destructive",
       });
     },
@@ -277,7 +245,14 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                   <FormItem>
                     <FormLabel>Funding Amount Needed</FormLabel>
                     <FormControl>
-                      <Input {...field} type="number" min="0" step="0.01" placeholder="9800" />
+                      <Input 
+                        {...field} 
+                        type="number" 
+                        min="1000" 
+                        step="100" 
+                        placeholder="10000"
+                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
