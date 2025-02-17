@@ -34,7 +34,8 @@ const validation = validateApiKey(apiKey || '');
 if (!validation.isValid) {
   console.error('SendGrid API key validation failed:', validation.error);
   console.warn('Email functionality will be disabled');
-  return;
+} else {
+  mailService.setApiKey(apiKey!);
 }
 
 mailService.setApiKey(apiKey!);
