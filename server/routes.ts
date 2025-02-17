@@ -15,6 +15,8 @@ import { diditService } from "./services/didit";
 import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { logger } from "./lib/logger";
+import { slackService } from "./services/slack"; // Add import for slack service
+
 
 // Global type declarations
 declare global {
@@ -23,7 +25,15 @@ declare global {
       user?: {
         id: number;
         role: string;
-        [key: string]: any;
+        email?: string;
+        name?: string;
+        phoneNumber?: string;
+        platform?: string;
+        kycStatus?: string;
+        otpExpiry?: Date | null;
+        lastOtpCode?: string | null;
+        createdAt?: Date;
+        updatedAt?: Date;
       };
     }
   }
@@ -524,7 +534,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix the contract creation endpoint
+  // Fix contract creation endpoint with Slack notifications
   apiRouter.post("/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
@@ -539,8 +549,6 @@ export function registerRoutes(app: Express): Server {
 
       // Create customer user record
       const [customer] = await db.insert(users).values({
-        username: customerDetails.phone,
-        password: await authService.hashPassword(Math.random().toString(36).slice(-8)),
         email: customerDetails.email,
         name: `${customerDetails.firstName} ${customerDetails.lastName}`,
         role: 'customer',
@@ -552,6 +560,17 @@ export function registerRoutes(app: Express): Server {
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
       const contractNumber = `LN${Date.now()}`;
+
+      // Get merchant details for notifications
+      const [merchant] = await db
+        .select()
+        .from(merchants)
+        .where(eq(merchants.id, merchantId))
+        .limit(1);
+
+      if (!merchant) {
+        throw new Error('Merchant not found');
+      }
 
       const [newContract] = await db.insert(contracts).values({
         merchantId,
@@ -569,6 +588,14 @@ export function registerRoutes(app: Express): Server {
         borrowerEmail: customerDetails.email,
         borrowerPhone: customerDetails.phone
       }).returning();
+
+      // Send Slack notifications
+      await slackService.notifyLoanApplication({
+        merchantName: merchant.companyName,
+        customerName: `${customerDetails.firstName} ${customerDetails.lastName}`,
+        amount,
+        phone: customerDetails.phone
+      });
 
       // Emit contract update event
       global.io?.to(`merchant_${merchantId}`).emit('contract_update', {

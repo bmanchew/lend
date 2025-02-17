@@ -1,12 +1,14 @@
-
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: number, onSuccess?: () => void }) {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -25,24 +27,95 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+
     try {
+      // Validate phone number
+      const cleanPhone = formData.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        toast({
+          title: "Invalid Phone Number",
+          description: "Please enter a valid 10-digit phone number",
+          variant: "destructive"
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate funding amount
+      const amount = parseFloat(formData.fundingAmount);
+      if (isNaN(amount) || amount <= 0) {
+        toast({
+          title: "Invalid Amount",
+          description: "Please enter a valid funding amount",
+          variant: "destructive"
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Add logging for debugging
+      console.log("[LoanApplicationForm] Submitting application:", {
+        ...formData,
+        merchantId,
+        phone: cleanPhone,
+        amount,
+        timestamp: new Date().toISOString()
+      });
+
       const response = await fetch('/api/contracts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           merchantId,
-          customerDetails: formData,
-          amount: parseFloat(formData.fundingAmount),
+          customerDetails: {
+            ...formData,
+            phone: cleanPhone
+          },
+          amount,
           term: 12, // Default term
           interestRate: 24.99, // Fixed interest rate
         }),
       });
-      
-      if (response.ok) {
-        onSuccess?.();
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create contract');
       }
+
+      toast({
+        title: "Success",
+        description: "Application submitted successfully",
+        variant: "default"
+      });
+
+      // Clear form after successful submission
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        dateOfBirth: '',
+        streetAddress: '',
+        aptNumber: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        program: '',
+        fundingAmount: '',
+        salesRepEmail: ''
+      });
+
+      onSuccess?.();
     } catch (error) {
       console.error('Error creating contract:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to submit application",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -90,21 +163,18 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
               phone = phone.replace(/^1/, '');
               // Only take first 10 digits
               phone = phone.slice(0, 10);
-              
-              // Store raw digits for submission
-              const rawPhone = phone;
-              
+
               // Format for display as (XXX) XXX-XXXX
+              let formattedPhone = phone;
               if (phone.length >= 6) {
-                phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
+                formattedPhone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
               } else if (phone.length >= 3) {
-                phone = `(${phone.slice(0,3)}) ${phone.slice(3)}`;
+                formattedPhone = `(${phone.slice(0,3)}) ${phone.slice(3)}`;
               } else if (phone.length > 0) {
-                phone = `(${phone}`;
+                formattedPhone = `(${phone}`;
               }
-              
-              // Store both formatted display value and raw digits
-              setFormData({...formData, phone, rawPhone});
+
+              setFormData({...formData, phone: formattedPhone});
             }}
             maxLength={14}
             required
@@ -180,6 +250,8 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
           <Label>Funding Amount Needed</Label>
           <Input 
             type="number"
+            min="0"
+            step="0.01"
             value={formData.fundingAmount}
             onChange={e => setFormData({...formData, fundingAmount: e.target.value})}
             required
@@ -197,7 +269,9 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
         />
       </div>
 
-      <Button type="submit" className="w-full">Submit Application</Button>
+      <Button type="submit" className="w-full" disabled={isSubmitting}>
+        {isSubmitting ? "Submitting..." : "Submit Application"}
+      </Button>
     </form>
   );
 }

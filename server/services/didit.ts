@@ -1,7 +1,7 @@
 import { users, verificationSessions, webhookEvents } from "@db/schema";
 import { db } from "@db";
 import { eq, and, lt, desc } from "drizzle-orm";
-import axios from "axios";
+import axios from 'axios';
 import crypto from 'crypto';
 import { VerificationStatus, DiditWebhookPayload } from "../routes";
 
@@ -13,10 +13,10 @@ interface DiditConfig {
 }
 
 export interface DiditSessionConfig {
-  userId: number;
+  userId: string | number;
   platform: 'mobile' | 'web';
+  redirectUrl?: string;
   userAgent?: string;
-  returnUrl?: string;
 }
 
 interface VerificationSessionData {
@@ -63,7 +63,7 @@ class DiditService {
     return Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), 60000);
   }
 
-  private logAPICall(method: string, endpoint: string, startTime: number) {
+  private logAPICall(method: string, endpoint: string, startTime: number): void {
     const duration = Date.now() - startTime;
     console.log(`[DiditService] ${method} ${endpoint} completed in ${duration}ms`);
   }
@@ -84,7 +84,7 @@ class DiditService {
       ).toString('base64');
 
       console.log("[DiditService] Requesting new access token");
-      const response = await axios.post('https://apx.didit.me/auth/v2/token/',
+      const response = await axios.post<DiditAuthResponse>('https://apx.didit.me/auth/v2/token/',
         'grant_type=client_credentials',
         {
           headers: {
@@ -113,8 +113,9 @@ class DiditService {
     }
   }
 
-  async initializeKycSession({ userId, platform, userAgent, returnUrl }: DiditSessionConfig): Promise<string> {
+  async initializeKycSession(config: DiditSessionConfig): Promise<string> {
     const startTime = Date.now();
+    const userId = typeof config.userId === 'string' ? parseInt(config.userId) : config.userId;
     console.log("[DiditService] Initializing KYC session for user", userId);
 
     try {
@@ -130,51 +131,53 @@ class DiditService {
       }
 
       const accessToken = await this.getAccessToken();
-      const replitDomain = process.env.DEPLOYMENT_URL || 'https://shi-fi-lend-brandon263.replit.app';
-      const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
+      const replitDomain = process.env.DEPLOYMENT_URL || process.env.REPLIT_DOMAIN;
+      if (!replitDomain) {
+        throw new Error("Missing deployment URL configuration");
+      }
 
+      const callbackUrl = new URL('/api/kyc/webhook', replitDomain);
       console.log("[DiditService] Using webhook URL:", callbackUrl.toString());
 
       // Ensure return URL is absolute and includes domain
-      const completeReturnUrl = returnUrl?.startsWith('http')
-        ? returnUrl
-        : new URL(returnUrl || '/', replitDomain).toString();
+      const completeReturnUrl = config.redirectUrl?.startsWith('http')
+        ? config.redirectUrl
+        : new URL(config.redirectUrl || '/', replitDomain).toString();
 
-      const isMobile = platform === 'mobile' || (userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(userAgent));
+      const isMobile = config.platform === 'mobile' || 
+        (config.userAgent && /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(config.userAgent));
 
       console.log("[DiditService] Session configuration:", {
         userId,
         isMobile,
-        platform,
-        userAgent: userAgent?.substring(0, 50),
+        platform: config.platform,
+        userAgent: config.userAgent?.substring(0, 50),
         returnUrl: completeReturnUrl
       });
 
-      const sessionData = {
-        callback: callbackUrl.toString(),
-        features: 'OCR + FACE',
-        vendor_data: JSON.stringify({
-          userId: user.id,
-          username: user.username,
-          platform,
-          userAgent,
-          sessionType: 'verification'
-        }),
-        redirect_url: completeReturnUrl,
-        app_scheme: 'didit',
-        mobile_flow: isMobile,
-        mobile_settings: {
-          allow_app: true,
-          fallback_to_web: true,
-          app_timeout: 10000,
-          force_mobile_flow: isMobile,
-          universal_link_enabled: true
-        }
-      };
-
-      const response = await axios.post(
+      const sessionResponse = await axios.post(
         'https://verification.didit.me/v1/session/',
-        sessionData,
+        {
+          callback: callbackUrl.toString(),
+          features: 'OCR + FACE',
+          vendor_data: JSON.stringify({
+            userId: user.id,
+            username: user.username,
+            platform: config.platform,
+            userAgent: config.userAgent,
+            sessionType: 'verification'
+          }),
+          redirect_url: completeReturnUrl,
+          app_scheme: 'didit',
+          mobile_flow: isMobile,
+          mobile_settings: {
+            allow_app: true,
+            fallback_to_web: true,
+            app_timeout: 10000,
+            force_mobile_flow: isMobile,
+            universal_link_enabled: true
+          }
+        },
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -188,8 +191,8 @@ class DiditService {
         throw new Error(error.response?.data?.message || "Failed to create verification session");
       });
 
-      if (!response.data || !response.data.url) {
-        console.error("[DiditService] Invalid API response format", response.data);
+      if (!sessionResponse.data?.url) {
+        console.error("[DiditService] Invalid API response format", sessionResponse.data);
         throw new Error("Invalid response format from Didit API");
       }
 
@@ -197,10 +200,10 @@ class DiditService {
       expiresAt.setHours(expiresAt.getHours() + 24);
 
       await db.insert(verificationSessions).values({
-        sessionId: response.data.session_id,
+        sessionId: sessionResponse.data.session_id,
         userId,
         status: 'initialized',
-        features: sessionData.features,
+        features: 'OCR + FACE',
         returnUrl: completeReturnUrl,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -208,10 +211,9 @@ class DiditService {
       });
 
       await this.updateUserKycStatus(userId, 'pending');
-
       this.logAPICall('POST', '/v1/session', startTime);
-      return response.data.url;
 
+      return sessionResponse.data.url;
     } catch (error: any) {
       console.error("[DiditService] Error initializing KYC session:", {
         userId,
@@ -222,7 +224,6 @@ class DiditService {
       throw new Error(error.response?.data?.message || "Failed to start verification process");
     }
   }
-
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     console.log("[DiditService] Verifying webhook signature");
     try {

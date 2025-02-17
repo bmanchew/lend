@@ -14,7 +14,7 @@ const applicationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"), 
   email: z.string().email("Valid email is required"),
-  phone: z.string().min(10, "Valid phone number is required"),
+  phone: z.string().min(10, "Valid phone number is required").transform(val => val.replace(/\D/g, '')),
   program: z.string().min(1, "Program is required"),
   fundingAmount: z.string().min(1, "Funding amount is required").transform(val => parseFloat(val)),
   salesRepEmail: z.string().email("Valid sales rep email is required")
@@ -30,6 +30,7 @@ interface Props {
 export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: programs } = useQuery({
@@ -62,95 +63,78 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
-      console.log('[LoanApplication] Starting submission:', {
-        data,
-        timestamp: new Date().toISOString(),
-        merchantId,
-        merchantName
-      });
-      const debugLog = (message: string, data?: any) => {
-        console.log(`[LoanDialog][${Date.now().toString(36)}] ${message}`, data || '');
-      };
+      setIsSubmitting(true);
+      try {
+        console.log('[LoanApplication] Starting submission:', {
+          data,
+          timestamp: new Date().toISOString(),
+          merchantId,
+          merchantName
+        });
 
-      debugLog('Starting mutation', {
-        ...data,
-        merchantId,
-        merchantName,
-        timestamp: new Date().toISOString()
-      });
+        // Validate phone format
+        const phone = data.phone?.replace(/\D/g, '');
+        if (!phone || phone.length !== 10) {
+          throw new Error('Invalid phone number format');
+        }
 
-      if (!merchantId) {
-        console.error('[LoanDialog] Missing merchantId');
-        throw new Error('Missing merchant ID');
-      }
+        const fundingAmount = parseFloat(data.fundingAmount);
+        if (isNaN(fundingAmount) || fundingAmount <= 0) {
+          throw new Error('Invalid funding amount');
+        }
 
-      // Validate phone format
-      const phone = data.phone?.replace(/\D/g, '');
-      if (!phone || phone.length !== 10) {
-        throw new Error('Invalid phone number format');
-      }
+        const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...data,
+            merchantName,
+            amount: fundingAmount,
+            fundingAmount: data.fundingAmount,
+            phone: phone.replace(/^1/, '').slice(-10),
+            rawPhone: phone.replace(/^1/, '').slice(-10)
+          }),
+        });
 
-      const fundingAmount = parseFloat(data.fundingAmount);
-      if (isNaN(fundingAmount) || fundingAmount <= 0) {
-        throw new Error('Invalid funding amount');
-      }
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[LoanApplication] API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+            timestamp: new Date().toISOString()
+          });
+          throw new Error(errorData.error || "Failed to send invitation");
+        }
 
-      const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...data,
-          merchantName,
-          amount: fundingAmount,
-          fundingAmount: data.fundingAmount,
-          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),
-          rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[LoanApplication] API Error:', {
+        const responseData = await response.json();
+        console.log('[LoanApplication] API Success Response:', {
           status: response.status,
-          statusText: response.statusText,
-          error: errorData,
           timestamp: new Date().toISOString()
         });
-        throw new Error(errorData.error || "Failed to send invitation");
-      }
-      
-      console.log('[LoanApplication] API Success Response:', {
-        status: response.status,
-        timestamp: new Date().toISOString()
-      });
 
-      const responseData = await response.json();
-      debugLog('Application submission successful', responseData);
-      return responseData;
+        return responseData;
+      } finally {
+        setIsSubmitting(false);
+      }
     },
     onSuccess: (data) => {
       console.log('[LoanApplication] Submission successful:', {
         data,
         timestamp: new Date().toISOString()
       });
-      
+
       toast({
         title: "Success",
         description: "Loan application sent successfully",
+        variant: "default"
       });
-      
-      // Reset form and update UI state
+
       setOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
-      
-      toast({
-        title: "Success",
-        description: "Application sent successfully",
-        variant: "default"
-      });
     },
     onError: (error: any) => {
       console.error('[LoanDialog] Error:', error);
@@ -234,15 +218,32 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                   <FormItem>
                     <FormLabel>Client Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} type="tel" placeholder="123-456-7890" />
+                      <Input 
+                        {...field} 
+                        type="tel" 
+                        placeholder="(123) 456-7890"
+                        onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, '');
+                          if (value.length > 10) value = value.slice(0, 10);
+
+                          // Format for display
+                          if (value.length >= 6) {
+                            value = `(${value.slice(0,3)}) ${value.slice(3,6)}-${value.slice(6)}`;
+                          } else if (value.length >= 3) {
+                            value = `(${value.slice(0,3)}) ${value.slice(3)}`;
+                          } else if (value.length > 0) {
+                            value = `(${value}`;
+                          }
+
+                          field.onChange(value);
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-
-
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -257,7 +258,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                           <SelectValue placeholder="Select program" />
                         </SelectTrigger>
                         <SelectContent>
-                          {programs?.map((program) => (
+                          {programs?.map((program: any) => (
                             <SelectItem key={program.id} value={program.id.toString()}>
                               {program.name} ({program.term} months @ {program.interestRate}%)
                             </SelectItem>
@@ -303,10 +304,13 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                 type="button"
                 variant="outline"
                 onClick={() => setOpen(false)}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
-              <Button type="submit">Send Application</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Sending..." : "Send Application"}
+              </Button>
             </div>
           </form>
         </Form>
