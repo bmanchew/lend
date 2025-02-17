@@ -989,7 +989,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(merchants.id, parseInt(req.params.id)))
         .limit(1);
 
-      if (!merchant) {
+if (!merchant) {
         logger.error('[LoanApplication] Merchant not found', {
           merchantId: req.params.id,
           requestId
@@ -1066,9 +1066,18 @@ export function registerRoutes(app: Express): Server {
           requestId
         });
 
-        return res.status(500).json({
+        // Provide more user-friendly error message based on error type
+        let userErrorMessage = 'Failed to send application link';
+        if (smsResult.error?.includes('Invalid \'To\' Phone Number')) {
+          userErrorMessage = 'Please provide a valid mobile phone number that can receive SMS messages';
+        } else if (smsResult.error?.includes('unsubscribed')) {
+          userErrorMessage = 'This phone number has opted out of receiving messages. Please use a different number or contact support.';
+        }
+
+        return res.status(400).json({
           success: false,
-          error: 'Failed to send application link'
+          error: userErrorMessage,
+          details: process.env.NODE_ENV === 'development' ? smsResult.error : undefined
         });
       }
 
