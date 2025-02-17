@@ -23,17 +23,19 @@ if (!process.env.DATABASE_URL) {
 
 // Create pool with retry logic
 const createPool = async (retryCount = 0) => {
+  console.log(`[Database] Attempting to create pool (attempt ${retryCount + 1}/${MAX_RETRIES})`);
   try {
     const pool = new Pool(POOL_CONFIG);
+    console.log('[Database] Pool created, testing connection...');
 
     // Test the connection
     await pool.query('SELECT 1');
-    console.log('Database connected successfully');
+    console.log('[Database] Connection test successful');
     return pool;
   } catch (error) {
-    console.error('Database connection error:', error);
+    console.error('[Database] Connection error:', error);
     if (retryCount < MAX_RETRIES) {
-      console.log(`Retrying connection in ${RETRY_DELAY / 1000} seconds...`);
+      console.log(`[Database] Retrying connection in ${RETRY_DELAY / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       return createPool(retryCount + 1);
     }
@@ -46,59 +48,100 @@ class DatabaseInstance {
   public pool?: Pool;
   public db?: ReturnType<typeof drizzle<typeof schema>>;
   private initialized = false;
+  private initializationPromise?: Promise<void>;
 
-  private constructor() {}
+  private constructor() {
+    console.log('[Database] Creating DatabaseInstance singleton');
+  }
 
   public static getInstance(): DatabaseInstance {
     if (!DatabaseInstance.instance) {
+      console.log('[Database] Initializing new DatabaseInstance singleton');
       DatabaseInstance.instance = new DatabaseInstance();
     }
     return DatabaseInstance.instance;
   }
 
   public async initialize(): Promise<void> {
-    if (!this.initialized) {
-      this.pool = await createPool();
-      this.db = drizzle(this.pool, { schema });
-      this.initialized = true;
-      console.log('Database instance initialized successfully');
+    if (this.initializationPromise) {
+      console.log('[Database] Initialization already in progress, waiting...');
+      return this.initializationPromise;
     }
+
+    if (this.initialized) {
+      console.log('[Database] Already initialized');
+      return;
+    }
+
+    console.log('[Database] Starting initialization');
+    this.initializationPromise = (async () => {
+      try {
+        this.pool = await createPool();
+        console.log('[Database] Pool created successfully');
+
+        this.db = drizzle(this.pool, { schema });
+        console.log('[Database] Drizzle ORM initialized');
+
+        this.initialized = true;
+        console.log('[Database] Initialization completed successfully');
+      } catch (error) {
+        console.error('[Database] Initialization failed:', error);
+        throw error;
+      } finally {
+        this.initializationPromise = undefined;
+      }
+    })();
+
+    return this.initializationPromise;
   }
 
   public async checkConnection(): Promise<boolean> {
-    if (!this.pool) return false;
+    if (!this.pool) {
+      console.log('[Database] No pool available for health check');
+      return false;
+    }
     try {
+      console.log('[Database] Performing health check...');
       await this.pool.query('SELECT 1');
+      console.log('[Database] Health check passed');
       return true;
     } catch (error) {
-      console.error('Database health check failed:', error);
+      console.error('[Database] Health check failed:', error);
       return false;
     }
   }
 
   public async cleanup(): Promise<void> {
     if (this.pool) {
+      console.log('[Database] Starting cleanup...');
       try {
         await this.pool.end();
-        console.log('Database connections closed');
+        console.log('[Database] Cleanup completed, all connections closed');
       } catch (error) {
-        console.error('Error during database cleanup:', error);
+        console.error('[Database] Cleanup failed:', error);
       }
+    } else {
+      console.log('[Database] No pool to clean up');
     }
   }
 
   private async handlePoolError(err: Error): Promise<void> {
-    console.error('Unexpected database error:', err);
+    console.error('[Database] Unexpected error:', err);
     try {
+      console.log('[Database] Attempting to reconnect...');
       const newPool = await createPool();
       if (newPool) {
         this.pool = newPool;
         this.db = drizzle(newPool, { schema });
-        console.log("Successfully reconnected to the database");
+        console.log('[Database] Successfully reconnected');
       }
     } catch (reconnectError) {
-      console.error("Failed to reconnect to database", reconnectError);
+      console.error('[Database] Reconnection failed:', reconnectError);
     }
+  }
+
+  public isInitialized(): boolean {
+    return this.initialized;
   }
 }
 
@@ -106,12 +149,19 @@ class DatabaseInstance {
 const dbInstance = DatabaseInstance.getInstance();
 
 // Set up cleanup handlers
-process.on('SIGTERM', () => dbInstance.cleanup());
-process.on('SIGINT', () => dbInstance.cleanup());
+process.on('SIGTERM', () => {
+  console.log('[Database] Received SIGTERM signal');
+  dbInstance.cleanup();
+});
+process.on('SIGINT', () => {
+  console.log('[Database] Received SIGINT signal');
+  dbInstance.cleanup();
+});
 
 // Initialize the database connection
+console.log('[Database] Starting initial database connection');
 dbInstance.initialize().catch(error => {
-  console.error('Failed to initialize database:', error);
+  console.error('[Database] Failed to initialize database:', error);
   process.exit(1);
 });
 
@@ -120,6 +170,7 @@ export { dbInstance };
 export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
   get: (target, prop) => {
     if (!dbInstance.db) {
+      console.error('[Database] Attempted to access database before initialization');
       throw new Error('Database not initialized');
     }
     return dbInstance.db[prop];
