@@ -541,8 +541,6 @@ type User = {
   otpExpiry: string | null;
 };
 
-export const authService = new AuthService();
-
 class AuthService {
   private readonly config: AuthConfig = {
     saltLength: 16,
@@ -584,6 +582,9 @@ async function comparePasswords(supplied: string, stored: string) {
   try {
     // Validate input
     if (!supplied || !stored) {
+
+export const authService = new AuthService();
+
       console.error("[Auth] Invalid password comparison input", {
         suppliedExists: !!supplied,
         storedExists: !!stored
