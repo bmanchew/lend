@@ -941,11 +941,32 @@ export function registerRoutes(app: Express): Server {
     });
 
     try {
-      // Validate phone number first
-      const phone = req.body.phone?.replace(/\D/g, '');
-      if (!phone || phone.length !== 10) {
+      // Enhanced phone number validation and formatting
+      let phone = req.body.phone?.replace(/[^0-9+]/g, ''); // Keep + sign but remove other non-digits
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          error: 'Phone number is required'
+        });
+      }
+
+      debugLog('Initial phone cleaning', {
+        original: req.body.phone,
+        cleaned: phone
+      });
+
+      // Handle various phone formats
+      if (phone.startsWith('+1')) {
+        phone = phone.substring(2);
+      } else if (phone.startsWith('1')) {
+        phone = phone.substring(1);
+      }
+
+      if (phone.length !== 10) {
         logger.error('[LoanApplication] Invalid phone number format', {
-          phone: req.body.phone,
+          originalPhone: req.body.phone,
+          cleanedPhone: phone,
+          length: phone.length,
           requestId
         });
         return res.status(400).json({
@@ -953,6 +974,13 @@ export function registerRoutes(app: Express): Server {
           error: 'Invalid phone number format. Please provide a 10-digit US phone number.'
         });
       }
+
+      const formattedPhone = `+1${phone}`;
+      debugLog('Formatted phone number', {
+        original: req.body.phone,
+        intermediate: phone,
+        formatted: formattedPhone
+      });
 
       // Get merchant info for the SMS
       const [merchant] = await db
@@ -983,7 +1011,6 @@ export function registerRoutes(app: Express): Server {
       }
 
       const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
-      const formattedPhone = smsService.formatPhoneNumber(phone);
       const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
 
       debugLog('Generated application URL', {
@@ -992,58 +1019,93 @@ export function registerRoutes(app: Express): Server {
         phone: formattedPhone
       });
 
+      // Store webhook event before sending SMS
+      await db.insert(webhookEvents).values({
+        session_id: requestId,
+        event_type: 'loan_application_attempt',
+        status: 'pending',
+        error: null,
+        error_message: null,
+        payload: JSON.stringify({
+          merchantId: parseInt(req.params.id),
+          merchantName: merchant.companyName,
+          phone: formattedPhone,
+          applicationUrl,
+          timestamp: new Date().toISOString(),
+          requestId
+        }),
+        created_at: new Date(),
+        processed_at: null,
+        retry_count: 0
+      });
+
       // Send SMS with enhanced error handling
       const smsResult = await smsService.sendLoanApplicationLink(
         formattedPhone,
-        merchant.companyName,
         applicationUrl,
-        requestId
+        {
+          merchantName: merchant.companyName,
+          requestId
+        }
       );
 
       if (!smsResult.success) {
+        // Update webhook event with error
+        await db.update(webhookEvents)
+          .set({
+            status: 'failed',
+            error: smsResult.error,
+            error_message: `Failed to send SMS: ${smsResult.error}`,
+            processed_at: new Date()
+          })
+          .where(eq(webhookEvents.session_id, requestId));
+
         logger.error('[LoanApplication] Failed to send SMS', {
           error: smsResult.error,
           phone: formattedPhone,
-          merchantId: merchant.id,
           requestId
         });
+
         return res.status(500).json({
           success: false,
-          error: smsResult.error || 'Failed to send application link'
+          error: 'Failed to send application link'
         });
       }
 
-      // Store application attempt in webhook_events table
-      await db.insert(webhookEvents).values({
-        event_type: 'loan_application_attempt',
-        status: 'sent',
-        payload: {
-          merchantId: parseInt(req.params.id),
-          phone: formattedPhone,
-          url: applicationUrl,
-          timestamp: new Date().toISOString(),
-          requestId
-        },
-        created_at: new Date(),
-        retry_count: 0
-      } as typeof webhookEvents.$inferInsert);
+      // Update webhook event with success
+      await db.update(webhookEvents)
+        .set({
+          status: 'sent',
+          processed_at: new Date()
+        })
+        .where(eq(webhookEvents.session_id, requestId));
 
       debugLog('Successfully sent application link', {
         phone: formattedPhone,
-        merchantId: merchant.id,
-        timestamp: new Date().toISOString()
+        url: applicationUrl
       });
 
       return res.json({
         success: true,
         message: 'Application link sent successfully'
       });
+
     } catch (error) {
       logger.error('[LoanApplication] Unexpected error', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        requestId,
-        stack: error instanceof Error ? error.stack : undefined
+        error,
+        requestId
       });
+
+      // Update webhook event with error
+      await db.update(webhookEvents)
+        .set({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          error_message: 'Unexpected error during loan application process',
+          processed_at: new Date()
+        })
+        .where(eq(webhookEvents.session_id, requestId));
+
       next(error);
     }
   });
