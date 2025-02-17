@@ -41,66 +41,89 @@ const createPool = async (retryCount = 0) => {
   }
 };
 
-// Initialize db instance
-let pool: Pool | undefined;
-let db: ReturnType<typeof drizzle<typeof schema>>;
+class DatabaseInstance {
+  private static instance: DatabaseInstance;
+  public pool?: Pool;
+  public db?: ReturnType<typeof drizzle<typeof schema>>;
+  private initialized = false;
 
-// Initialize pool and db
-const initialize = async () => {
-  if (!pool) {
-    pool = await createPool();
-    db = drizzle(pool, { schema });
-  }
-  return { pool, db };
-};
+  private constructor() {}
 
-// Health check function
-const checkConnection = async () => {
-  if (!pool) return false;
-  try {
-    await pool.query('SELECT 1');
-    return true;
-  } catch (error) {
-    console.error('Database health check failed:', error);
-    return false;
-  }
-};
-
-// Graceful shutdown
-const cleanup = async () => {
-  if (!pool) return;
-  try {
-    await pool.end();
-    console.log('Database connections closed');
-  } catch (error) {
-    console.error('Error during database cleanup:', error);
-  }
-};
-
-process.on('SIGTERM', cleanup);
-process.on('SIGINT', cleanup);
-
-// Add error handling for unexpected disconnects
-const handlePoolError = async (err: Error) => {
-  console.error('Unexpected database error:', err);
-  try {
-    const newPool = await createPool();
-    if (newPool) {
-      pool = newPool;
-      db = drizzle(newPool, { schema });
-      console.log("Successfully reconnected to the database");
+  public static getInstance(): DatabaseInstance {
+    if (!DatabaseInstance.instance) {
+      DatabaseInstance.instance = new DatabaseInstance();
     }
-  } catch (reconnectError) {
-    console.error("Failed to reconnect to database", reconnectError);
+    return DatabaseInstance.instance;
   }
-};
+
+  public async initialize(): Promise<void> {
+    if (!this.initialized) {
+      this.pool = await createPool();
+      this.db = drizzle(this.pool, { schema });
+      this.initialized = true;
+      console.log('Database instance initialized successfully');
+    }
+  }
+
+  public async checkConnection(): Promise<boolean> {
+    if (!this.pool) return false;
+    try {
+      await this.pool.query('SELECT 1');
+      return true;
+    } catch (error) {
+      console.error('Database health check failed:', error);
+      return false;
+    }
+  }
+
+  public async cleanup(): Promise<void> {
+    if (this.pool) {
+      try {
+        await this.pool.end();
+        console.log('Database connections closed');
+      } catch (error) {
+        console.error('Error during database cleanup:', error);
+      }
+    }
+  }
+
+  private async handlePoolError(err: Error): Promise<void> {
+    console.error('Unexpected database error:', err);
+    try {
+      const newPool = await createPool();
+      if (newPool) {
+        this.pool = newPool;
+        this.db = drizzle(newPool, { schema });
+        console.log("Successfully reconnected to the database");
+      }
+    } catch (reconnectError) {
+      console.error("Failed to reconnect to database", reconnectError);
+    }
+  }
+}
+
+// Create and initialize the database instance
+const dbInstance = DatabaseInstance.getInstance();
+
+// Set up cleanup handlers
+process.on('SIGTERM', () => dbInstance.cleanup());
+process.on('SIGINT', () => dbInstance.cleanup());
 
 // Initialize the database connection
-initialize().catch(error => {
+dbInstance.initialize().catch(error => {
   console.error('Failed to initialize database:', error);
   process.exit(1);
 });
 
-pool?.on('error', handlePoolError);
+// Export the singleton instance and its db property
+export { dbInstance };
+export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
+  get: (target, prop) => {
+    if (!dbInstance.db) {
+      throw new Error('Database not initialized');
+    }
+    return dbInstance.db[prop];
+  },
+});
 
-export { db, checkConnection };
+export const checkConnection = () => dbInstance.checkConnection();

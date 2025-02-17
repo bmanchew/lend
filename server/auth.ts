@@ -6,122 +6,27 @@ import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema } from "@db/schema";
-import { db } from "@db";
-const dbInstance = db; // Use db object directly
-import { eq, or, sql, and } from "drizzle-orm";
+import { db, dbInstance } from "@db";
+import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
-import SMSService from "./services/sms"; // Added import for sms service
+import SMSService from "./services/sms";
 
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
-interface AuthResult {
-  success: boolean;
-  user?: User;
-  error?: string;
-}
-
-interface AuthConfig {
-  saltLength: number;
-  keyLength: number;
-  sessionDuration: number;
-}
-
-class AuthService {
-  private readonly config: AuthConfig = {
-    saltLength: 16,
-    keyLength: 32,
-    sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
-  };
-
-  private readonly logger = {
-    info: (message: string, meta?: any) => console.log(`[AuthService] ${message}`, meta),
-    error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta),
-    debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta)
-  };
-
-  async hashPassword(password: string): Promise<string> {
-    this.logger.debug("Generating password hash");
-    const salt = randomBytes(this.config.saltLength).toString("hex");
-    const derivedKey = (await scryptAsync(password, salt, this.config.keyLength)) as Buffer;
-    return `${derivedKey.toString("hex")}.${salt}`;
+export async function setupAuth(app: Express) {
+  // Ensure database is initialized
+  if (!dbInstance.pool) {
+    await dbInstance.initialize();
   }
 
-  async comparePasswords(supplied: string, stored: string) {
-    console.log("[AuthService] Comparing passwords");
-    try {
-      if (!supplied || !stored) return false;
-      const [hashedPassword, salt] = stored.split(".");
-      if (!hashedPassword || !salt) return false;
-      const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
-      const storedBuf = Buffer.from(hashedPassword, "hex");
-      return suppliedBuf.length === storedBuf.length && timingSafeEqual(storedBuf, suppliedBuf);
-    } catch (error) {
-      console.error("[AuthService] Password comparison error:", error);
-      return false;
-    }
+  if (!dbInstance.pool) {
+    throw new Error('Failed to initialize database pool');
   }
-}
 
-export const authService = new AuthService();
-
-async function comparePasswords(supplied: string, stored: string) {
-  console.log("[Auth] Comparing passwords");
-  try {
-    // Validate input
-    if (!supplied || !stored) {
-      console.error("[Auth] Invalid password comparison input", {
-        suppliedExists: !!supplied,
-        storedExists: !!stored
-      });
-      return false;
-    }
-
-    const [hashedPassword, salt] = stored.split(".");
-    if (!hashedPassword || !salt) {
-      console.error("[Auth] Invalid stored password format");
-      return false;
-    }
-
-    const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
-    const storedBuf = Buffer.from(hashedPassword, "hex");
-
-    // Ensure both buffers are the same length before comparison
-    if (suppliedBuf.length !== storedBuf.length) {
-      console.error("[Auth] Buffer length mismatch", {
-        suppliedLength: suppliedBuf.length,
-        storedLength: storedBuf.length
-      });
-      return false;
-    }
-
-    const isMatch = timingSafeEqual(storedBuf, suppliedBuf);
-    console.log("[Auth] Password comparison result:", { isMatch });
-    return isMatch;
-  } catch (error) {
-    console.error("[Auth] Password comparison error:", error);
-    return false;
-  }
-}
-
-// Add types for user roles
-type UserRole = "admin" | "customer" | "merchant";
-type User = {
-  id: number;
-  username: string;
-  password: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  phoneNumber: string; // Added phoneNumber
-  lastOtpCode: string | null; // Added OTP fields
-  otpExpiry: string | null;
-};
-
-export function setupAuth(app: Express) {
-  // Session setup
-  const store = new PostgresSessionStore({ 
-    pool: dbInstance.pool, // Use dbInstance.pool here
+  // Session setup with initialized pool
+  const store = new PostgresSessionStore({
+    pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
@@ -175,7 +80,7 @@ export function setupAuth(app: Express) {
 
         // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
-          let [userRecord] = await dbInstance // Use dbInstance here
+          let [userRecord] = await dbInstance
             .select()
             .from(users)
             .where(eq(users.username, username))
@@ -205,10 +110,10 @@ export function setupAuth(app: Express) {
           const clean = phone.toString().replace(/\D/g, '').slice(-10);
 
           if (clean.length !== 10) {
-            console.error('[Auth] Invalid phone number format:', { 
-              phone, 
+            console.error('[Auth] Invalid phone number format:', {
+              phone,
               clean,
-              length: clean.length 
+              length: clean.length
             });
             throw new Error('Phone number must be 10 digits');
           }
@@ -216,8 +121,8 @@ export function setupAuth(app: Express) {
           // Always format as +1XXXXXXXXXX
           const formatted = '+1' + clean;
 
-          console.log('[Auth] Phone formatting successful:', { 
-            original: phone, 
+          console.log('[Auth] Phone formatting successful:', {
+            original: phone,
             formatted,
             timestamp: new Date().toISOString(),
             userId: userRecord?.id
@@ -431,7 +336,7 @@ export function setupAuth(app: Express) {
 
 
         // Clear used OTP
-        await dbInstance // Use dbInstance here
+        await dbInstance
           .update(users)
           .set({ lastOtpCode: null, otpExpiry: null })
           .where(eq(users.id, userRecord.id));
@@ -450,7 +355,7 @@ export function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: number, done) => {
     try {
-      const [user] = await dbInstance // Use dbInstance here
+      const [user] = await dbInstance
         .select()
         .from(users)
         .where(eq(users.id, id))
@@ -471,7 +376,7 @@ export function setupAuth(app: Express) {
       }
 
       // First, check for existing username or email to prevent unnecessary admin checks
-      const [existingUser] = await dbInstance // Use dbInstance here
+      const [existingUser] = await dbInstance
         .select()
         .from(users)
         .where(
@@ -494,7 +399,7 @@ export function setupAuth(app: Express) {
       // If registering as admin, check if it's the first admin or if user has admin privileges
       if (parsed.data.role === "admin") {
         // Check for existing admins
-        const adminCount = await dbInstance // Use dbInstance here
+        const adminCount = await dbInstance
           .select({ count: sql`count(*)` })
           .from(users)
           .where(eq(users.role, "admin"));
@@ -509,7 +414,7 @@ export function setupAuth(app: Express) {
 
       // Hash password and create user
       const hashedPassword = await hashPassword(parsed.data.password);
-      const [user] = await dbInstance // Use dbInstance here
+      const [user] = await dbInstance
         .insert(users)
         .values({
           ...parsed.data,
@@ -572,7 +477,7 @@ export function setupAuth(app: Express) {
 
   // Added OTP related endpoints
   app.post('/api/sendOTP', async (req, res) => {
-    console.log('[AUTH] Received OTP request:', { 
+    console.log('[AUTH] Received OTP request:', {
       body: req.body,
       headers: req.headers,
       timestamp: new Date().toISOString()
@@ -601,9 +506,9 @@ export function setupAuth(app: Express) {
       // Update user with new OTP
       const updateResult = await dbInstance
         .update(users)
-        .set({ 
-          lastOtpCode: otp, 
-          otpExpiry: expiry 
+        .set({
+          lastOtpCode: otp,
+          otpExpiry: expiry
         })
         .where(eq(users.phoneNumber, phoneNumber))
         .returning();
@@ -620,6 +525,107 @@ export function setupAuth(app: Express) {
       res.status(500).json({ message: 'Failed to send OTP' });
     }
   });
+}
 
+// Add types for user roles
+type UserRole = "admin" | "customer" | "merchant";
+type User = {
+  id: number;
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  phoneNumber: string; // Added phoneNumber
+  lastOtpCode: string | null; // Added OTP fields
+  otpExpiry: string | null;
+};
 
+export const authService = new AuthService();
+
+class AuthService {
+  private readonly config: AuthConfig = {
+    saltLength: 16,
+    keyLength: 32,
+    sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
+  };
+
+  private readonly logger = {
+    info: (message: string, meta?: any) => console.log(`[AuthService] ${message}`, meta),
+    error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta),
+    debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta)
+  };
+
+  async hashPassword(password: string): Promise<string> {
+    this.logger.debug("Generating password hash");
+    const salt = randomBytes(this.config.saltLength).toString("hex");
+    const derivedKey = (await scryptAsync(password, salt, this.config.keyLength)) as Buffer;
+    return `${derivedKey.toString("hex")}.${salt}`;
+  }
+
+  async comparePasswords(supplied: string, stored: string) {
+    console.log("[AuthService] Comparing passwords");
+    try {
+      if (!supplied || !stored) return false;
+      const [hashedPassword, salt] = stored.split(".");
+      if (!hashedPassword || !salt) return false;
+      const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
+      const storedBuf = Buffer.from(hashedPassword, "hex");
+      return suppliedBuf.length === storedBuf.length && timingSafeEqual(storedBuf, suppliedBuf);
+    } catch (error) {
+      console.error("[AuthService] Password comparison error:", error);
+      return false;
+    }
+  }
+}
+
+async function comparePasswords(supplied: string, stored: string) {
+  console.log("[Auth] Comparing passwords");
+  try {
+    // Validate input
+    if (!supplied || !stored) {
+      console.error("[Auth] Invalid password comparison input", {
+        suppliedExists: !!supplied,
+        storedExists: !!stored
+      });
+      return false;
+    }
+
+    const [hashedPassword, salt] = stored.split(".");
+    if (!hashedPassword || !salt) {
+      console.error("[Auth] Invalid stored password format");
+      return false;
+    }
+
+    const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
+    const storedBuf = Buffer.from(hashedPassword, "hex");
+
+    // Ensure both buffers are the same length before comparison
+    if (suppliedBuf.length !== storedBuf.length) {
+      console.error("[Auth] Buffer length mismatch", {
+        suppliedLength: suppliedBuf.length,
+        storedLength: storedBuf.length
+      });
+      return false;
+    }
+
+    const isMatch = timingSafeEqual(storedBuf, suppliedBuf);
+    console.log("[Auth] Password comparison result:", { isMatch });
+    return isMatch;
+  } catch (error) {
+    console.error("[Auth] Password comparison error:", error);
+    return false;
+  }
+}
+
+interface AuthResult {
+  success: boolean;
+  user?: User;
+  error?: string;
+}
+
+interface AuthConfig {
+  saltLength: number;
+  keyLength: number;
+  sessionDuration: number;
 }
