@@ -920,6 +920,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  //This is the updated route handler from the edited snippet
   apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
@@ -966,8 +967,22 @@ export function registerRoutes(app: Express): Server {
 
       // Generate application URL with proper encoding
       const appUrl = process.env.APP_URL || '';
+      if (!appUrl) {
+        logger.error('[LoanApplication] Missing APP_URL environment variable');
+        return res.status(500).json({
+          success: false,
+          error: 'Server configuration error'
+        });
+      }
+
       const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
       const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(phone)}`;
+
+      debugLog('Generated application URL', {
+        baseUrl,
+        applicationUrl,
+        phone
+      });
 
       // Send SMS with enhanced error handling
       const smsResult = await smsService.sendLoanApplicationLink(
@@ -985,36 +1000,29 @@ export function registerRoutes(app: Express): Server {
           requestId
         });
 
-        await slackService.notifySMSFailure({
-          phone,
-          error: smsResult.error || 'Unknown error',
-          context: 'loan_application'
-        });
-
         return res.status(500).json({
           success: false,
           error: 'Failed to send application link via SMS. Please try again later.'
         });
       }
 
-      // Log successful SMS sending
-      logger.info('[LoanApplication] Successfully sent application link', {
-        phone,
-        merchantId: merchant.id,
-        requestId
+      // Store application attempt in webhook_events table
+      await db.insert(webhookEvents).values({eventType: 'loan_application_attempt',
+        payload: JSON.stringify({
+          merchantId: req.params.id,
+          phone: req.body.phone,
+          timestamp: new Date().toISOString(),
+          requestId,
+          applicationUrl
+        }),
+        status: 'sent'
       });
 
-      // Store application attempt in webhook_events table
-      await db.insert(webhookEvents).values({
-  eventType: 'loan_application_attempt',
-  payload: JSON.stringify({
-    merchantId: req.params.id,
-    phone: req.body.phone,
-    timestamp: new Date().toISOString(),
-    requestId
-  }),
-  status: 'sent'
-}).returning();
+      debugLog('Successfully sent application link', {
+        phone,
+        merchantId: merchant.id,
+        timestamp: new Date().toISOString()
+      });
 
       return res.json({
         success: true,
@@ -1029,10 +1037,7 @@ export function registerRoutes(app: Express): Server {
         requestId
       });
 
-      return res.status(500).json({
-        success: false,
-        error: 'An unexpected error occurred. Please try again later.'
-      });
+      next(error);
     }
   });
 

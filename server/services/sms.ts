@@ -81,6 +81,10 @@ export const smsService = {
           const fullUrl = url.startsWith('http') ? url : `https://${url}`;
           const shortened = await service(fullUrl);
 
+          if (!shortened) {
+            throw new Error('URL shortening service returned empty result');
+          }
+
           logger.info('[SMS] URL shortened successfully:', {
             originalUrl: fullUrl,
             shortUrl: shortened,
@@ -194,11 +198,11 @@ export const smsService = {
   },
 
   async sendLoanApplicationLink(
-    phone: string, 
-    merchantName: string, 
-    url: string, 
+    phone: string,
+    merchantName: string,
+    url: string,
     requestId: string
-  ): Promise<{success: boolean, error?: string}> {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       logger.info('[SMS] Preparing loan application link', {
         requestId,
@@ -207,39 +211,93 @@ export const smsService = {
         urlLength: url.length
       });
 
-      // Try to shorten the URL
-      const shortUrl = await this.tryUrlShortening(url);
+      // Ensure base URL is properly formatted
+      let formattedUrl = url.trim();
+      if (!formattedUrl.startsWith('http')) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
 
-      // Format the message with proper spacing and formatting for better link detection
+      // Try to shorten the URL
+      let shortUrl;
+      try {
+        shortUrl = await this.tryUrlShortening(formattedUrl);
+        logger.info('[SMS] Successfully shortened URL', {
+          originalUrl: formattedUrl,
+          shortUrl,
+          requestId
+        });
+      } catch (error) {
+        logger.warn('[SMS] URL shortening failed, using original URL:', {
+          error,
+          originalUrl: formattedUrl,
+          requestId
+        });
+        shortUrl = formattedUrl;
+      }
+
+      // Ensure proper URL prefix for mobile detection
+      if (!shortUrl.startsWith('http')) {
+        shortUrl = `https://${shortUrl}`;
+      }
+
+      // Use minimal format with URL on its own line
+      // This format has highest chance of link detection
       const message = [
-        `${merchantName} Loan Application`,
-        '------------------------',
-        'You have been invited to complete a loan application.',
+        `${merchantName} loan application:`,
         '',
-        'ACTION REQUIRED:',
-        `Click here → ${shortUrl}`, // Using arrow emoji for better visibility
-        '',
-        '------------------------',
-        'Link expires in 24 hours.',
-        `Ref: ${requestId.slice(-6).toUpperCase()}`
+        shortUrl
       ].join('\n');
 
-      logger.info('[SMS] Sending loan application message', {
+      let attempt = 1;
+      const maxAttempts = 3;
+      let lastError;
+
+      while (attempt <= maxAttempts) {
+        try {
+          logger.info(`[SMS] Sending attempt ${attempt}/${maxAttempts}`, {
+            requestId,
+            phone,
+            messageLength: message.length
+          });
+
+          const sent = await this.sendSMS(phone, message);
+          if (sent) {
+            logger.info('[SMS] Successfully sent loan application message', {
+              requestId,
+              phone,
+              attempt
+            });
+            return { success: true };
+          }
+        } catch (error) {
+          lastError = error;
+          logger.error(`[SMS] Attempt ${attempt} failed`, {
+            error,
+            requestId,
+            phone
+          });
+        }
+        attempt++;
+        if (attempt <= maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+
+      const errorMessage = lastError instanceof Error ? lastError.message : 'Failed to send SMS after multiple attempts';
+      logger.error('[SMS] All sending attempts failed', {
         requestId,
+        error: errorMessage,
         phone,
-        messageLength: message.length,
-        urlLength: shortUrl.length
+        attempts: maxAttempts
       });
 
-      const sent = await this.sendSMS(phone, message);
-
-      logger.info('[SMS] Loan application message status', {
-        requestId,
-        success: sent,
-        phone
+      await slackService.notifySMSFailure({
+        phone,
+        error: errorMessage,
+        context: 'sendLoanApplicationLink'
       });
 
-      return { success: sent };
+      return { success: false, error: errorMessage };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('[SMS] Failed to send loan application link', {
