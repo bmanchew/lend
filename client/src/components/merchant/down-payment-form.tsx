@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useQuery } from "@tanstack/react-query";
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
@@ -20,7 +21,18 @@ export function DownPaymentForm({ loanAmount, onSuccess, onCancel }: DownPayment
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const downPaymentAmount = loanAmount * 0.05; // Calculate 5% down payment
-  const potentialReward = Math.floor(loanAmount / 10); // Basic reward calculation
+
+  // Fetch potential rewards
+  const { data: rewards } = useQuery({
+    queryKey: ['potentialRewards', downPaymentAmount],
+    queryFn: async () => {
+      const response = await fetch(`/api/rewards/potential?amount=${downPaymentAmount}&type=down_payment`);
+      if (!response.ok) throw new Error('Failed to fetch potential rewards');
+      return response.json();
+    }
+  });
+
+  const potentialReward = rewards?.totalPoints || Math.floor(loanAmount / 10); // Fallback to basic calculation
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -57,10 +69,13 @@ export function DownPaymentForm({ loanAmount, onSuccess, onCancel }: DownPayment
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Alert className="mb-4">
-          <AlertDescription>
-            🎁 Make your down payment now and earn {potentialReward} ShiFi coins! 
-            These coins can be redeemed for products and services.
+        <Alert className="mb-4 bg-amber-50">
+          <AlertDescription className="flex flex-col gap-2">
+            <span className="font-semibold">🎁 Earn ShiFi Coins with Your Down Payment!</span>
+            <span>Make your down payment now and earn {potentialReward} ShiFi coins instantly!</span>
+            <span className="text-sm text-muted-foreground">
+              These coins can be redeemed for products and services. Plus, earn more coins with early or additional payments!
+            </span>
           </AlertDescription>
         </Alert>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -84,6 +99,7 @@ export function DownPaymentForm({ loanAmount, onSuccess, onCancel }: DownPayment
         <Button
           type="submit"
           disabled={isProcessing || !stripePromise}
+          onClick={handleSubmit}
         >
           {isProcessing ? "Processing..." : `Pay ${formatCurrency(downPaymentAmount)}`}
         </Button>

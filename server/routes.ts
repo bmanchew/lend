@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { contracts, merchants, users, verificationSessions, webhookEvents, programs } from "@db/schema";
+import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema"; // Added import for rewardsBalances
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
@@ -18,6 +18,8 @@ import { logger } from "./lib/logger";
 import { slackService } from "./services/slack"; // Add import for slack service
 import { PlaidService } from './services/plaid';
 import { LedgerManager } from './services/ledger-manager';
+import { shifiRewardsService } from './services/shifi-rewards'; // Added import for shifiRewardsService
+
 
 // Global type declarations
 declare global {
@@ -153,8 +155,8 @@ const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
 export function registerRoutes(app: Express): Server {
   const apiRouter = express.Router();
 
-  // Register error handling middleware
-  apiRouter.use(async (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
+  // Add proper error handling middleware
+  const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
     const errorId = Date.now().toString(36);
     const isAPIError = err instanceof APIError;
 
@@ -181,11 +183,12 @@ export function registerRoutes(app: Express): Server {
       });
     }
 
-    next(err);
-  });
+    next();
+  };
 
   // Register middleware
   apiRouter.use(requestTrackingMiddleware);
+  apiRouter.use(errorHandlingMiddleware);
 
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
@@ -514,7 +517,7 @@ export function registerRoutes(app: Express): Server {
       const { status, merchantId } = req.query;
 
       // Start with base query
-      let queryBuilder = db
+      const baseQuery = db
         .select({
           contract: contracts,
           merchant: merchants,
@@ -524,16 +527,21 @@ export function registerRoutes(app: Express): Server {
         .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
         .leftJoin(users, eq(contracts.customerId, users.id));
 
-      // Add filters if provided
+      // Build conditions array for filtering
+      const conditions = [];
       if (status) {
-        queryBuilder = queryBuilder.where(eq(contracts.status, status as string));
+        conditions.push(eq(contracts.status, status as string));
       }
-
       if (merchantId) {
-        queryBuilder = queryBuilder.where(eq(contracts.merchantId, parseInt(merchantId as string)));
+        conditions.push(eq(contracts.merchantId, parseInt(merchantId as string)));
       }
 
-      const allContracts = await queryBuilder.orderBy(desc(contracts.createdAt));
+      // Apply conditions if any exist
+      const query = conditions.length > 0
+        ? baseQuery.where(and(...conditions))
+        : baseQuery;
+
+      const allContracts = await query.orderBy(desc(contracts.createdAt));
 
       console.log("[Routes] Successfully fetched contracts:", { count: allContracts.length });
       res.json(allContracts);
@@ -543,7 +551,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix contract creation endpoint with proper types
+  // Fix contract creation with proper types
   apiRouter.post("/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
@@ -558,20 +566,43 @@ export function registerRoutes(app: Express): Server {
 
       // Create customer user record with proper types
       const [customer] = await db.insert(users).values({
-        username: customerDetails.email, // Required field
-        password: Math.random().toString(36).slice(-8), // Required temp password
+        username: customerDetails.email,
+        password: Math.random().toString(36).slice(-8),
         email: customerDetails.email,
         name: `${customerDetails.firstName} ${customerDetails.lastName}`,
         role: 'customer',
-        phone_number: customerDetails.phone,
-        platform: 'web',
-        kyc_status: 'pending',
-        active: true
+        phoneNumber: customerDetails.phone,
+        plaidAccessToken: null,
+        kycStatus: 'pending',
+        lastOtpCode: null,
+        otpExpiry: null,
+        faceIdHash: null
       } as typeof users.$inferInsert).returning();
 
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
       const contractNumber = `LN${Date.now()}`;
+
+      // Insert contract with proper types
+      const [newContract] = await db.insert(contracts).values({
+        merchantId: merchantId,
+        customerId: customer.id,
+        contractNumber: contractNumber,
+        amount: amount.toString(),
+        term: term,
+        interestRate: interestRate.toString(),
+        downPayment: downPayment.toString(),
+        monthlyPayment: monthlyPayment.toString(),
+        totalInterest: totalInterest.toString(),
+        status: 'pending_review',
+        notes: notes,
+        underwritingStatus: 'pending',
+        borrowerEmail: customerDetails.email,
+        borrowerPhone: customerDetails.phone,
+        active: true,
+        lastPaymentId: null,
+        lastPaymentStatus: null
+      } as typeof contracts.$inferInsert).returning();
 
       // Get merchant details for notifications
       const [merchant] = await db
@@ -583,25 +614,6 @@ export function registerRoutes(app: Express): Server {
       if (!merchant) {
         throw new Error('Merchant not found');
       }
-
-      // Convert values to match database types
-      const [newContract] = await db.insert(contracts).values({
-        merchant_id: merchantId,
-        customer_id: customer.id,
-        contract_number: contractNumber,
-        amount: amount.toString(), // Convert to string for numeric type
-        term: parseInt(term.toString()),
-        interest_rate: interestRate.toString(),
-        down_payment: downPayment.toString(),
-        monthly_payment: monthlyPayment.toString(),
-        total_interest: totalInterest.toString(),
-        status: 'pending_review',
-        notes,
-        underwriting_status: 'pending',
-        borrower_email: customerDetails.email,
-        borrower_phone: customerDetails.phone,
-        active: true
-      } as typeof contracts.$inferInsert).returning();
 
       // Send Slack notifications
       await slackService.notifyLoanApplication({
@@ -625,316 +637,51 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/apply/:token", async (req: Request, res: Response, next: NextFunction) => {
+  // Fix webhook event handling with proper types
+  apiRouter.post("/webhooks/process", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { firstName, lastName, email, phone } = req.body;
+      const { eventType, sessionId, payload } = req.body;
 
-      console.log("[Apply Route] Processing application with details:", {
-        firstName,
-        lastName,
-        email,
-        phone
-      });
+      await db.insert(webhookEvents).values({
+        eventType,
+        sessionId,
+        status: 'pending',
+        payload,
+        error: null,
+        retryCount: 0,
+        nextRetryAt: null,
+        processedAt: null
+      } as typeof webhookEvents.$inferInsert);
 
-      // Find existing user by phone number
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, phone))
-        .limit(1);
-
-      if (!existingUser) {
-        console.error('[Apply Route] User not found for phone:', phone);
-        return res.status(400).json({ error: 'Invalid application link' });
-      }
-
-      console.log('[Apply Route] Found existing user:', existingUser);
-
-      // Update user with additional details
-      const [user] = await db
-        .update(users)
-        .set({
-          email,
-          name: `${firstName} ${lastName}`,
-        })
-        .where(eq(users.id, existingUser.id))
-        .returning();
-
-      console.log('[Apply Route] Updated user details:', user);
-
-      // Start KYC process with explicit userId in URL
-      const redirectUrl = `/apply/${user.id}?verification=true`;
-      console.log('[Apply Route] Redirecting to:', redirectUrl);
-
-      res.json({
-        userId: user.id,
-        redirectUrl
-      });
-    } catch (err) {
-      console.error('Error creating borrower account:', err);
-      next(err);
-    }
-  });
-
-  // Update KYC initialization with proper typing
-  apiRouter.post("/kyc/start", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { userId } = req.body;
-
-      const sessionConfig: DiditSessionConfig = {
-        userId: userId.toString(),
-        platform: 'mobile',
-        redirectUrl: `/verify/${userId}`
-      };
-
-      const sessionUrl = await diditService.initializeKycSession(sessionConfig);
-      res.json({ redirectUrl: sessionUrl });
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error('Unknown error occurred');
-      console.error('Error starting KYC process:', error);
-      res.status(500).json({
-        error: 'Failed to start verification process',
-        details: error.message
-      });
-    }
-  });
-
-  apiRouter.post("/auth/send-otp", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { phoneNumber } = req.body;
-
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "Phone number is required" });
-      }
-
-      // Generate OTP
-      const otp = smsService.generateOTP();
-      const otpExpiry = new Date();
-      otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // 5 minute expiry
-
-      // Check if user exists with strict role validation
-      let user = await db
-        .select()
-        .from(users)
-        .where(eq(users.phoneNumber, phoneNumber))
-        .limit(1)
-        .then(rows => rows[0]);
-
-      // Validate user role before proceeding
-      if (user && user.role !== 'customer') {
-        logger.error('[Routes] Invalid role attempting OTP:', {
-          userId: user.id,
-          role: user.role,
-          phone: phoneNumber
-        });
-        return res.status(403).json({ error: 'Invalid account type for OTP login' });
-      }
-
-      console.log('[Routes] User lookup for OTP:', {
-        phone: phoneNumber,
-        found: !!user,
-        userId: user?.id,
-        role: user?.role,
-        timestamp: new Date().toISOString()
-      });
-
-      if (!user) {
-        // Create new user if doesn't exist
-        user = await db
-          .insert(users)
-          .values({
-            username: phoneNumber.replace(/\D/g, ''),
-            password: Math.random().toString(36).slice(-8), // temporary password
-            email: `${phoneNumber.replace(/\D/g, '')}@temp.shifi.com`,
-            name: '',
-            role: 'customer',
-            phoneNumber: phoneNumber,
-            lastOtpCode: otp,
-            otpExpiry: otpExpiry,
-            platform: 'mobile',
-            kycStatus: 'pending'
-          } as typeof users.$inferInsert)
-          .returning()
-          .then(rows => rows[0]);
-      } else {
-        // Update existing user's OTP
-        await db
-          .update(users)
-          .set({
-            lastOtpCode: otp,
-            otpExpiry: otpExpiry
-          })
-          .where(eq(users.id, user.id));
-      }
-
-      // Send OTP via SMS
-      const sent = await smsService.sendOTP(phoneNumber, otp);
-
-      if (sent) {
-        console.log('[Routes] Successfully sent OTP to:', phoneNumber);
-        res.json({ success: true });
-      } else {
-        console.error('[Routes] Failed to send OTP to:', phoneNumber);
-        res.status(500).json({ error: "Failed to send OTP" });
-      }
-    } catch (err) {
-      console.error("Error sending OTP:", err);
-      next(err);
-    }
-  });
-
-  apiRouter.get("/kyc/auto-start", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const userId = req.query.userId;
-      if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
-      }
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, parseInt(userId as string)))
-        .limit(1);
-
-      if (!user || user.kycStatus === 'verified') {
-        return res.json({ status: user?.kycStatus || 'not_started' });
-      }
-
-      const sessionUrl = await diditService.initializeKycSession(parseInt(userId as string));
-      res.json({ redirectUrl: sessionUrl });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  apiRouter.get("/kyc/status", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const userId = req.query.userId;
-
-      if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
-      }
-
-      const parsedUserId = parseInt(userId as string);
-      if (isNaN(parsedUserId)) {
-        return res.status(400).json({ error: 'Invalid user ID format' });
-      }
-
-      const [latestSession] = await db
-        .select()
-        .from(verificationSessions)
-        .where(eq(verificationSessions.userId, parsedUserId))
-        .orderBy(desc(verificationSessions.createdAt))
-        .limit(1);
-
-      let status;
-      if (latestSession) {
-        status = await diditService.getSessionStatus(latestSession.sessionId);
-
-        // Update the session status if it has changed
-        if (status !== latestSession.status) {
-          await db
-            .update(verificationSessions)
-            .set({
-              status: status as VerificationStatus,
-              updatedAt: new Date()
-            })
-            .where(eq(verificationSessions.sessionId, latestSession.sessionId));
-        }
-      } else {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, parsedUserId))
-          .limit(1);
-
-        status = user?.kycStatus || 'not_started';
-      }
-
-      res.json({
-        status,
-        sessionId: latestSession?.sessionId,
-        lastUpdated: latestSession?.updatedAt || null
-      });
-    } catch (err) {
-      console.error('Error checking KYC status:', err);
-      next(err);
-    }
-  });
-
-  apiRouter.post("/kyc/webhook", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      console.log('[KYC Webhook] Received webhook:', {
-        headers: req.headers,
-        body: req.body
-      });
-
-      const signature = req.headers['x-signature'];
-      const timestamp = req.headers['x-timestamp'];
-      const rawBody = JSON.stringify(req.body);
-
-      if (!signature || !timestamp) {
-        console.error('[KYC Webhook] Missing signature or timestamp headers');
-        return res.status(400).json({ error: 'Missing required headers' });
-      }
-
-      if (!diditService.verifyWebhookSignature(rawBody, signature as string, timestamp as string)) {
-        console.error('[KYC Webhook] Invalid webhook signature');
-        return res.status(401).json({ error: 'Invalid webhook signature' });
-      }
-
-      const payload = req.body as DiditWebhookPayload;
-      if (!payload || !payload.session_id) {
-        console.error('[KYC Webhook] Invalid payload received');
-        return res.status(400).json({ error: 'Invalid payload' });
-      }
-
-      console.log('[KYC Webhook] Processing webhook:', {
-        sessionId: payload.session_id,
-        status: payload.status
-      });
-
-      await diditService.processWebhook(payload);
-
-      return res.json({ status: 'success' });
-    } catch (err) {
-      console.error('Error processing Didit webhook:', err);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-
-  apiRouter.post("/kyc/retry-webhooks", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      await diditService.retryFailedWebhooks();
       res.json({ status: 'success' });
     } catch (err) {
       next(err);
     }
   });
 
-  apiRouter.get("/kyc/sessions", async (req: Request, res: Response, next: NextFunction) => {
+  // Add rewards endpoints with proper types
+  apiRouter.get("/rewards/balance", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const sessions = await db
-        .select({
-          id: verificationSessions.id,
-          userId: verificationSessions.userId,
-          sessionId: verificationSessions.sessionId,
-          status: verificationSessions.status,
-          features: verificationSessions.features,
-          createdAt: verificationSessions.createdAt,
-          updatedAt: verificationSessions.updatedAt
-        })
-        .from(verificationSessions)
-        .orderBy(desc(verificationSessions.createdAt));
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
 
-      res.json(sessions);
+      const balance = await shifiRewardsService.getBalance(req.user.id);
+      const [balanceData] = await db
+        .select()
+        .from(rewardsBalances)
+        .where(eq(rewardsBalances.userId, req.user.id))
+        .limit(1);
+
+      res.json({
+        balance: balance,
+        lifetimeEarned: balanceData?.lifetimeEarned || 0
+      });
     } catch (err) {
-      console.error('Error fetching verification sessions:', err);
       next(err);
     }
   });
 
-  //This is the updated route handler from the edited snippet
   apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
@@ -1199,6 +946,78 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add rewards endpoints
+  apiRouter.get("/rewards/balance", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const balance = await shifiRewardsService.getBalance(req.user.id);
+      const [balanceData] = await db
+        .select()
+        .from(rewardsBalances)
+        .where(eq(rewardsBalances.userId, req.user.id))
+        .limit(1);
+
+      res.json({
+        balance: balance,
+        lifetimeEarned: balanceData?.lifetimeEarned || 0
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  apiRouter.get("/rewards/transactions", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
+      res.json(transactions);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  apiRouter.get("/rewards/potential", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const amount = parseFloat(req.query.amount as string);
+      const type = req.query.type as string;
+
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+      }
+
+      let totalPoints = 0;
+      switch (type) {
+        case 'down_payment':
+          totalPoints = Math.floor(amount / 10); // Basic reward for down payment
+          break;
+        case 'early_payment':
+          const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
+          const { earlyPayoff } = calculatePotentialRewards(amount, monthsEarly);
+          totalPoints = earlyPayoff;
+          break;        case 'additional_payment':
+          const { additional } = calculatePotentialRewards(0, 0, amount);
+          totalPoints = additional;
+          break;
+        default:
+          return res.status(400).json({ error: 'Invalid reward type' });
+      }
+
+      res.json({
+        totalPoints,
+        type,
+        amount
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   apiRouter.use(cacheMiddleware(300)); // 5 mins cache
 
   apiRouter.post("/plaid/process-payment", async (req: Request, res: Response, next: NextFunction) => {
@@ -1438,55 +1257,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  apiRouter.use(cacheMiddleware(300)); // 5 mins cache
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
 
-  const errorHandlingMiddleware: ErrorHandlingMiddleware = (err, req, res, _next) => {
-    const requestId = req.headers['x-request-id'] as string || Date.now().toString(36);
-    const isAPIError = err instanceof APIError;
-
-    const errorDetails = {
-      requestId,
-      name: err.name,
-      message: err.message,
-      status: isAPIError ? err.status : 500,
-      code: isAPIError ? err.code : undefined,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      url: req.originalUrl || req.url,
-      query: req.query,
-      body: req.body,
-      headers: { ...req.headers, authorization: undefined },
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      originalError: err instanceof Error ? {
-        name: err.name,
-        message: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-        code: (err as any).code
-      } : null
-    };
-
-    console.error("[API] Error caught:", errorDetails);
-    logger.error("API Error", errorDetails);
-
-    if (!res.headersSent) {
-      const status = errorDetails.status;
-      const message = process.env.NODE_ENV === 'development' ?
-        err.message :
-        'Internal Server Error';
-
-      res.status(status).json({
-        status: 'error',
-        message,
-        errorId: requestId,
-        errorCode: isAPIError ? err.code : undefined
-      });
-    }
-  };
-
+  //The existing errorHandlingMiddleware is removed here.
   // Register error handling middleware
   app.use(errorHandlingMiddleware);
   return httpServer;
+}
+
+function calculatePotentialRewards(amount: number, monthsEarly: number, additionalPayment: number = 0): { earlyPayoff: number; additional: number } {
+  // Replace with your actual reward calculation logic
+  let earlyPayoff = 0;
+  if (monthsEarly > 0) {
+    earlyPayoff = monthsEarly * 10; // Example: 10 points per month paid early
+  }
+  const additional = Math.floor(additionalPayment / 20); // Example: 1 point for every $20 additional payment
+
+  return { earlyPayoff, additional };
 }

@@ -80,99 +80,66 @@ const startServer = async () => {
     // Register API routes first
     const httpServer = registerRoutes(app);
 
-    // Initialize LedgerManager with default configuration
-    const ledgerManager = LedgerManager.getInstance({
-      minBalance: 10000, // $10,000 minimum balance
-      maxBalance: 50000, // $50,000 maximum balance
-      sweepThreshold: 1000, // Minimum $1,000 for sweep
-      sweepSchedule: '*/15 * * * *' // Every 15 minutes
-    });
+    // Configure port with proper retries and logging
+    const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    let retries = 5;
 
-    // Start automated sweeps if PLAID_SWEEP_ACCESS_TOKEN is configured
-    if (process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-      try {
-        await ledgerManager.initializeSweeps();
-        logger.info('Automated ledger sweeps initialized');
-      } catch (error) {
-        logger.error('Failed to initialize ledger sweeps:', error);
-      }
-    } else {
-      logger.warn('PLAID_SWEEP_ACCESS_TOKEN not configured, automated sweeps disabled');
-    }
+    const startListening = () => {
+      return new Promise<void>((resolve, reject) => {
+        const server = httpServer.listen(PORT, "0.0.0.0", async () => {
+          // Log server start
+          log(`Server running at http://0.0.0.0:${PORT}`);
+          console.log('Environment:', process.env.NODE_ENV);
+          console.log('WebSocket status: enabled');
+          console.log('Server ready for connections');
 
-    // Enterprise error handling middleware
-    app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-      const errorId = Date.now().toString(36);
-      const errorInfo = {
-        id: errorId,
-        path: req.path,
-        method: req.method,
-        timestamp: new Date().toISOString(),
-        userId: req.body?.userId || 'anonymous',
-        error: {
-          name: err.name,
-          message: err.message,
-          stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
-        }
-      };
+          // Initialize Socket.IO
+          const io = new Server(server, {
+            cors: { origin: "*" },
+            path: '/socket.io/'
+          });
 
-      logger.error("[ERROR]", errorInfo);
+          // Make io globally available
+          (global as any).io = io;
 
-      if (!res.headersSent) {
-        res.status(err.status || 500).json({
-          status: "error",
-          message: err.message || "Internal Server Error",
-          errorId
-        });
-      }
-    });
+          io.on('connection', (socket) => {
+            console.log('Client connected:', socket.id);
 
-    // Setup Vite/static serving last
-    if (app.get("env") === "development") {
-      await setupVite(app, httpServer);
-    } else {
-      serveStatic(app);
-    }
+            socket.on('join_merchant_room', (merchantId: number) => {
+              socket.join(`merchant_${merchantId}`);
+              console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+            });
 
-    const portfinder = await import('portfinder');
+            socket.on('disconnect', () => {
+              console.log('Client disconnected:', socket.id);
+            });
+          });
 
-    // Configure portfinder with base port
-    const PORT = await portfinder.getPortPromise({
-      port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
-      stopPort: 9000
-    });
-
-    // Start server and wait for port to be available
-    await new Promise<void>((resolve, reject) => {
-      const server = httpServer.listen(PORT, "0.0.0.0", () => {
-        log(`Server running at http://0.0.0.0:${PORT}`);
-        console.log('Environment:', process.env.NODE_ENV);
-        console.log('WebSocket status: enabled');
-        resolve();
-      }).on('error', reject);
-
-      // Initialize Socket.IO after server is running
-      const io = new Server(server, {
-        cors: { origin: "*" },
-        path: '/socket.io/'
-      });
-
-      // Make io globally available
-      (global as any).io = io;
-
-      io.on('connection', (socket) => {
-        console.log('Client connected:', socket.id);
-
-        socket.on('join_merchant_room', (merchantId: number) => {
-          socket.join(`merchant_${merchantId}`);
-          console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+          // Signal that the server is ready
+          resolve();
+        }).on('error', (err: any) => {
+          if (err.code === 'EADDRINUSE' && retries > 0) {
+            retries--;
+            console.log(`Port ${PORT} in use, retrying... (${retries} attempts left)`);
+            setTimeout(() => {
+              server.close();
+              startListening().then(resolve).catch(reject);
+            }, 1000);
+          } else {
+            console.error('Server failed to start:', err);
+            reject(err);
+          }
         });
 
-        socket.on('disconnect', () => {
-          console.log('Client disconnected:', socket.id);
+        // Add health check endpoint
+        app.get('/health', (_req, res) => {
+          res.json({ status: 'ok', port: PORT });
         });
       });
-    });
+    };
+
+    await startListening();
+    console.log('Server initialization complete');
 
   } catch (error) {
     console.error('Failed to start server:', error);
