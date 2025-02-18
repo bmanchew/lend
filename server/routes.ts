@@ -995,7 +995,7 @@ router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next
     res.json({ token });
 
   } catch (err) {
-    nexterr);
+    next(err);
   }
 });
 
