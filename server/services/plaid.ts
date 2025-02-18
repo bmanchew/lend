@@ -40,7 +40,7 @@ export class PlaidService {
           }))
         });
 
-        const fundingAccount = authData.accounts.find(acc => 
+        const fundingAccount = authData.accounts.find(acc =>
           acc.type === 'depository' && acc.subtype === 'checking'
         );
 
@@ -103,16 +103,16 @@ export class PlaidService {
     if (!publicToken) {
       throw new Error('Public token is required');
     }
-    
+
     try {
       const response = await plaidClient.itemPublicTokenExchange({
         public_token: publicToken,
       });
-      
+
       if (!response?.data?.access_token) {
         throw new Error('Invalid response from Plaid token exchange');
       }
-      
+
       return response.data;
     } catch (error: any) {
       logger.error('Error exchanging public token:', {
@@ -249,8 +249,8 @@ export class PlaidService {
 
     try {
       await this.validateSandboxSetup();
-      
-      // Create transfer authorization first  
+
+      // Create transfer authorization first
       const authRequest: TransferAuthorizationCreateRequest = {
         access_token: accessToken,
         account_id: accountId,
@@ -509,27 +509,18 @@ export class PlaidService {
         environment: this.isSandbox ? 'sandbox' : 'production'
       });
 
-      const response = await plaidClient.authGet({
-        access_token: accessToken
-      });
-
-      // Check if account exists and is valid for ACH
-      const account = response.data.accounts.find(acc => acc.account_id === accountId);
-      if (!account) {
-        throw new Error('Account not found');
-      }
-
-      const verificationResponse = await plaidClient.sandboxItemVerificationExpediatedUpdate({
+      const response = await plaidClient.sandboxItemSetVerificationStatus({
         access_token: accessToken,
-        account_id: accountId
+        account_id: accountId,
+        verification_status: 'verification_expired'
       });
 
       logger.info('ACH verification initiated:', {
         accountId,
-        response: verificationResponse.data
+        response: response.data
       });
 
-      return verificationResponse.data;
+      return response.data;
     } catch (error: any) {
       logger.error('Error initiating ACH verification:', {
         error: error?.response?.data || error.message,
@@ -547,10 +538,20 @@ export class PlaidService {
         environment: this.isSandbox ? 'sandbox' : 'production'
       });
 
-      const response = await plaidClient.itemMicrodepositsVerify({
+      if (this.isSandbox) {
+        // In sandbox, we simulate verification success
+        await plaidClient.sandboxItemSetVerificationStatus({
+          access_token: accessToken,
+          account_id: accountId,
+          verification_status: 'automatically_verified'
+        });
+        return { verified: true };
+      }
+
+      const response = await plaidClient.authMicrodepositsVerify({
         access_token: accessToken,
         account_id: accountId,
-        amounts: amounts.map(amount => amount.toString())
+        amounts: amounts.map(amount => amount.toFixed(2))
       });
 
       logger.info('Micro-deposits verified:', {

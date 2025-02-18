@@ -1417,6 +1417,27 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add new route for creating Plaid link tokens
+  apiRouter.post("/plaid/create-link-token", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      logger.info('Creating Plaid link token for user:', { userId });
+      const linkToken = await PlaidService.createLinkToken(userId.toString());
+
+      res.json({
+        status: 'success',
+        linkToken: linkToken.link_token
+      });
+    } catch (err) {
+      logger.error('Error creating Plaid link token:', err);
+      next(err);
+    }
+  });
+
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
