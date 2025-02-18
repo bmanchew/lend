@@ -31,14 +31,21 @@ export default function MerchantLogin() {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
+      console.log("[MerchantLogin] Attempting login:", {
+        username: data.username,
+        loginType: "merchant",
+        timestamp: new Date().toISOString()
+      });
+
       const response = await loginMutation.mutateAsync({
         username: data.username,
         password: data.password,
         loginType: "merchant"
       }) as LoginResponse;
 
-      if (!response.token) {
-        throw new Error('No token received');
+      if (!response || !response.token) {
+        console.error("[MerchantLogin] Invalid response:", response);
+        throw new Error('Invalid response from server');
       }
 
       // Store auth token
@@ -58,11 +65,21 @@ export default function MerchantLogin() {
         });
       }
     } catch (error: any) {
-      console.error("[MerchantLogin] Login failed:", error);
+      console.error("[MerchantLogin] Login failed:", {
+        error: error,
+        data: { username: data.username, password: "[REDACTED]" },
+        errorType: error.constructor.name,
+        errorMessage: error.response?.data?.message || error.message,
+        timestamp: new Date().toISOString()
+      });
 
       let errorMessage = "Login failed. Please try again.";
       if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
 
       toast({
