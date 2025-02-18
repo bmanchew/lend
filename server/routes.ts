@@ -145,9 +145,8 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
 
-    // Verify password with bcrypt
-    const bcrypt = require('bcrypt');
-    const isValid = await bcrypt.compare(password, user.password);
+    // Verify password using authService
+    const isValid = await authService.comparePasswords(password, user.password);
 
     if (!isValid) {
       logger.info("[Auth] Invalid password for user:", username);
