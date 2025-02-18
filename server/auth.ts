@@ -33,15 +33,16 @@ interface User {
   username: string;
   password: string;
   email: string;
-  name: string;
-  role: UserRole;
-  phoneNumber: string;
+  name: string | null;
+  role: UserRole; // Using the UserRole type alias
+  phoneNumber: string | null;
   lastOtpCode: string | null;
   otpExpiry: Date | null;
   platform?: string;
-  kycStatus?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  kycStatus?: string | null;
+  createdAt?: Date | null;
+  plaidAccessToken?: string | null;
+  faceIdHash?: string | null;
 }
 
 interface AuthResult {
@@ -192,28 +193,60 @@ export async function setupAuth(app: Express): Promise<void> {
         const loginType = req.body.loginType || 'customer';
 
         if (!username || !password) {
+          console.log("[Auth] Missing credentials:", { username: !!username, password: !!password });
           return done(null, false, { message: "Missing credentials" });
         }
 
         if (loginType === 'admin' || loginType === 'merchant') {
+          console.log("[Auth] Attempting admin/merchant login");
           const [userRecord] = await db.select().from(users)
             .where(eq(users.username, username))
             .limit(1);
 
+          console.log("[Auth] User record found:", {
+            found: !!userRecord,
+            role: userRecord?.role,
+            expectedRole: loginType
+          });
+
           if (!userRecord || userRecord.role !== loginType) {
+            console.log("[Auth] Invalid credentials - user not found or wrong role");
             return done(null, false, { message: "Invalid credentials" });
           }
 
           const isValid = await authService.comparePasswords(password, userRecord.password);
+          console.log("[Auth] Password comparison result:", {
+            isValid,
+            passwordProvided: !!password,
+            hashedPasswordExists: !!userRecord.password
+          });
+
           if (!isValid) {
+            console.log("[Auth] Invalid credentials - password mismatch");
             return done(null, false, { message: "Invalid credentials" });
           }
 
           const user: User = {
-            ...userRecord,
-            name: userRecord.name || '',
-            phoneNumber: userRecord.phoneNumber || ''
+            id: userRecord.id,
+            username: userRecord.username,
+            password: userRecord.password,
+            email: userRecord.email,
+            name: userRecord.name,
+            role: userRecord.role as UserRole,
+            phoneNumber: userRecord.phoneNumber,
+            lastOtpCode: userRecord.lastOtpCode,
+            otpExpiry: userRecord.otpExpiry,
+            kycStatus: userRecord.kycStatus,
+            createdAt: userRecord.createdAt,
+            plaidAccessToken: userRecord.plaidAccessToken,
+            faceIdHash: userRecord.faceIdHash
           };
+
+          console.log("[Auth] Login successful:", {
+            userId: user.id,
+            role: user.role,
+            timestamp: new Date().toISOString()
+          });
 
           return done(null, user);
         }
@@ -228,23 +261,48 @@ export async function setupAuth(app: Express): Promise<void> {
           .where(eq(users.phoneNumber, `+1${formattedPhone}`))
           .limit(1);
 
+        console.log("[Auth] User record found (customer):", {
+          found: !!userRecord,
+          phoneNumber: userRecord?.phoneNumber
+        });
+
         if (!userRecord || userRecord.role !== 'customer') {
+          console.log("[Auth] Invalid credentials - user not found or not a customer");
           return done(null, false, { message: "Invalid account" });
         }
 
         if (!userRecord.lastOtpCode || !userRecord.otpExpiry || new Date() > userRecord.otpExpiry) {
+          console.log("[Auth] Invalid OTP - expired");
           return done(null, false, { message: "OTP expired or invalid" });
         }
 
+        console.log("[Auth] Comparing OTP...");
         if (userRecord.lastOtpCode.trim() !== password.trim()) {
+          console.log("[Auth] Invalid OTP - mismatch");
           return done(null, false, { message: "Invalid OTP" });
         }
 
         const user: User = {
-          ...userRecord,
-          name: userRecord.name || '',
-          phoneNumber: userRecord.phoneNumber || ''
+          id: userRecord.id,
+          username: userRecord.username,
+          password: userRecord.password,
+          email: userRecord.email,
+          name: userRecord.name,
+          role: userRecord.role as UserRole,
+          phoneNumber: userRecord.phoneNumber,
+          lastOtpCode: userRecord.lastOtpCode,
+          otpExpiry: userRecord.otpExpiry,
+          kycStatus: userRecord.kycStatus,
+          createdAt: userRecord.createdAt,
+          plaidAccessToken: userRecord.plaidAccessToken,
+          faceIdHash: userRecord.faceIdHash
         };
+
+        console.log("[Auth] Login successful (customer):", {
+          userId: user.id,
+          phoneNumber: user.phoneNumber,
+          timestamp: new Date().toISOString()
+        });
 
         // Clear used OTP
         await db.update(users)
@@ -276,9 +334,19 @@ export async function setupAuth(app: Express): Promise<void> {
       }
 
       const user: User = {
-        ...userRecord,
-        name: userRecord.name || '',
-        phoneNumber: userRecord.phoneNumber || ''
+        id: userRecord.id,
+        username: userRecord.username,
+        password: userRecord.password,
+        email: userRecord.email,
+        name: userRecord.name,
+        role: userRecord.role as UserRole,
+        phoneNumber: userRecord.phoneNumber,
+        lastOtpCode: userRecord.lastOtpCode,
+        otpExpiry: userRecord.otpExpiry,
+        kycStatus: userRecord.kycStatus,
+        createdAt: userRecord.createdAt,
+        plaidAccessToken: userRecord.plaidAccessToken,
+        faceIdHash: userRecord.faceIdHash
       };
 
       done(null, user);

@@ -1,5 +1,5 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { drizzle, NeonDatabase } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
 import * as schema from './schema';
 
@@ -46,7 +46,7 @@ const createPool = async (retryCount = 0) => {
 class DatabaseInstance {
   private static instance: DatabaseInstance;
   public pool?: Pool;
-  public db?: ReturnType<typeof drizzle<typeof schema>>;
+  public db?: NeonDatabase<typeof schema>;
   private initialized = false;
   private initializationPromise?: Promise<void>;
 
@@ -165,15 +165,15 @@ await dbInstance.initialize().catch(error => {
   process.exit(1);
 });
 
-// Export the singleton instance and its db property
+// Export the singleton instance and its db property with proper typing
 export { dbInstance };
-export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
-  get: (target, prop) => {
+export const db = new Proxy({} as NeonDatabase<typeof schema>, {
+  get: (target, prop: string | symbol) => {
     if (!dbInstance.db) {
       console.error('[Database] Attempted to access database before initialization');
       throw new Error('Database not initialized');
     }
-    return dbInstance.db[prop];
+    return dbInstance.db[prop as keyof typeof dbInstance.db];
   },
 });
 
