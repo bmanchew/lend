@@ -169,9 +169,9 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Register middleware with proper types
-  apiRouter.use(requestTrackingMiddleware as RequestHandler);
-  apiRouter.use(verifyJWT as RequestHandler);
-  apiRouter.use(errorHandlingMiddleware as RequestHandler);
+  apiRouter.use(requestTrackingMiddleware);
+  apiRouter.use(verifyJWT);
+  apiRouter.use(errorHandlingMiddleware);
 
 
   // Protected routes with proper types
