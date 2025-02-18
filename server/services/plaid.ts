@@ -24,7 +24,7 @@ export class PlaidService {
 
     if (this.isSandbox && !this.sweepAccountId) {
       logger.info('Initializing sandbox sweep account');
-      
+
       try {
         const authData = await this.getAuthData(process.env.PLAID_SWEEP_ACCESS_TOKEN);
         if (!authData?.accounts?.length) {
@@ -40,21 +40,28 @@ export class PlaidService {
           }))
         });
 
-      const fundingAccount = authData.accounts.find(acc => 
-        acc.type === 'depository' && acc.subtype === 'checking'
-      );
+        const fundingAccount = authData.accounts.find(acc => 
+          acc.type === 'depository' && acc.subtype === 'checking'
+        );
 
-      if (!fundingAccount) {
-        throw new Error('No eligible funding account found in sandbox');
+        if (!fundingAccount) {
+          throw new Error('No eligible funding account found in sandbox');
+        }
+
+        this.sweepAccountId = fundingAccount.account_id;
+        logger.info('Selected sandbox sweep account:', {
+          accountId: this.sweepAccountId,
+          type: fundingAccount.type,
+          subtype: fundingAccount.subtype,
+          balances: fundingAccount.balances
+        });
+      } catch (error: any) {
+        logger.error('Failed to initialize sandbox account:', {
+          error: error?.message,
+          stack: error?.stack
+        });
+        throw error;
       }
-
-      this.sweepAccountId = fundingAccount.account_id;
-      logger.info('Selected sandbox sweep account:', {
-        accountId: this.sweepAccountId,
-        type: fundingAccount.type,
-        subtype: fundingAccount.subtype,
-        balances: fundingAccount.balances
-      });
     }
   }
 

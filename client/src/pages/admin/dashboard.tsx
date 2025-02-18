@@ -5,14 +5,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SelectMerchant, SelectContract } from "@db/schema";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Phone, Mail, FileText, UserCheck, Clock } from "lucide-react";
+import { ChevronDown, Phone, Mail } from "lucide-react";
 import { useState } from "react";
 
 export default function AdminDashboard() {
@@ -21,26 +21,18 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
-  const { data: contracts, error: contractsError, isLoading: contractsLoading } = useQuery<SelectContract[]>({
+  const { data: contracts = [], error: contractsError, isLoading: contractsLoading } = useQuery({
     queryKey: ["/api/contracts"],
-    onError: (error) => {
-      console.error("[AdminDashboard] Failed to fetch contracts:", error);
-    }
+    retry: 1,
+    throwOnError: false
   });
 
-  const { data: merchants, error: merchantsError, isLoading: merchantsLoading } = useQuery<SelectMerchant[]>({
+  const { data: merchants = [], error: merchantsError, isLoading: merchantsLoading } = useQuery({
     queryKey: ["/api/merchants"],
-    onSuccess: (data) => {
-      console.log("[AdminDashboard] Merchants loaded:", {
-        count: data?.length,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onError: (error) => {
-      console.error("[AdminDashboard] Error loading merchants:", {
-        error,
-        timestamp: new Date().toISOString()
-      });
+    retry: 1,
+    throwOnError: false,
+    onError: (error: Error) => {
+      console.error("[AdminDashboard] Error loading merchants:", error);
     }
   });
 
@@ -56,28 +48,41 @@ export default function AdminDashboard() {
     {
       accessorKey: "amount",
       header: "Amount",
-      cell: ({ row }) => `$${(parseFloat(row.getValue("amount")) || 0).toFixed(2)}`,
+      cell: ({ row }) => {
+        const amount = row.getValue("amount");
+        return typeof amount === 'string' || typeof amount === 'number' 
+          ? `$${(parseFloat(amount.toString()) || 0).toFixed(2)}`
+          : '$0.00';
+      },
     },
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ getValue }) => (
-        <Badge variant={getValue() === "active" ? "success" : "secondary"}>
-          {getValue()}
-        </Badge>
-      ),
+      cell: ({ getValue }) => {
+        const value = getValue() as string;
+        return (
+          <Badge variant={value === "active" ? "default" : "secondary"}>
+            {value}
+          </Badge>
+        );
+      },
     },
     {
       accessorKey: "createdAt",
       header: "Created",
       cell: ({ getValue }) => {
         const value = getValue();
-        return value ? format(new Date(value), "MMM d, yyyy") : "N/A";
+        if (!value) return "N/A";
+        try {
+          return format(new Date(value), "MMM d, yyyy");
+        } catch (e) {
+          return "Invalid Date";
+        }
       },
     },
   ];
 
-  const filteredContracts = contracts?.filter(contract => {
+  const filteredContracts = (contracts as SelectContract[]).filter(contract => {
     const matchesSearch = 
       (contract?.contractNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (contract?.merchants?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
@@ -85,35 +90,22 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus;
   });
 
-  const updateContractStatus = useMutation({
-    mutationFn: async ({ contractId, status }: { contractId: number; status: string }) => {
-      const response = await fetch(`/api/contracts/${contractId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
-    },
-  });
-
-  console.log("[AdminDashboard] Rendering with:", {
-    contractsLoading,
-    merchantsLoading,
-    contractsError,
-    merchantsError,
-    contractsCount: contracts?.length,
-    merchantsCount: merchants?.length
-  });
-
   if (contractsLoading || merchantsLoading) {
-    return <div>Loading...</div>;
+    return (
+      <PortalLayout>
+        <div className="p-8">Loading...</div>
+      </PortalLayout>
+    );
   }
 
   if (contractsError || merchantsError) {
-    return <div>Error loading data: {(contractsError || merchantsError)?.message}</div>;
+    return (
+      <PortalLayout>
+        <div className="p-8 text-red-500">
+          Error loading data: {((contractsError || merchantsError) as Error)?.message}
+        </div>
+      </PortalLayout>
+    );
   }
 
   return (
@@ -137,7 +129,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                {contracts?.filter(c => c.status === "active").length ?? 0}
+                {(contracts as SelectContract[])?.filter(c => c.status === "active").length ?? 0}
               </p>
             </CardContent>
           </Card>
@@ -148,7 +140,10 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts?.filter(c => c.status === 'active').reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
+                ${(contracts as SelectContract[])
+                  ?.filter(c => c.status === 'active')
+                  .reduce((sum, c) => sum + (parseFloat(c.amount?.toString() || '0') || 0), 0)
+                  .toFixed(2) ?? "0.00"}
               </p>
             </CardContent>
           </Card>
@@ -167,7 +162,6 @@ export default function AdminDashboard() {
           <TabsList>
             <TabsTrigger value="contracts">Contract Management</TabsTrigger>
             <TabsTrigger value="merchants">Merchant Management</TabsTrigger>
-            <TabsTrigger value="communications">Communications</TabsTrigger>
           </TabsList>
 
           <TabsContent value="contracts">
@@ -198,10 +192,7 @@ export default function AdminDashboard() {
               <CardContent>
                 <DataTable
                   columns={contractColumns}
-                  data={filteredContracts || []}
-                  onRowClick={(row) => {
-                    // Open contract details dialog
-                  }}
+                  data={filteredContracts}
                 />
               </CardContent>
             </Card>
@@ -214,7 +205,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {merchants?.map((merchant) => (
+                  {(merchants as SelectMerchant[])?.map((merchant) => (
                     <Collapsible key={merchant.id}>
                       <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-2">
@@ -242,10 +233,10 @@ export default function AdminDashboard() {
                             <h4 className="font-medium mb-2">Performance</h4>
                             <div className="space-y-2">
                               <div>Total Contracts: {
-                                contracts?.filter(c => c.merchantId === merchant.id).length
+                                (contracts as SelectContract[])?.filter(c => c.merchantId === merchant.id).length ?? 0
                               }</div>
                               <div>Active Contracts: {
-                                contracts?.filter(c => c.merchantId === merchant.id && c.status === "active").length
+                                (contracts as SelectContract[])?.filter(c => c.merchantId === merchant.id && c.status === "active").length ?? 0
                               }</div>
                             </div>
                           </div>
@@ -253,20 +244,6 @@ export default function AdminDashboard() {
                       </CollapsibleContent>
                     </Collapsible>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="communications">
-            <Card>
-              <CardHeader>
-                <CardTitle>Communication History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Communication logs would go here */}
-                  <p>Communication history and logs will be displayed here</p>
                 </div>
               </CardContent>
             </Card>

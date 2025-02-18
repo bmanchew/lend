@@ -508,17 +508,23 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update the contracts table query with proper types
+  // Fix the contracts table query with proper types
   apiRouter.get("/contracts", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { status, merchantId } = req.query;
 
+      // Start with base query
       let queryBuilder = db
-        .select()
+        .select({
+          contract: contracts,
+          merchant: merchants,
+          user: users
+        })
         .from(contracts)
         .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
         .leftJoin(users, eq(contracts.customerId, users.id));
 
+      // Add filters if provided
       if (status) {
         queryBuilder = queryBuilder.where(eq(contracts.status, status as string));
       }
@@ -983,7 +989,7 @@ export function registerRoutes(app: Express): Server {
         formatted: formattedPhone
       });
 
-      // Get merchant info for the SMS
+      //// Get merchant info for the SMS
       const [merchant] = await db
         .select()
         .from(merchants)
