@@ -188,8 +188,7 @@ export async function setupAuth(app: Express): Promise<void> {
   // Modify JWT verification middleware to skip public routes
   const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
     // Skip verification for public routes
-    const path = req.path.replace(/\/+$/, ''); // Remove trailing slashes
-    if (publicRoutes.includes(path) || publicRoutes.includes('/api' + path)) {
+    if (publicRoutes.includes(req.path)) {
       return next();
     }
 
