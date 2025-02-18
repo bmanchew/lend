@@ -198,7 +198,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-// Register middleware
+// Register core middleware
 router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
@@ -252,10 +252,7 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
-// OTP endpoint is already defined above
-
-// Public routes - no auth required
-router.post("/sendOTP", async (req: Request, res: Response) => {
+// Protected routes below this point
   try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
@@ -304,59 +301,10 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
-// Public OTP endpoint
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-    
-    // Format phone number consistently
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-    
-    // Create user if doesn't exist
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-    
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = smsService.generateOTP();
-    const sent = await smsService.sendOTP(formattedPhone, otp);
-
-    if (sent) {
-      await db.update(users)
-        .set({
-          lastOtpCode: otp,
-          otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-        })
-        .where(eq(users.phoneNumber, formattedPhone));
-
-      res.json({ message: "OTP sent successfully" });
-    } else {
-      res.status(500).json({ error: "Failed to send OTP" });
-    }
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Protected routes - require JWT verification  
+// Apply JWT verification middleware for protected routes
 router.use(verifyJWT);
 
+// Protected routes below
 router.get("/auth/me", async (req: RequestWithUser, res: Response) => {
   try {
     if (!req.user) {
