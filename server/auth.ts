@@ -102,15 +102,20 @@ class AuthService {
     try {
       if (!supplied || !stored) {
         this.logger.error("Missing password:", { supplied: !!supplied, stored: !!stored });
-        return false;
+        throw new Error("Missing credentials");
       }
 
       const isMatch = await bcrypt.compare(supplied, stored);
       this.logger.debug("Password comparison result:", { isMatch });
+      
+      if (!isMatch) {
+        throw new Error("Invalid credentials");
+      }
+      
       return isMatch;
     } catch (error) {
       this.logger.error("Password comparison error:", error);
-      return false;
+      throw error;
     }
   }
 }
