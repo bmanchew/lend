@@ -847,7 +847,22 @@ router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser,
       processedAt: null
     } as typeof webhookEvents.$inferInsert);
 
-    // Send SMS with enhanced error handling
+    // Skip auth check for OTP endpoints
+app.post('/api/sendOTP', async (req, res) => {
+  const { phoneNumber } = req.body;
+  try {
+    const result = await smsService.sendOTP(phoneNumber);
+    if (result) {
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Failed to send OTP' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send SMS with enhanced error handling
     const smsResult = await smsService.sendLoanApplicationLink(
       formattedPhone,
       applicationUrl,
