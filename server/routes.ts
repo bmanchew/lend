@@ -113,11 +113,42 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
 router.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const { username, password, loginType } = req.body as LoginData;
+    
+    logger.debug("[Auth] Login attempt details:", {
+      username,
+      loginType,
+      hasPassword: !!password,
+      timestamp: new Date().toISOString()
+    });
 
     if (!username || !password) {
       logger.info("[Auth] Missing credentials:", { username });
       return res.status(400).json({ error: "Username and password are required" });
     }
+
+    // Get user from database with role check
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.username, username),
+          eq(users.role, loginType)
+        )
+      )
+      .limit(1);
+
+    if (!user) {
+      logger.info("[Auth] User not found or invalid role:", { username, loginType });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    logger.debug("[Auth] Found user:", {
+      userId: user.id,
+      role: user.role,
+      hasStoredPassword: !!user.password,
+      timestamp: new Date().toISOString()
+    });
 
     logger.debug("[Auth] Login attempt details:", {
       username,

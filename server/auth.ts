@@ -96,7 +96,12 @@ class AuthService {
     this.logger.debug("Comparing passwords", {
       suppliedLength: supplied?.length,
       storedHashLength: stored?.length,
-      storedHashPrefix: stored ? stored.substring(0, 10) + "..." : null
+      storedHashPrefix: stored ? stored.substring(0, 10) + "..." : null,
+      timestamp: new Date().toISOString(),
+      hasSupplied: !!supplied,
+      hasStored: !!stored,
+      storedType: typeof stored,
+      suppliedType: typeof supplied
     });
 
     try {
