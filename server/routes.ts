@@ -264,9 +264,6 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('[SMS] OTP send error:', error);
     res.status(500).json({ error: "Failed to send OTP" });
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Failed to send OTP" });
   }
 });
 
