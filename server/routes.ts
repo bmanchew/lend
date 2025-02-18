@@ -53,9 +53,8 @@ export function registerRoutes(app: Express): Server {
     sweepSchedule: '0 */15 * * * *' // Every 15 minutes
   });
 
-  // Create API router and HTTP server
+  // Create API router
   const apiRouter = express.Router();
-  const httpServer = createServer(app);
 
   // Request tracking middleware
   const requestTrackingMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
@@ -1353,9 +1352,7 @@ export function registerRoutes(app: Express): Server {
 
   app.use('/api', apiRouter);
 
-  const httpServer = createServer(app);
-
-  return httpServer;
+  return createServer(app);
 }
 
 // Helper function declarations
