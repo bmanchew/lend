@@ -12,9 +12,9 @@ import { createServer as createNetServer } from 'net';
 
 // Rate limiter configuration
 const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute window
-  max: 1000, // Set very high for testing
-  message: { error: "Too many requests from this IP, please try again later" }
+  windowMs: 15 * 60 * 1000, // 15 minute window
+  max: 2000, // Higher limit
+  message: { error: "Too many requests, please try again in 15 minutes" }
 });
 
 const app = express();
