@@ -1,6 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
-import { apiRouter } from "./routes";
+import apiRouter from "./routes";
 import { setupVite } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import portfinder from 'portfinder';
+import { createServer as createNetServer } from 'net';
 
 // Rate limiter configuration
 const limiter = rateLimit({
@@ -54,6 +55,35 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 
 app.use(requestLogger);
 
+// Function to check if a port is available
+const isPortAvailable = (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const server = createNetServer()
+      .once('error', () => {
+        resolve(false);
+      })
+      .once('listening', () => {
+        server.once('close', () => {
+          resolve(true);
+        });
+        server.close();
+      })
+      .listen(port, '0.0.0.0');
+  });
+};
+
+// Function to wait for port to be available
+const waitForPort = async (port: number, retries = 20, interval = 250): Promise<void> => {
+  for (let i = 0; i < retries; i++) {
+    const available = await isPortAvailable(port);
+    if (available) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  throw new Error(`Port ${port} is not available after ${retries} retries`);
+};
+
 const startServer = async () => {
   try {
     // Initialize auth
@@ -81,6 +111,9 @@ const startServer = async () => {
     const port = await portfinder.getPortPromise({ 
       port: process.env.PORT ? parseInt(process.env.PORT) : 3000 
     });
+
+    // Wait for port to be available before starting
+    await waitForPort(port);
 
     // Start server
     const server = httpServer.listen(port, "0.0.0.0", () => {

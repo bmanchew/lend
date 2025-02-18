@@ -1,5 +1,5 @@
-import type { Express, Request, Response, NextFunction } from "express";
 import { Router } from 'express';
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
@@ -31,7 +31,7 @@ interface RequestWithUser extends Request {
   user?: JWTPayload;
 }
 
-export type UserRole = 'admin' | 'merchant' | 'customer';
+const router = Router();
 
 // Custom error class for API errors
 class APIError extends Error {
@@ -45,77 +45,6 @@ class APIError extends Error {
     this.name = 'APIError';
   }
 }
-
-const apiRouter = Router();
-
-// Auth routes - no JWT verification needed for these
-apiRouter.post("/auth/login", async (req: Request, res: Response) => {
-  try {
-    const { username, password, loginType } = req.body as LoginData;
-
-    if (!username || !password) {
-      logger.info("[Auth] Missing credentials:", { username });
-      return res.status(400).json({ error: "Username and password are required" });
-    }
-
-    logger.info("[Auth] Login attempt:", {
-      username,
-      loginType,
-      timestamp: new Date().toISOString()
-    });
-
-    // Get user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, username))
-      .limit(1);
-
-    if (!user) {
-      logger.info("[Auth] User not found:", username);
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Verify password with bcrypt
-    const bcrypt = require('bcrypt');
-    const isValid = await bcrypt.compare(password, user.password);
-
-    if (!isValid) {
-      logger.info("[Auth] Invalid password for user:", username);
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Generate JWT token
-    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
-    const token = jwt.sign({
-      id: user.id,
-      role: user.role,
-      name: user.name || undefined,
-      email: user.email,
-      phoneNumber: user.phoneNumber || undefined
-    } as JWTPayload, jwtSecret);
-
-    logger.info("[Auth] Login successful:", {
-      userId: user.id,
-      role: user.role,
-      timestamp: new Date().toISOString()
-    });
-
-    // Return response
-    res.json({
-      token,
-      id: user.id,
-      role: user.role,
-      name: user.name,
-      email: user.email,
-      username: user.username
-    });
-  } catch (err) {
-    logger.error("[Auth] Login error:", err);
-    res.status(500).json({ error: "Internal server error during login" });
-  }
-});
-
 
 // Request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
@@ -134,6 +63,8 @@ const requestTrackingMiddleware = (req: Request, res: Response, next: NextFuncti
 
 // Cache middleware
 const cacheMiddleware = (duration: number) => {
+  const apiCache = new NodeCache({ stdTTL: duration });
+
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET') return next();
 
@@ -177,17 +108,104 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
   }
 };
 
-// Initialize cache middleware
-const apiCache = new NodeCache({ stdTTL: 300 }); // 5 minutes default TTL
+// Auth routes - no JWT verification needed for these
+router.post("/auth/login", async (req: Request, res: Response) => {
+  try {
+    const { username, password, loginType } = req.body as LoginData;
+
+    if (!username || !password) {
+      logger.info("[Auth] Missing credentials:", { username });
+      return res.status(400).json({ error: "Username and password are required" });
+    }
+
+    logger.debug("[Auth] Login attempt details:", {
+      username,
+      loginType,
+      requestHeaders: req.headers,
+      timestamp: new Date().toISOString(),
+      path: req.path
+    });
+
+    // Get user from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, username))
+      .limit(1);
+
+    if (!user) {
+      logger.info("[Auth] User not found:", username);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    logger.debug("[Auth] Found user:", {
+      userId: user.id,
+      role: user.role,
+      hasPassword: !!user.password,
+      timestamp: new Date().toISOString()
+    });
+
+    // Verify password with bcrypt
+    const bcrypt = require('bcrypt');
+    const isValid = await bcrypt.compare(password, user.password);
+
+    if (!isValid) {
+      logger.info("[Auth] Invalid password for user:", username);
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Check if loginType matches user role
+    if (loginType !== user.role) {
+      logger.info("[Auth] Role mismatch:", { 
+        expected: loginType, 
+        actual: user.role,
+        username,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ 
+        error: `This login is for ${loginType} accounts only.`
+      });
+    }
+
+    // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+    const token = jwt.sign({
+      id: user.id,
+      role: user.role,
+      name: user.name || undefined,
+      email: user.email,
+      phoneNumber: user.phoneNumber || undefined
+    } as JWTPayload, jwtSecret);
+
+    logger.info("[Auth] Login successful:", {
+      userId: user.id,
+      role: user.role,
+      timestamp: new Date().toISOString()
+    });
+
+    // Return response
+    res.json({
+      token,
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+      username: user.username
+    });
+  } catch (err) {
+    logger.error("[Auth] Login error:", err);
+    res.status(500).json({ error: "Internal server error during login" });
+  }
+});
 
 // Register middleware
-apiRouter.use(requestTrackingMiddleware);
-apiRouter.use(cacheMiddleware(300));
+router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
 
 // Protected routes - require JWT verification
-apiRouter.use(verifyJWT);
+router.use(verifyJWT);
 
-apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
+router.get("/auth/me", async (req: RequestWithUser, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -199,7 +217,7 @@ apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
   }
 });
 
-apiRouter.post("/contracts/:id/status",  async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/contracts/:id/status",  async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -237,7 +255,7 @@ apiRouter.post("/contracts/:id/status",  async (req: RequestWithUser, res: Respo
   }
 });
 
-apiRouter.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.id);
     if (isNaN(userId)) {
@@ -256,7 +274,7 @@ apiRouter.get("/customers/:id/contracts", async (req: RequestWithUser, res: Resp
   }
 });
 
-apiRouter.post("/test-verification-email", async (req: RequestWithUser, res: Response) => {
+router.post("/test-verification-email", async (req: RequestWithUser, res: Response) => {
   try {
     logger.info('Received test email request:', req.body);
     const testEmail = req.body.email;
@@ -303,7 +321,7 @@ apiRouter.post("/test-verification-email", async (req: RequestWithUser, res: Res
   }
 });
 
-apiRouter.get("/verify-sendgrid", async (req: RequestWithUser, res: Response) => {
+router.get("/verify-sendgrid", async (req: RequestWithUser, res: Response) => {
   try {
     const apiKey = process.env.SENDGRID_API_KEY;
     if (!apiKey || !apiKey.startsWith('SG.')) {
@@ -333,7 +351,7 @@ apiRouter.get("/verify-sendgrid", async (req: RequestWithUser, res: Response) =>
   }
 });
 
-apiRouter.get("/test-email", async (req: RequestWithUser, res: Response) => {
+router.get("/test-email", async (req: RequestWithUser, res: Response) => {
   try {
     const isConnected = await testSendGridConnection();
     if (isConnected) {
@@ -356,7 +374,7 @@ apiRouter.get("/test-email", async (req: RequestWithUser, res: Response) => {
   }
 });
 
-apiRouter.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.userId);
     logger.info("[Merchant Lookup] Attempting to find merchant for userId:", userId);
@@ -390,7 +408,7 @@ apiRouter.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Re
   }
 });
 
-apiRouter.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const merchantContracts = await db.query.contracts.findMany({
       where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -405,7 +423,7 @@ apiRouter.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Resp
   }
 });
 
-apiRouter.post("/merchants/create", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/merchants/create", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     logger.info("[Merchant Creation] Received request:", {
       body: req.body,
@@ -485,7 +503,7 @@ apiRouter.post("/merchants/create", async (req: RequestWithUser, res: Response, 
   }
 });
 
-apiRouter.get("/merchants", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   logger.info("[Merchants] Fetching all merchants");
   try {
     const allMerchants = await db
@@ -521,7 +539,7 @@ apiRouter.get("/merchants", async (req: RequestWithUser, res: Response, next: Ne
   }
 });
 
-apiRouter.post("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     logger.info("[Programs] Creating new program:", req.body);
     const { name, term, interestRate } = req.body;
@@ -541,7 +559,7 @@ apiRouter.post("/merchants/:id/programs", async (req: RequestWithUser, res: Resp
   }
 });
 
-apiRouter.get("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const merchantId = parseInt(req.params.id);
     const merchantPrograms = await db
@@ -555,7 +573,7 @@ apiRouter.get("/merchants/:id/programs", async (req: RequestWithUser, res: Respo
   }
 });
 
-apiRouter.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { status, merchantId } = req.query;
 
@@ -594,7 +612,7 @@ apiRouter.get("/contracts", async (req: RequestWithUser, res: Response, next: Ne
   }
 });
 
-apiRouter.post("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const {
       merchantId,
@@ -679,7 +697,7 @@ apiRouter.post("/contracts", async (req: RequestWithUser, res: Response, next: N
   }
 });
 
-apiRouter.post("/webhooks/process", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/webhooks/process", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { eventType, sessionId, payload } = req.body;
 
@@ -699,7 +717,7 @@ apiRouter.post("/webhooks/process", async (req: RequestWithUser, res: Response, 
   }
 });
 
-apiRouter.get("/rewards/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -721,7 +739,7 @@ apiRouter.get("/rewards/balance", async (req: RequestWithUser, res: Response, ne
   }
 });
 
-apiRouter.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   const debugLog = (message: string, data?: any) => {
     logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
@@ -909,7 +927,7 @@ apiRouter.post("/merchants/:id/send-loan-application", async (req: RequestWithUs
   }
 });
 
-apiRouter.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { phoneNumber, otp } = req.body;
     if (!phoneNumber || !otp) {
@@ -947,7 +965,7 @@ apiRouter.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, n
   }
 });
 
-apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -958,7 +976,7 @@ apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response, next: Next
   }
 });
 
-apiRouter.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -974,15 +992,13 @@ apiRouter.post("/auth/logout", async (req: RequestWithUser, res: Response, next:
     next(err);
   }
 });
-
-
-apiRouter.post("/auth/register", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/auth/register", async (req: RequestWithUser, res: Response, nextFunction) => {
   try {
     const { username, password, email, name, role, phoneNumber } = req.body;
     if (!username || !password || !email || !name || !role || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
     }
-    const hashedPassword = await authService.hashPassword(password);
+    const hashedPassword= await authService.hashPassword(password);
     const user = await db.insert(users).values({
       username, password: hashedPassword, email, name, role,phoneNumber
     } as typeof users.$inferInsert).returning();
@@ -992,7 +1008,7 @@ apiRouter.post("/auth/register", async (req: RequestWithUser, res: Response, nex
   }
 });
 
-apiRouter.get("/rewards/transactions", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/transactions", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Authentication required' });}
@@ -1004,7 +1020,7 @@ apiRouter.get("/rewards/transactions", async (req: RequestWithUser, res: Respons
   }
 });
 
-apiRouter.get("/rewards/calculate", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/calculate", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { type, amount } = req.query;
 
@@ -1049,7 +1065,7 @@ apiRouter.get("/rewards/calculate", async (req: RequestWithUser, res: Response, 
   }
 });
 
-apiRouter.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const amount = parseFloat(req.query.amount as string);
     const type = req.query.type as string;
@@ -1108,7 +1124,7 @@ interface PlaidContractUpdate {
   lastPaymentStatus?: string | null;
 }
 
-apiRouter.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
     const updates: Partial<typeof contracts.$inferInsert> = {};
@@ -1133,7 +1149,7 @@ apiRouter.patch("/contracts/:id", async (req: RequestWithUser, res: Response, ne
   }
 });
 
-apiRouter.post("/plaid/process-payment", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/process-payment", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { public_token, account_id, amount, contractId, requireAchVerification } = req.body;
 
@@ -1191,7 +1207,7 @@ apiRouter.post("/plaid/process-payment", async (req: RequestWithUser, res: Respo
   }
 });
 
-apiRouter.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { transferId } = req.params;
 
@@ -1229,7 +1245,7 @@ apiRouter.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, 
   }
 });
 
-apiRouter.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { contractId, amounts } = req.body;
 
@@ -1263,7 +1279,7 @@ apiRouter.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res:
   }
 });
 
-apiRouter.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
       return res.status(400).json({
@@ -1283,7 +1299,7 @@ apiRouter.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: R
   }
 });
 
-apiRouter.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     ledgerManager.stopSweeps();
     res.json({
@@ -1296,7 +1312,7 @@ apiRouter.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Re
   }
 });
 
-apiRouter.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { type, amount } = req.body;
 
@@ -1329,7 +1345,7 @@ apiRouter.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: R
   }
 });
 
-apiRouter.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
       return res.status(400).json({
@@ -1349,7 +1365,7 @@ apiRouter.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Respons
   }
 });
 
-apiRouter.post("/plaid/create-link-token", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1370,13 +1386,13 @@ apiRouter.post("/plaid/create-link-token", async (req: RequestWithUser, res: Res
 });
 
 // Mount API router with prefix
-app.use('/api', apiRouter);
+//app.use('/api', apiRouter);  //This line is removed as it's handled differently in the edited code.
+
 
 // Create HTTP server
-const server = createServer(app);
+//const server = createServer(app); //This line is removed as it's handled differently in the edited code.
 
-return server;
-}
+//return server; //This line is removed as it's handled differently in the edited code.
 
 // Helper function declarations
 async function generateVerificationToken(): Promise<string> {
@@ -1437,3 +1453,5 @@ export interface DiditWebhookPayload {
 }
 
 export type UserRole = 'admin' | 'merchant' | 'customer';
+
+export default router;
