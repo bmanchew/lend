@@ -107,13 +107,23 @@ const startServer = async () => {
       });
     });
 
-    // Find available port
+    // Find available port starting from 3001
     const port = await portfinder.getPortPromise({ 
-      port: process.env.PORT ? parseInt(process.env.PORT) : 3000 
+      port: 3001,
+      stopPort: 3999
     });
 
-    // Wait for port to be available before starting
-    await waitForPort(port);
+    // Handle cleanup on termination signals
+    const cleanup = () => {
+      logger.info('Received termination signal');
+      httpServer.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', cleanup);
+    process.on('SIGINT', cleanup);
 
     // Start server
     const server = httpServer.listen(port, "0.0.0.0", () => {
