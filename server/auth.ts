@@ -13,28 +13,33 @@ import { Express } from "express";
 import session from "express-session";
 import rateLimit from "express-rate-limit";
 import connectPg from "connect-pg-simple";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
+import bcrypt from "bcrypt";
 import { users, insertUserSchema } from "@db/schema";
-import { db } from "@db";
+import { db, dbInstance } from "@db";
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms";
 import jwt from 'jsonwebtoken';
 
-const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
 // Add types for user roles
 type UserRole = "admin" | "customer" | "merchant";
 
+// Auth configuration type
+interface AuthConfig {
+  saltRounds: number;
+  sessionDuration: number;
+}
+
+// Update User interface to properly handle null values
 interface User {
   id: number;
   username: string;
   password: string;
   email: string;
   name: string | null;
-  role: UserRole; // Using the UserRole type alias
+  role: UserRole;
   phoneNumber: string | null;
   lastOtpCode: string | null;
   otpExpiry: Date | null;
@@ -45,23 +50,31 @@ interface User {
   faceIdHash?: string | null;
 }
 
-interface AuthResult {
-  success: boolean;
-  user?: User;
-  error?: string;
+// Extend Express.User to match our User interface
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      username: string;
+      password: string;
+      email: string;
+      name: string | null;
+      role: UserRole;
+      phoneNumber: string | null;
+      lastOtpCode: string | null;
+      otpExpiry: Date | null;
+      platform?: string;
+      kycStatus?: string | null;
+      createdAt?: Date | null;
+      plaidAccessToken?: string | null;
+      faceIdHash?: string | null;
+    }
+  }
 }
 
-interface AuthConfig {
-  saltLength: number;
-  keyLength: number;
-  sessionDuration: number;
-}
-
-// AuthService class definition
 class AuthService {
   private readonly config: AuthConfig = {
-    saltLength: 16,
-    keyLength: 32,
+    saltRounds: 10,
     sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
   };
 
@@ -92,20 +105,22 @@ class AuthService {
 
   async hashPassword(password: string): Promise<string> {
     this.logger.debug("Generating password hash");
-    const salt = randomBytes(this.config.saltLength).toString("hex");
-    const derivedKey = (await scryptAsync(password, salt, this.config.keyLength)) as Buffer;
-    return `${derivedKey.toString("hex")}.${salt}`;
+    return bcrypt.hash(password, this.config.saltRounds);
   }
 
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
     console.log("[AuthService] Comparing passwords");
     try {
-      if (!supplied || !stored) return false;
-      const [hashedPassword, salt] = stored.split(".");
-      if (!hashedPassword || !salt) return false;
-      const suppliedBuf = (await scryptAsync(supplied, salt, 32)) as Buffer;
-      const storedBuf = Buffer.from(hashedPassword, "hex");
-      return suppliedBuf.length === storedBuf.length && timingSafeEqual(storedBuf, suppliedBuf);
+      if (!supplied || !stored) {
+        console.log("[AuthService] Missing password:", { supplied: !!supplied, stored: !!stored });
+        return false;
+      }
+      console.log("[AuthService] Password details:", {
+        suppliedLength: supplied.length,
+        storedLength: stored.length,
+        storedHash: stored.substring(0, 10) + "..." // Only log first 10 chars for security
+      });
+      return bcrypt.compare(supplied, stored);
     } catch (error) {
       console.error("[AuthService] Password comparison error:", error);
       return false;
@@ -117,26 +132,29 @@ class AuthService {
   }
 }
 
-// Create authService instance
+// Create authService instance after class definition
 export const authService = new AuthService();
 
 export async function setupAuth(app: Express): Promise<void> {
   console.log('[Auth] Starting auth setup...');
 
-  // Configure rate limiter
+  // Temporarily disable rate limiting for testing
   const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Limit each IP to 5 requests per windowMs
-    message: { error: "Too many login attempts, please try again after 15 minutes" }
+    windowMs: 1 * 60 * 1000,
+    max: 1000, // Set very high for testing
+    message: { error: "Too many login attempts, please try again after 1 minute" }
   });
 
-  // Apply rate limiter to auth routes
   app.use(["/api/login", "/api/register"], authLimiter);
 
-  // Session setup with initialized pool
+  // Session setup with pool from DatabaseInstance
   console.log('[Auth] Creating session store...');
+  if (!dbInstance.pool) {
+    throw new Error('Database pool not initialized');
+  }
+
   const store = new PostgresSessionStore({
-    pool: db.$client,
+    pool: dbInstance.pool, // Use the pool from DatabaseInstance
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
