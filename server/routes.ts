@@ -158,18 +158,6 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       path: req.path
     });
 
-    // Get user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, username))
-      .limit(1);
-
-    if (!user) {
-      logger.info("[Auth] User not found:", username);
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
     logger.debug("[Auth] Found user:", {
       userId: user.id,
       role: user.role,
