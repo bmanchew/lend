@@ -105,20 +105,26 @@ const startServer = async () => {
     }
 
     // Initialize LedgerManager in background if Plaid is configured
-    if (process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) {
-      const ledgerConfig = {
-        minBalance: 1000,
-        maxBalance: 100000,
-        sweepThreshold: 500,
-        sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-      };
+    if (process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET && process.env.PLAID_ENV) {
+      try {
+        const ledgerConfig = {
+          minBalance: 1000,
+          maxBalance: 100000,
+          sweepThreshold: 500,
+          sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+        };
 
-      const ledgerManager = LedgerManager.getInstance(ledgerConfig);
-      ledgerManager.initializeSweeps().catch(error => {
-        logger.warn('Ledger sweeps initialization skipped:', error);
-      });
+        const ledgerManager = LedgerManager.getInstance(ledgerConfig);
+        // Make this non-blocking
+        ledgerManager.initializeSweeps().catch(error => {
+          logger.warn('Ledger sweeps initialization had issues:', error);
+        });
+      } catch (error) {
+        logger.warn('Failed to initialize ledger manager:', error);
+        // Continue server startup even if ledger manager fails
+      }
     } else {
-      logger.warn('Plaid integration not configured - ledger sweeps will be disabled');
+      logger.warn('Plaid integration not fully configured - ledger sweeps will be disabled');
     }
 
     // Add health check endpoint before starting server

@@ -45,14 +45,10 @@ export class LedgerManager {
         return;
       }
 
-      if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-        logger.warn('PLAID_SWEEP_ACCESS_TOKEN not configured - ledger sweeps will be disabled');
-        this.isInitialized = true;
-        return;
-      }
-
-      // Initial balance check
-      await this.checkAndAdjustBalance();
+      // Initial balance check - make this non-blocking
+      this.checkAndAdjustBalance().catch(error => {
+        logger.warn('Initial balance check failed:', error);
+      });
 
       // Set up periodic balance checks
       this.sweepInterval = setInterval(
@@ -129,8 +125,8 @@ export class LedgerManager {
     }
 
     try {
-      const operation = type === 'withdraw' ? 
-        PlaidService.withdrawFromLedger : 
+      const operation = type === 'withdraw' ?
+        PlaidService.withdrawFromLedger :
         PlaidService.depositToLedger;
 
       logger.info(`Initiating ${type} sweep`, {
@@ -170,8 +166,8 @@ export class LedgerManager {
       }
 
       const result = await this.executeSweep(type, amount);
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: `Manual ${type} sweep completed`,
         transferId: result?.transfer?.id
       };
