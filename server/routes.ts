@@ -264,8 +264,14 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('[SMS] OTP send error:', error);
     res.status(500).json({ error: "Failed to send OTP" });
+  } catch (error) {
+    logger.error('[SMS] OTP send error:', error);
+    res.status(500).json({ error: "Failed to send OTP" });
   }
 });
+
+router.post("/sendOTP", async (req: Request, res: Response) => {
+  try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
       return res.status(400).json({ error: "Phone number is required" });
