@@ -11,6 +11,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
+import rateLimit from "express-rate-limit";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -120,6 +121,16 @@ export const authService = new AuthService();
 
 export async function setupAuth(app: Express): Promise<void> {
   console.log('[Auth] Starting auth setup...');
+
+  // Configure rate limiter
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 requests per windowMs
+    message: { error: "Too many login attempts, please try again after 15 minutes" }
+  });
+
+  // Apply rate limiter to auth routes
+  app.use(["/api/login", "/api/register"], authLimiter);
 
   // Session setup with initialized pool
   console.log('[Auth] Creating session store...');
