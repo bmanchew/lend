@@ -80,11 +80,9 @@ class AuthService {
       phoneNumber: user.phoneNumber
     };
 
-    if (!process.env.REPL_ID) {
-      throw new Error('JWT secret (REPL_ID) is not configured');
-    }
+    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
 
-    return jwt.sign(payload, process.env.REPL_ID, {
+    return jwt.sign(payload, jwtSecret, {
       expiresIn: '30d', // Match session duration
       algorithm: 'HS256'
     });
