@@ -975,8 +975,7 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/rewards/transactions", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
+        return res.status(401).json({ error: 'Authentication required' });}
 
       const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
       res.json(transactions);
