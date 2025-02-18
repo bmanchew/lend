@@ -232,35 +232,7 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
-// Protected routes - require JWT verification
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-    const otp = smsService.generateOTP();
-    const sent = await smsService.sendOTP(phoneNumber, otp);
-
-    if (sent) {
-      // Store OTP in user record
-      await db.update(users)
-        .set({
-          lastOtpCode: otp,
-          otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-        })
-        .where(eq(users.phoneNumber, phoneNumber));
-
-      res.json({ message: "OTP sent successfully" });
-    } else {
-      res.status(500).json({ error: "Failed to send OTP" });
-    }
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+// OTP endpoint is already defined above
 
 // Protected routes - require JWT verification  
 router.use(verifyJWT);
@@ -908,7 +880,7 @@ router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser,
       processedAt: null
     } as typeof webhookEvents.$inferInsert);
 
-    
+
 
 // Send SMS with enhanced error handling
     const smsResult = await smsService.sendLoanApplicationLink(
@@ -1023,7 +995,7 @@ router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next
     res.json({ token });
 
   } catch (err) {
-    next(err);
+    nexterr);
   }
 });
 
@@ -1446,15 +1418,6 @@ router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Respon
     next(err);
   }
 });
-
-// Mount API router with prefix
-//app.use('/api', apiRouter);  //This line is removed as it's handled differently in the edited code.
-
-
-// Create HTTP server
-//const server = createServer(app); //This line is removed as it's handled differently in the edited code.
-
-//return server; //This line is removed as it's handled differently in the edited code.
 
 // Helper function declarations
 async function generateVerificationToken(): Promise<string> {
