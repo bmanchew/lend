@@ -197,13 +197,10 @@ export async function setupAuth(app: Express): Promise<void> {
           console.log("[Auth] Comparing passwords for user:", username);
           const isValid = await authService.comparePasswords(password, userRecord.password);
 
-          console.log("[Auth] Password comparison result:", {
-            isValid,
-            passwordProvided: !!password,
-            hashedPasswordExists: !!userRecord.password,
-            passwordLength: password.length,
-            storedHashLength: userRecord.password.length,
-            storedHashPrefix: userRecord.password.substring(0, 10) + "..."
+          console.log("[Auth] Password verification details:", {
+            providedPassword: password ? "exists" : "missing",
+            storedHash: userRecord.password ? userRecord.password.substring(0, 10) + "..." : "missing",
+            isValid
           });
 
           if (!isValid) {
