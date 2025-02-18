@@ -17,6 +17,7 @@ import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
 import type { LoginData, JWTPayload, User } from '@/types';
+import { asyncHandler } from './lib/async-handler';
 
 // Initialize LedgerManager singleton
 const ledgerManager = LedgerManager.getInstance({
@@ -109,268 +110,130 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
   }
 };
 
+// Public route for sending OTP - moved before JWT verification
+router.post("/sendOTP", asyncHandler(async (req: Request, res: Response) => {
+  const { phoneNumber } = req.body;
+  if (!phoneNumber) {
+    return res.status(400).json({ error: "Phone number is required" });
+  }
+
+  logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
+
+  // Format phone number consistently
+  const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
+
+  // Create user if doesn't exist
+  let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
+
+  if (!user) {
+    [user] = await db.insert(users)
+      .values({
+        phoneNumber: formattedPhone,
+        role: 'customer',
+        username: formattedPhone,
+        password: '',
+        email: '',
+        name: ''
+      } as typeof users.$inferInsert)
+      .returning();
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
+
+  await db.update(users)
+    .set({
+      lastOtpCode: otp,
+      otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    })
+    .where(eq(users.phoneNumber, formattedPhone));
+
+  return res.json({ message: "OTP sent successfully" });
+}));
+
 // Auth routes - no JWT verification needed for these
-router.post("/auth/login", async (req: Request, res: Response) => {
-  try {
-    const { username, password, loginType } = req.body as LoginData;
+router.post("/auth/login", asyncHandler(async (req: Request, res: Response) => {
+  const { username, password, loginType } = req.body as LoginData;
 
-    logger.debug("[Auth] Login attempt details:", {
-      username,
-      loginType,
-      hasPassword: !!password,
-      timestamp: new Date().toISOString()
-    });
+  logger.debug("[Auth] Login attempt details:", {
+    username,
+    loginType,
+    hasPassword: !!password,
+    timestamp: new Date().toISOString()
+  });
 
-    if (!username || !password) {
-      logger.info("[Auth] Missing credentials:", { username });
-      return res.status(400).json({ error: "Username and password are required" });
-    }
+  if (!username || !password) {
+    logger.info("[Auth] Missing credentials:", { username });
+    return res.status(400).json({ error: "Username and password are required" });
+  }
 
-    // Get user from database with role check
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(
-        and(
-          eq(users.username, username),
-          eq(users.role, loginType)
-        )
+  // Get user from database with role check
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.username, username),
+        eq(users.role, loginType)
       )
-      .limit(1);
+    )
+    .limit(1);
 
-    if (!user) {
-      logger.info("[Auth] User not found or invalid role:", { username, loginType });
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    logger.debug("[Auth] Found user:", {
-      userId: user.id,
-      role: user.role,
-      hasStoredPassword: !!user.password,
-      timestamp: new Date().toISOString()
-    });
-
-    logger.debug("[Auth] Login attempt details:", {
-      username,
-      loginType,
-      requestHeaders: req.headers,
-      timestamp: new Date().toISOString(),
-      path: req.path
-    });
-
-    logger.debug("[Auth] Found user:", {
-      userId: user.id,
-      role: user.role,
-      hasPassword: !!user.password,
-      timestamp: new Date().toISOString()
-    });
-
-    // Verify password using authService
-    const isValid = await authService.comparePasswords(password, user.password);
-
-    if (!isValid) {
-      logger.info("[Auth] Invalid password for user:", username);
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Check if loginType matches user role
-    if (loginType !== user.role) {
-      logger.info("[Auth] Role mismatch:", { 
-        expected: loginType, 
-        actual: user.role,
-        username,
-        timestamp: new Date().toISOString()
-      });
-      return res.status(403).json({ 
-        error: `This login is for ${loginType} accounts only.`
-      });
-    }
-
-    // Generate JWT token
-    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
-    const token = jwt.sign({
-      id: user.id,
-      role: user.role,
-      name: user.name || undefined,
-      email: user.email,
-      phoneNumber: user.phoneNumber || undefined
-    } as JWTPayload, jwtSecret);
-
-    logger.info("[Auth] Login successful:", {
-      userId: user.id,
-      role: user.role,
-      timestamp: new Date().toISOString()
-    });
-
-    // Return response
-    res.json({
-      token,
-      id: user.id,
-      role: user.role,
-      name: user.name,
-      email: user.email,
-      username: user.username
-    });
-  } catch (err) {
-    logger.error("[Auth] Login error:", err);
-    res.status(500).json({ error: "Internal server error during login" });
+  if (!user) {
+    logger.info("[Auth] User not found or invalid role:", { username, loginType });
+    return res.status(401).json({ error: "Invalid credentials" });
   }
-});
 
-// Public route for sending OTP
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
+  // Verify password using authService
+  const isValid = await authService.comparePasswords(password, user.password);
 
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-
-    // Format phone number consistently
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-
-    // Create user if doesn't exist
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
-
-    await db.update(users)
-      .set({
-        lastOtpCode: otp,
-        otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-      })
-      .where(eq(users.phoneNumber, formattedPhone));
-
-    res.json({ message: "OTP sent successfully" });
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Failed to send OTP" });
+  if (!isValid) {
+    logger.info("[Auth] Invalid password for user:", username);
+    return res.status(401).json({ error: "Invalid credentials" });
   }
-});
+
+  // Generate JWT token
+  const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+  const token = jwt.sign({
+    id: user.id,
+    role: user.role,
+    name: user.name || undefined,
+    email: user.email,
+    phoneNumber: user.phoneNumber || undefined
+  } as JWTPayload, jwtSecret);
+
+  logger.info("[Auth] Login successful:", {
+    userId: user.id,
+    role: user.role,
+    timestamp: new Date().toISOString()
+  });
+
+  return res.json({
+    token,
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    email: user.email,
+    username: user.username
+  });
+}));
 
 // Register core middleware
 router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
-// Public routes that don't need authentication
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-
-    // Format phone number consistently
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-
-    // Create user if doesn't exist
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
-
-    await db.update(users)
-      .set({
-        lastOtpCode: otp,
-        otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-      })
-      .where(eq(users.phoneNumber, formattedPhone));
-
-    res.json({ message: "OTP sent successfully" });
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Failed to send OTP" });
-  }
-});
-
-// Public routes
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
-
-    await db.update(users)
-      .set({
-        lastOtpCode: otp,
-        otpExpiry: new Date(Date.now() + 10 * 60 * 1000)
-      })
-      .where(eq(users.phoneNumber, formattedPhone));
-
-    res.json({ message: "OTP sent successfully" });
-  } catch (error) {
-    logger.error('[SMS] Failed to send OTP:', error);
-    res.status(500).json({ error: "Failed to send OTP" });
-  }
-});
-
 // Protected routes below
 router.use(verifyJWT);
 
-// Protected routes below
-router.get("/auth/me", async (req: RequestWithUser, res: Response) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    res.json(req.user);
-  } catch (err) {
-    logger.error("Error in /auth/me:", err);
-    res.status(500).json({ error: "Internal server error" });
+// Auth check route
+router.get("/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
-});
+  return res.json(req.user);
+}));
 
-router.post("/contracts/:id/status",  async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -402,13 +265,13 @@ router.post("/contracts/:id/status",  async (req: RequestWithUser, res: Response
       await ledgerManager.manualSweep('deposit', updatedContract.amount);
     }
 
-    res.json(updatedContract);
+    return res.json(updatedContract);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
     if (isNaN(userId)) {
@@ -420,114 +283,90 @@ router.get("/customers/:id/contracts", async (req: RequestWithUser, res: Respons
       .orderBy(desc(contracts.createdAt));
 
     logger.info("Found contracts for customer:", customerContracts);
-    res.json(customerContracts);
+    return res.json(customerContracts);
   } catch (err: any) {
     logger.error("Error fetching customer contracts:", err);
     next(err);
   }
-});
+}));
 
-router.post("/test-verification-email", async (req: RequestWithUser, res: Response) => {
-  try {
-    logger.info('Received test email request:', req.body);
-    const testEmail = req.body.email;
+router.post("/test-verification-email", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  logger.info('Received test email request:', req.body);
+  const testEmail = req.body.email;
 
-    if (!testEmail) {
-      return res.status(400).json({
-        status: "error",
-        message: "Email address is required"
-      });
-    }
+  if (!testEmail) {
+    return res.status(400).json({
+      status: "error",
+      message: "Email address is required"
+    });
+  }
 
-    if (!process.env.SENDGRID_API_KEY) {
-      return res.status(500).json({
-        status: "error",
-        message: "SendGrid API key is not configured"
-      });
-    }
-
-    logger.info('Generating verification token for:', testEmail);
-    const token = await generateVerificationToken();
-
-    logger.info('Attempting to send verification email to:', testEmail);
-    const sent = await sendVerificationEmail(testEmail, token);
-
-    if (sent) {
-      logger.info('Email sent successfully to:', testEmail);
-      return res.json({
-        status: "success",
-        message: "Verification email sent successfully"
-      });
-    } else {
-      logger.error('Failed to send email to:', testEmail);
-      return res.status(500).json({
-        status: "error",
-        message: "Failed to send verification email"
-      });
-    }
-  } catch (err: any) {
-    logger.error('Test verification email error:', err);
+  if (!process.env.SENDGRID_API_KEY) {
     return res.status(500).json({
       status: "error",
-      message: err.message || "Failed to send test email"
+      message: "SendGrid API key is not configured"
     });
   }
-});
 
-router.get("/verify-sendgrid", async (req: RequestWithUser, res: Response) => {
-  try {
-    const apiKey = process.env.SENDGRID_API_KEY;
-    if (!apiKey || !apiKey.startsWith('SG.')) {
-      return res.status(500).json({
-        status: "error",
-        message: "Invalid or missing SendGrid API key."
-      });
-    }
-    const isConnected = await testSendGridConnection();
-    if (isConnected) {
-      res.json({
-        status: "success",
-        message: "SendGrid setup verified successfully."
-      });
-    } else {
-      res.status(500).json({
-        status: "error",
-        message: "SendGrid setup verification failed. Check API key and connection."
-      });
-    }
-  } catch (err: any) {
-    logger.error('SendGrid verification error:', err);
-    res.status(500).json({
+  logger.info('Generating verification token for:', testEmail);
+  const token = await generateVerificationToken();
+
+  logger.info('Attempting to send verification email to:', testEmail);
+  const sent = await sendVerificationEmail(testEmail, token);
+
+  if (sent) {
+    logger.info('Email sent successfully to:', testEmail);
+    return res.json({
+      status: "success",
+      message: "Verification email sent successfully"
+    });
+  } else {
+    logger.error('Failed to send email to:', testEmail);
+    return res.status(500).json({
       status: "error",
-      message: err.message || "SendGrid verification failed"
+      message: "Failed to send verification email"
     });
   }
-});
+}));
 
-router.get("/test-email", async (req: RequestWithUser, res: Response) => {
-  try {
-    const isConnected = await testSendGridConnection();
-    if (isConnected) {
-      res.json({
-        status: "success",
-        message: "SendGrid connection successful"
-      });
-    } else {
-      res.status(500).json({
-        status: "error",
-        message: "SendGrid connection failed. See logs for details."
-      });
-    }
-  } catch (err: any) {
-    logger.error('SendGrid test error:', err);
-    res.status(500).json({
+router.get("/verify-sendgrid", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey || !apiKey.startsWith('SG.')) {
+    return res.status(500).json({
       status: "error",
-      message: err.message || "SendGrid test failed"
+      message: "Invalid or missing SendGrid API key."
     });
   }
-});
+  const isConnected = await testSendGridConnection();
+  if (isConnected) {
+    return res.json({
+      status: "success",
+      message: "SendGrid setup verified successfully."
+    });
+  } else {
+    return res.status(500).json({
+      status: "error",
+      message: "SendGrid setup verification failed. Check API key and connection."
+    });
+  }
+}));
 
-router.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/test-email", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const isConnected = await testSendGridConnection();
+  if (isConnected) {
+    return res.json({
+      status: "success",
+      message: "SendGrid connection successful"
+    });
+  } else {
+    return res.status(500).json({
+      status: "error",
+      message: "SendGrid connection failed. See logs for details."
+    });
+  }
+}));
+
+router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = parseInt(req.params.userId);
     logger.info("[Merchant Lookup] Attempting to find merchant for userId:", userId);
@@ -554,14 +393,14 @@ router.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Respo
     }
 
     logger.info("Found merchant:", merchant);
-    res.json(merchant);
+    return res.json(merchant);
   } catch (err: any) {
     logger.error("Error fetching merchant by user:", err);
     next(err);
   }
-});
+}));
 
-router.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/contracts", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const merchantContracts = await db.query.contracts.findMany({
       where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -569,94 +408,89 @@ router.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Respons
         customer: true,
       },
     });
-    res.json(merchantContracts);
+    return res.json(merchantContracts);
   } catch (err: any) {
     logger.error("Error fetching merchant contracts:", err);
     next(err);
   }
-});
+}));
 
-router.post("/merchants/create", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    logger.info("[Merchant Creation] Received request:", {
-      body: req.body,
-      timestamp: new Date().toISOString()
-    });
+router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  logger.info("[Merchant Creation] Received request:", {
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
 
-    const { companyName, email, phoneNumber, address, website } = req.body;
-    const tempPassword = Math.random().toString(36).slice(-8);
+  const { companyName, email, phoneNumber, address, website } = req.body;
+  const tempPassword = Math.random().toString(36).slice(-8);
 
-    // Validate required fields
-    if (!email || !companyName) {
-      logger.error("[Merchant Creation] Missing required fields");
-      return res.status(400).json({ error: 'Email and company name are required' });
-    }
-
-    // Check for existing user first
-    logger.info("[Merchant Creation] Checking for existing user with email:", email);
-    const existingUser = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    let merchantUser;
-    if (existingUser.length > 0) {
-      // Update existing user to merchant role
-      [merchantUser] = await db
-        .update(users)
-        .set({ role: 'merchant' })
-        .where(eq(users.id, existingUser[0].id))
-        .returning();
-      logger.info("[Merchant Creation] Updated existing user to merchant:", merchantUser);
-    } else {
-
-      logger.info("[Merchant Creation] Generated temporary password");
-      const hashedPassword = await authService.hashPassword(tempPassword);
-
-      logger.info("[Merchant Creation] Creating new merchant user account");
-      [merchantUser] = await db
-        .insert(users)
-        .values({
-          username: email,
-          password: hashedPassword,
-          email,
-          name: companyName,
-          role: 'merchant',
-          phoneNumber
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    logger.info("[Merchant Creation] Created merchant user:", {
-      id: merchantUser.id,
-      email: merchantUser.email,
-      role: merchantUser.role
-    });
-
-    // Create merchant record
-    const [merchant] = await db
-      .insert(merchants)
-      .values({
-        userId: merchantUser.id,
-        companyName,
-        address,
-        website,
-        status: 'active'
-      } as typeof merchants.$inferInsert)
-      .returning();
-
-    // Send login credentials via email
-    await sendMerchantCredentials(email, email, tempPassword);
-
-    res.status(201).json({ merchant, user: merchantUser });
-  } catch (err) {
-    logger.error("Error creating merchant:", err);
-    next(err);
+  // Validate required fields
+  if (!email || !companyName) {
+    logger.error("[Merchant Creation] Missing required fields");
+    return res.status(400).json({ error: 'Email and company name are required' });
   }
-});
 
-router.get("/merchants", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  // Check for existing user first
+  logger.info("[Merchant Creation] Checking for existing user with email:", email);
+  const existingUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  let merchantUser;
+  if (existingUser.length > 0) {
+    // Update existing user to merchant role
+    [merchantUser] = await db
+      .update(users)
+      .set({ role: 'merchant' })
+      .where(eq(users.id, existingUser[0].id))
+      .returning();
+    logger.info("[Merchant Creation] Updated existing user to merchant:", merchantUser);
+  } else {
+
+    logger.info("[Merchant Creation] Generated temporary password");
+    const hashedPassword = await authService.hashPassword(tempPassword);
+
+    logger.info("[Merchant Creation] Creating new merchant user account");
+    [merchantUser] = await db
+      .insert(users)
+      .values({
+        username: email,
+        password: hashedPassword,
+        email,
+        name: companyName,
+        role: 'merchant',
+        phoneNumber
+      } as typeof users.$inferInsert)
+      .returning();
+  }
+
+  logger.info("[Merchant Creation] Created merchant user:", {
+    id: merchantUser.id,
+    email: merchantUser.email,
+    role: merchantUser.role
+  });
+
+  // Create merchant record
+  const [merchant] = await db
+    .insert(merchants)
+    .values({
+      userId: merchantUser.id,
+      companyName,
+      address,
+      website,
+      status: 'active'
+    } as typeof merchants.$inferInsert)
+    .returning();
+
+  // Send login credentials via email
+  await sendMerchantCredentials(email, email, tempPassword);
+
+  return res.status(201).json({ merchant, user: merchantUser });
+}));
+
+router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response) => {
   logger.info("[Merchants] Fetching all merchants");
   try {
     const allMerchants = await db
@@ -685,48 +519,43 @@ router.get("/merchants", async (req: RequestWithUser, res: Response, next: NextF
 
     const merchantsWithPrograms = Array.from(merchantsMap.values());
 
-    res.json(merchantsWithPrograms);
+    return res.json(merchantsWithPrograms);
   } catch (err: any) {
     logger.error("Error fetching all merchants:", err);
     next(err);
   }
-});
+}));
 
-router.post("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    logger.info("[Programs] Creating new program:", req.body);
-    const { name, term, interestRate } = req.body;
-    const merchantId = parseInt(req.params.id);
+router.post("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  logger.info("[Programs] Creating new program:", req.body);
+  const { name, term, interestRate } = req.body;
+  const merchantId = parseInt(req.params.id);
 
-    const [program] = await db.insert(programs).values({
-      merchantId,
-      name,
-      term,
-      interestRate,
-    } as typeof programs.$inferInsert).returning();
+  const [program] = await db.insert(programs).values({
+    merchantId,
+    name,
+    term,
+    interestRate,
+  } as typeof programs.$inferInsert).returning();
 
-    res.json(program);
-  } catch (err: any) {
-    logger.error("Error creating program:", err);
-    next(err);
-  }
-});
+  return res.json(program);
+}));
 
-router.get("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const merchantId = parseInt(req.params.id);
     const merchantPrograms = await db
       .select()
       .from(programs)
       .where(eq(programs.merchantId, merchantId));
-    res.json(merchantPrograms);
+    return res.json(merchantPrograms);
   } catch (err: any) {
     logger.error("Error fetching merchant programs:", err);
     next(err);
   }
-});
+}));
 
-router.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/contracts", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { status, merchantId } = req.query;
 
@@ -758,14 +587,14 @@ router.get("/contracts", async (req: RequestWithUser, res: Response, next: NextF
     const allContracts = await query.orderBy(desc(contracts.createdAt));
 
     logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length });
-    res.json(allContracts);
+    return res.json(allContracts);
   } catch (err) {
     logger.error("[Routes] Error fetching contracts:", err);
     next(err);
   }
-});
+}));
 
-router.post("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const {
       merchantId,
@@ -843,14 +672,14 @@ router.post("/contracts", async (req: RequestWithUser, res: Response, next: Next
       status: 'pending_review'
     });
 
-    res.json(newContract);
+    return res.json(newContract);
   } catch (err) {
     logger.error("[Routes] Error creating contract:", err);
     next(err);
   }
-});
+}));
 
-router.post("/webhooks/process", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/webhooks/process", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { eventType, sessionId, payload } = req.body;
 
@@ -864,13 +693,13 @@ router.post("/webhooks/process", async (req: RequestWithUser, res: Response, nex
       processedAt: null
     } as typeof webhookEvents.$inferInsert);
 
-    res.json({ status: 'success' });
+    return res.json({ status: 'success' });
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get("/rewards/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/balance", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -883,16 +712,16 @@ router.get("/rewards/balance", async (req: RequestWithUser, res: Response, next:
       .where(eq(rewardsBalances.userId, req.user.id))
       .limit(1);
 
-    res.json({
+    return res.json({
       balance: balance,
       lifetimeEarned: balanceData?.lifetimeEarned || 0
     });
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: RequestWithUser, res: Response) => {
   const requestId = Date.now().toString(36);
   const debugLog = (message: string, data?: any) => {
     logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
@@ -1002,8 +831,7 @@ router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser,
     } as typeof webhookEvents.$inferInsert);
 
 
-
-// Send SMS with enhanced error handling
+    // Send SMS with enhanced error handling
     const smsResult = await smsService.sendLoanApplicationLink(
       formattedPhone,
       applicationUrl,
@@ -1080,12 +908,13 @@ router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser,
 
     next(error);
   }
-});
+}));
 
-router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/auth/verify-otp", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { phoneNumber, otp } = req.body;
-    if (!phoneNumber || !otp) {      return res.status(400).json({ error: "Phone number and OTP are required" });
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
     }
 
     const [user] = await db
@@ -1112,25 +941,25 @@ router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next
       phoneNumber: user.phoneNumber || ''
     });
 
-    res.json({ token });
+    return res.json({ token });
 
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    res.json(req.user);
+    return res.json(req.user);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/auth/logout", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -1139,42 +968,51 @@ router.post("/auth/logout", async (req: RequestWithUser, res: Response, next: Ne
       if (err) {
         next(err);
       } else {
-        res.json({ success: true });
+        return res.json({ success: true });
       }
     });
   } catch (err) {
     next(err);
   }
-});
-router.post("/auth/register", async (req: RequestWithUser, res: Response, nextFunction) => {
+}));
+
+router.post("/auth/register", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { username, password, email, name, role, phoneNumber } = req.body;
     if (!username || !password || !email || !name || !role || !phoneNumber) {
       return res.status(400).json({ error: "All fields are required" });
     }
-    const hashedPassword= await authService.hashPassword(password);
-    const user = await db.insert(users).values({
-      username, password: hashedPassword, email, name, role,phoneNumber
+    const hashedPassword = await authService.hashPassword(password);
+
+    const [user] = await db.insert(users).values({
+      username, 
+      password: hashedPassword, 
+      email, 
+      name, 
+      role, 
+      phoneNumber
     } as typeof users.$inferInsert).returning();
-    res.json(user);
-  } catch(err) {
-    next(err);
-  }
-});
 
-router.get("/rewards/transactions", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    if (!req.user?.id) {
-      return res.status(401).json({ error: 'Authentication required' });}
-
-    const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
-    res.json(transactions);
+    return res.json(user);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get("/rewards/calculate", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/transactions", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
+    return res.json(transactions);
+  } catch (err) {
+    next(err);
+  }
+}));
+
+router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { type, amount } = req.query;
 
@@ -1208,7 +1046,7 @@ router.get("/rewards/calculate", async (req: RequestWithUser, res: Response, nex
         return res.status(400).json({ error: 'Invalid reward type' });
     }
 
-    res.json({
+    return res.json({
       totalPoints,
       details,
       type,
@@ -1217,9 +1055,9 @@ router.get("/rewards/calculate", async (req: RequestWithUser, res: Response, nex
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const amount = parseFloat(req.query.amount as string);
     const type = req.query.type as string;
@@ -1229,11 +1067,11 @@ router.get("/rewards/potential", async (req: RequestWithUser, res: Response, nex
     }
 
     let totalPoints = 0;
-    const details: Record<string, any> = {}; // Fix letdetails typo
+    const details: Record<string, any> = {}; 
 
     switch (type) {
       case 'down_payment':
-        totalPoints = Math.floor(amount / 10); // Basic reward for down payment
+        totalPoints = Math.floor(amount / 10); 
         details.basePoints = totalPoints;
         break;
 
@@ -1257,7 +1095,7 @@ router.get("/rewards/potential", async (req: RequestWithUser, res: Response, nex
         return res.status(400).json({ error: 'Invalid reward type' });
     }
 
-    res.json({
+    return res.json({
       points: totalPoints,
       details,
       type,
@@ -1266,7 +1104,7 @@ router.get("/rewards/potential", async (req: RequestWithUser, res: Response, nex
   } catch (err) {
     next(err);
   }
-});
+}));
 
 // Update PlaidContractUpdate interface to match schema
 interface PlaidContractUpdate {
@@ -1278,7 +1116,7 @@ interface PlaidContractUpdate {
   lastPaymentStatus?: string | null;
 }
 
-router.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const contractId = parseInt(req.params.id);
     const updates: Partial<typeof contracts.$inferInsert> = {};
@@ -1297,13 +1135,13 @@ router.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next:
       .where(eq(contracts.id, contractId))
       .returning();
 
-    res.json(updatedContract);
+    return res.json(updatedContract);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.post("/plaid/process-payment", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/process-payment", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { public_token, account_id, amount, contractId, requireAchVerification } = req.body;
 
@@ -1350,7 +1188,7 @@ router.post("/plaid/process-payment", async (req: RequestWithUser, res: Response
       })
       .where(eq(contracts.id, contractId));
 
-    res.json({
+    return res.json({
       status: transfer.status,
       transferId: transfer.id
     });
@@ -1359,9 +1197,9 @@ router.post("/plaid/process-payment", async (req: RequestWithUser, res: Response
     logger.error('Error processing Plaid payment:', err);
     next(err);
   }
-});
+}));
 
-router.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/plaid/payment-status/:transferId", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { transferId } = req.params;
 
@@ -1387,7 +1225,7 @@ router.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res
       .set({ lastPaymentStatus: transfer.status })
       .where(eq(contracts.id, contract.id));
 
-    res.json({
+    return res.json({
       status: transfer.status,
       achConfirmationRequired,
       achConfirmed
@@ -1397,9 +1235,9 @@ router.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res
     logger.error('Error checking payment status:', err);
     next(err);
   }
-});
+}));
 
-router.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/verify-micro-deposits", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { contractId, amounts } = req.body;
 
@@ -1425,15 +1263,15 @@ router.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res: Re
       .set({ ach_verification_status: 'verified' })
       .where(eq(contracts.id, contractId));
 
-    res.json({ status: 'success', message: 'ACH verification completed' });
+    return res.json({ status: 'success', message: 'ACH verification completed' });
 
   } catch (err) {
     logger.error('Error verifying micro-deposits:', err);
     next(err);
   }
-});
+}));
 
-router.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/start-sweeps", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
       return res.status(400).json({
@@ -1443,7 +1281,7 @@ router.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Resp
     }
 
     await ledgerManager.initializeSweeps();
-    res.json({
+    return res.json({
       status: 'success',
       message: 'Ledger sweep monitoring started'
     });
@@ -1451,12 +1289,12 @@ router.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Resp
     logger.error('Failed to start sweeps:', error);
     next(error);
   }
-});
+}));
 
-router.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/stop-sweeps", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     ledgerManager.stopSweeps();
-    res.json({
+    return res.json({
       status: 'success',
       message: 'Ledger sweep monitoring stopped'
     });
@@ -1464,9 +1302,9 @@ router.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Respo
     logger.error('Failed to stop sweeps:', error);
     next(error);
   }
-});
+}));
 
-router.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/ledger/manual-sweep", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const { type, amount } = req.body;
 
@@ -1492,14 +1330,14 @@ router.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: Resp
     }
 
     const result = await ledgerManager.manualSweep(type, amount.toString());
-    res.json(result);
+    return res.json(result);
   } catch (error: any) {
     logger.error('Manual sweep failed:', error);
     next(error);
   }
-});
+}));
 
-router.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/plaid/ledger/balance", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
       return res.status(400).json({
@@ -1509,7 +1347,7 @@ router.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, 
     }
 
     const balance = await PlaidService.getLedgerBalance();
-    res.json({
+    return res.json({
       status: 'success',
       data: balance
     });
@@ -1517,9 +1355,9 @@ router.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, 
     logger.error('Failed to fetch ledger balance:', error);
     next(error);
   }
-});
+}));
 
-router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.post("/plaid/create-link-token", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -1529,7 +1367,7 @@ router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Respon
     logger.info('Creating Plaid link token for user:', { userId });
     const linkToken = await PlaidService.createLinkToken(userId.toString());
 
-    res.json({
+    return res.json({
       status: 'success',
       linkToken: linkToken.link_token
     });
@@ -1537,7 +1375,7 @@ router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Respon
     logger.error('Error creating Plaid link token:', err);
     next(err);
   }
-});
+}));
 
 // Helper function declarations
 async function generateVerificationToken(): Promise<string> {
