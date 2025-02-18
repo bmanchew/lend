@@ -2,7 +2,7 @@
 declare module 'express-session' {
   interface SessionData {
     userId: number;
-    userRole: string;
+    userRole: UserRole;
     phoneNumber?: string;
   }
 }
@@ -32,43 +32,27 @@ interface AuthConfig {
   sessionDuration: number;
 }
 
-// Update User interface to properly handle null values
+// Base User interface with consistent property modifiers
 interface User {
   id: number;
   username: string;
   password: string;
   email: string;
-  name: string | null;
   role: UserRole;
+  name: string | null;
   phoneNumber: string | null;
   lastOtpCode: string | null;
   otpExpiry: Date | null;
-  platform?: string;
-  kycStatus?: string | null;
-  createdAt?: Date | null;
-  plaidAccessToken?: string | null;
-  faceIdHash?: string | null;
+  kycStatus: string | null;
+  createdAt: Date | null;
+  plaidAccessToken: string | null;
+  faceIdHash: string | null;
 }
 
-// Extend Express.User to match our User interface
+// Extend Express.User to match our User interface exactly
 declare global {
   namespace Express {
-    interface User {
-      id: number;
-      username: string;
-      password: string;
-      email: string;
-      name: string | null;
-      role: UserRole;
-      phoneNumber: string | null;
-      lastOtpCode: string | null;
-      otpExpiry: Date | null;
-      platform?: string;
-      kycStatus?: string | null;
-      createdAt?: Date | null;
-      plaidAccessToken?: string | null;
-      faceIdHash?: string | null;
-    }
+    interface User extends Omit<User, 'password'> {} // Omit password for security
   }
 }
 
@@ -98,7 +82,7 @@ class AuthService {
     const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
 
     return jwt.sign(payload, jwtSecret, {
-      expiresIn: '30d', // Match session duration
+      expiresIn: '30d',
       algorithm: 'HS256'
     });
   }
@@ -109,26 +93,25 @@ class AuthService {
   }
 
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
-    console.log("[AuthService] Comparing passwords");
+    this.logger.debug("Comparing passwords", {
+      suppliedLength: supplied?.length,
+      storedHashLength: stored?.length,
+      storedHashPrefix: stored ? stored.substring(0, 10) + "..." : null
+    });
+
     try {
       if (!supplied || !stored) {
-        console.log("[AuthService] Missing password:", { supplied: !!supplied, stored: !!stored });
+        this.logger.error("Missing password:", { supplied: !!supplied, stored: !!stored });
         return false;
       }
-      console.log("[AuthService] Password details:", {
-        suppliedLength: supplied.length,
-        storedLength: stored.length,
-        storedHash: stored.substring(0, 10) + "..." // Only log first 10 chars for security
-      });
-      return bcrypt.compare(supplied, stored);
+
+      const isMatch = await bcrypt.compare(supplied, stored);
+      this.logger.debug("Password comparison result:", { isMatch });
+      return isMatch;
     } catch (error) {
-      console.error("[AuthService] Password comparison error:", error);
+      this.logger.error("Password comparison error:", error);
       return false;
     }
-  }
-
-  async verifyPassword(supplied: string, stored: string): Promise<boolean> {
-    return this.comparePasswords(supplied, stored);
   }
 }
 
@@ -138,30 +121,24 @@ export const authService = new AuthService();
 export async function setupAuth(app: Express): Promise<void> {
   console.log('[Auth] Starting auth setup...');
 
-  // Temporarily disable rate limiting for testing
   const authLimiter = rateLimit({
     windowMs: 1 * 60 * 1000,
-    max: 1000, // Set very high for testing
+    max: 1000,
     message: { error: "Too many login attempts, please try again after 1 minute" }
   });
 
   app.use(["/api/login", "/api/register"], authLimiter);
 
-  // Session setup with pool from DatabaseInstance
-  console.log('[Auth] Creating session store...');
   if (!dbInstance.pool) {
     throw new Error('Database pool not initialized');
   }
 
   const store = new PostgresSessionStore({
-    pool: dbInstance.pool, // Use the pool from DatabaseInstance
+    pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
-  console.log('[Auth] Session store created');
 
-  // Session middleware setup
-  console.log('[Auth] Setting up session middleware');
   app.use(
     session({
       store,
@@ -170,29 +147,13 @@ export async function setupAuth(app: Express): Promise<void> {
       saveUninitialized: false,
       cookie: {
         secure: app.get("env") === "production",
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       },
     })
   );
-  console.log('[Auth] Session middleware configured');
 
-  // Passport initialization
-  console.log('[Auth] Initializing Passport...');
   app.use(passport.initialize());
   app.use(passport.session());
-  console.log('[Auth] Passport initialized');
-
-  // Add header validation middleware
-  app.use((req, res, next) => {
-    if (req.user) {
-      console.log('[Auth] Setting user headers for request');
-      const user = req.user as User;
-      req.headers['x-replit-user-id'] = user.id.toString();
-      req.headers['x-replit-user-name'] = user.username;
-      req.headers['x-replit-user-roles'] = user.role;
-    }
-    next();
-  });
 
   passport.use(
     new LocalStrategy({
@@ -203,12 +164,11 @@ export async function setupAuth(app: Express): Promise<void> {
       console.log("[Auth] Login attempt:", {
         username,
         loginType: req.body.loginType,
-        timestamp: new Date().toISOString(),
-        userAgent: req.headers['user-agent']
+        timestamp: new Date().toISOString()
       });
 
       try {
-        const loginType = req.body.loginType || 'customer';
+        const loginType = req.body.loginType as UserRole || 'customer';
 
         if (!username || !password) {
           console.log("[Auth] Missing credentials:", { username: !!username, password: !!password });
@@ -224,7 +184,9 @@ export async function setupAuth(app: Express): Promise<void> {
           console.log("[Auth] User record found:", {
             found: !!userRecord,
             role: userRecord?.role,
-            expectedRole: loginType
+            expectedRole: loginType,
+            username: userRecord?.username,
+            passwordHash: userRecord?.password ? userRecord.password.substring(0, 10) + "..." : null
           });
 
           if (!userRecord || userRecord.role !== loginType) {
@@ -232,16 +194,28 @@ export async function setupAuth(app: Express): Promise<void> {
             return done(null, false, { message: "Invalid credentials" });
           }
 
+          console.log("[Auth] Comparing passwords for user:", username);
           const isValid = await authService.comparePasswords(password, userRecord.password);
+
           console.log("[Auth] Password comparison result:", {
             isValid,
             passwordProvided: !!password,
-            hashedPasswordExists: !!userRecord.password
+            hashedPasswordExists: !!userRecord.password,
+            passwordLength: password.length,
+            storedHashLength: userRecord.password.length,
+            storedHashPrefix: userRecord.password.substring(0, 10) + "..."
           });
 
           if (!isValid) {
             console.log("[Auth] Invalid credentials - password mismatch");
             return done(null, false, { message: "Invalid credentials" });
+          }
+
+          // Explicitly type the role as UserRole
+          const role = userRecord.role as UserRole;
+          if (!['admin', 'merchant', 'customer'].includes(role)) {
+            console.log("[Auth] Invalid role type:", role);
+            return done(null, false, { message: "Invalid user role" });
           }
 
           const user: User = {
@@ -250,7 +224,7 @@ export async function setupAuth(app: Express): Promise<void> {
             password: userRecord.password,
             email: userRecord.email,
             name: userRecord.name,
-            role: userRecord.role as UserRole,
+            role: role,
             phoneNumber: userRecord.phoneNumber,
             lastOtpCode: userRecord.lastOtpCode,
             otpExpiry: userRecord.otpExpiry,
@@ -335,10 +309,9 @@ export async function setupAuth(app: Express): Promise<void> {
     })
   );
 
-  // User serialization
+  // Serialization methods
   passport.serializeUser((user: Express.User, done) => {
-    const typedUser = user as User;
-    done(null, typedUser.id);
+    done(null, user.id);
   });
 
   passport.deserializeUser(async (id: number, done) => {
@@ -351,13 +324,17 @@ export async function setupAuth(app: Express): Promise<void> {
         return done(null, false);
       }
 
-      const user: User = {
+      const role = userRecord.role as UserRole;
+      if (!['admin', 'merchant', 'customer'].includes(role)) {
+        return done(new Error("Invalid user role"), null);
+      }
+
+      const user: Omit<User, 'password'> = {
         id: userRecord.id,
         username: userRecord.username,
-        password: userRecord.password,
         email: userRecord.email,
         name: userRecord.name,
-        role: userRecord.role as UserRole,
+        role: role,
         phoneNumber: userRecord.phoneNumber,
         lastOtpCode: userRecord.lastOtpCode,
         otpExpiry: userRecord.otpExpiry,
@@ -370,153 +347,6 @@ export async function setupAuth(app: Express): Promise<void> {
       done(null, user);
     } catch (err) {
       done(err);
-    }
-  });
-
-  // Auth routes
-  app.post("/api/register", async (req, res) => {
-    try {
-      const parsed = insertUserSchema.safeParse(req.body);
-      if (!parsed.success) {
-        const error = fromZodError(parsed.error);
-        return res.status(400).json({ message: error.message });
-      }
-
-      // First, check for existing username or email
-      const [existingUser] = await db.select().from(users)
-        .where(
-          or(
-            eq(users.username, parsed.data.username),
-            eq(users.email, parsed.data.email)
-          )
-        )
-        .limit(1);
-
-      if (existingUser) {
-        if (existingUser.username === parsed.data.username) {
-          return res.status(400).json({ message: "Username already exists" });
-        }
-        if (existingUser.email === parsed.data.email) {
-          return res.status(400).json({ message: "Email already exists" });
-        }
-      }
-
-      // If registering as admin, check if it's the first admin or if user has admin privileges
-      if (parsed.data.role === "admin") {
-        const adminCount = await db.select({ count: sql`count(*)` })
-          .from(users)
-          .where(eq(users.role, "admin"));
-
-        const isFirstAdmin = adminCount[0].count === 0;
-        const isAdminUser = req.user && (req.user as User).role === "admin";
-
-        if (!isFirstAdmin && !isAdminUser) {
-          return res.status(403).json({ message: "Only admins can create admin accounts" });
-        }
-      }
-
-      // Hash password and create user
-      const hashedPassword = await authService.hashPassword(parsed.data.password);
-      const [user] = await db.insert(users)
-        .values({
-          ...parsed.data,
-          password: hashedPassword,
-        })
-        .returning();
-
-      req.login(user, (err) => {
-        if (err) {
-          console.error('Login after registration error:', err);
-          return res.status(500).json({ message: "Login failed after registration" });
-        }
-        res.status(201).json(user);
-      });
-    } catch (err) {
-      console.error('Registration error:', err);
-      res.status(500).json({ message: "Registration failed" });
-    }
-  });
-
-  app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: User | false, info: any) => {
-      console.log('Auth attempt:', {
-        body: req.body,
-        error: err,
-        user: user,
-        info: info
-      });
-
-      if (err) {
-        console.error('Login error:', err);
-        return res.status(500).json({ message: "Login failed" });
-      }
-      if (!user) {
-        console.error('Auth failed:', info);
-        return res.status(401).json({ message: info?.message || "Invalid credentials" });
-      }
-      req.login(user, (err) => {
-        if (err) {
-          console.error('Login session error:', err);
-          return res.status(500).json({ message: "Login failed" });
-        }
-        res.json(user);
-      });
-    })(req, res, next);
-  });
-
-  app.post("/api/logout", (req, res) => {
-    req.logout(() => {
-      res.sendStatus(200);
-    });
-  });
-
-  app.get("/api/user", (req, res) => {
-    if (!req.user) {
-      return res.sendStatus(401);
-    }
-    res.json(req.user);
-  });
-
-  // OTP endpoints
-  app.post('/api/sendOTP', async (req, res) => {
-    try {
-      const { phoneNumber } = req.body;
-
-      if (!phoneNumber) {
-        return res.status(400).json({ error: 'Phone number is required' });
-      }
-
-      console.log('[AUTH] Generating OTP for:', phoneNumber);
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiry = new Date();
-      expiry.setMinutes(expiry.getMinutes() + 5); // 5 minute expiry
-
-      console.log('[AUTH] Attempting to send OTP');
-      const sent = await SMSService.sendOTP(phoneNumber, otp);
-
-      if (!sent) {
-        return res.status(500).json({ error: 'Failed to send OTP' });
-      }
-
-      // Update user with new OTP
-      const updateResult = await db.update(users)
-        .set({
-          lastOtpCode: otp,
-          otpExpiry: expiry
-        })
-        .where(eq(users.phoneNumber, phoneNumber))
-        .returning();
-
-      console.log('[AUTH] OTP Update result:', {
-        phone: phoneNumber,
-        otpSet: !!updateResult[0]?.lastOtpCode,
-        timestamp: new Date().toISOString()
-      });
-
-      res.json({ message: 'OTP sent successfully' });
-    } catch (error) {
-      console.error('Error sending OTP:', error);
-      res.status(500).json({ message: 'Failed to send OTP' });
     }
   });
 }
