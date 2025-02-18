@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Initialize Stripe (we'll add the key later)
+// Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 interface DownPaymentFormProps {
@@ -19,20 +20,20 @@ export function DownPaymentForm({ loanAmount, onSuccess, onCancel }: DownPayment
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const downPaymentAmount = loanAmount * 0.05; // Calculate 5% down payment
+  const potentialReward = Math.floor(loanAmount / 10); // Basic reward calculation
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsProcessing(true);
 
     try {
-      // We'll implement the actual payment processing when we have the Stripe keys
       console.log("Processing payment for:", formatCurrency(downPaymentAmount));
-      
+
       toast({
         title: "Payment Successful",
-        description: `Down payment of ${formatCurrency(downPaymentAmount)} has been processed.`,
+        description: `Down payment of ${formatCurrency(downPaymentAmount)} has been processed. You've earned ${potentialReward} ShiFi coins!`,
       });
-      
+
       onSuccess();
     } catch (error) {
       console.error("Payment failed:", error);
@@ -56,6 +57,12 @@ export function DownPaymentForm({ loanAmount, onSuccess, onCancel }: DownPayment
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <Alert className="mb-4">
+          <AlertDescription>
+            🎁 Make your down payment now and earn {potentialReward} ShiFi coins! 
+            These coins can be redeemed for products and services.
+          </AlertDescription>
+        </Alert>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Elements stripe={stripePromise}>
             {/* We'll add Stripe's card element here once we have the API keys */}

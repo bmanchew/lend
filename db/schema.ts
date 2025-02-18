@@ -21,7 +21,7 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow(),
   plaidAccessToken: varchar('plaid_access_token', { length: 255 }),
   kycStatus: varchar('kyc_status', { length: 50 }),
-  phoneNumber: varchar('phone_number', { length: 12 }).unique(), // +1XXXXXXXXXX format
+  phoneNumber: varchar('phone_number', { length: 12 }).unique(),
   lastOtpCode: varchar('last_otp_code', { length: 6 }),
   otpExpiry: timestamp('otp_expiry'),
   faceIdHash: text('face_id_hash')
@@ -66,8 +66,8 @@ export const contracts = pgTable('contracts', {
   underwritingStatus: text('underwriting_status'),
   borrowerEmail: text('borrower_email'),
   borrowerPhone: text('borrower_phone'),
-  lastPaymentId: text('last_payment_id'), // Store Plaid transfer ID
-  lastPaymentStatus: text('last_payment_status'), // Store Plaid transfer status
+  lastPaymentId: text('last_payment_id'),
+  lastPaymentStatus: text('last_payment_status'),
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').default(true)
 });
@@ -78,7 +78,7 @@ export const contractRelations = relations(contracts, ({ one }) => ({
     references: [merchants.id],
   }),
   customer: one(users, {
-    fields: [contracts.customerId], 
+    fields: [contracts.customerId],
     references: [users.id],
   }),
 }));
@@ -106,9 +106,76 @@ export const webhookEvents = pgTable('webhook_events', {
   createdAt: timestamp('created_at').defaultNow()
 });
 
+// New schema for ShiFi rewards
+export const rewardsBalances = pgTable('rewards_balances', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  balance: integer('balance').notNull().default(0),
+  lifetimeEarned: integer('lifetime_earned').notNull().default(0),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow()
+});
+
+export const rewardsTransactions = pgTable('rewards_transactions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  contractId: integer('contract_id').references(() => contracts.id),
+  amount: integer('amount').notNull(),
+  type: varchar('type', { length: 50 }).notNull(),
+  description: text('description').notNull(),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').defaultNow()
+});
+
+export const rewardsRedemptions = pgTable('rewards_redemptions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  transactionId: integer('transaction_id').references(() => rewardsTransactions.id),
+  productName: varchar('product_name', { length: 255 }).notNull(),
+  coinsSpent: integer('coins_spent').notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+});
+
+// Add relations
+export const rewardsBalancesRelations = relations(rewardsBalances, ({ one }) => ({
+  user: one(users, {
+    fields: [rewardsBalances.userId],
+    references: [users.id],
+  })
+}));
+
+export const rewardsTransactionsRelations = relations(rewardsTransactions, ({ one }) => ({
+  user: one(users, {
+    fields: [rewardsTransactions.userId],
+    references: [users.id],
+  }),
+  contract: one(contracts, {
+    fields: [rewardsTransactions.contractId],
+    references: [contracts.id],
+  })
+}));
+
+export const rewardsRedemptionsRelations = relations(rewardsRedemptions, ({ one }) => ({
+  user: one(users, {
+    fields: [rewardsRedemptions.userId],
+    references: [users.id],
+  }),
+  transaction: one(rewardsTransactions, {
+    fields: [rewardsRedemptions.transactionId],
+    references: [rewardsTransactions.id],
+  })
+}));
+
+// Export types
 export type SelectUser = typeof users.$inferSelect;
 export type SelectMerchant = typeof merchants.$inferSelect;
 export type SelectContract = typeof contracts.$inferSelect;
 export type SelectProgram = typeof programs.$inferSelect;
 export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
 export type SelectWebhookEvent = typeof webhookEvents.$inferSelect;
+export type SelectRewardsBalance = typeof rewardsBalances.$inferSelect;
+export type SelectRewardsTransaction = typeof rewardsTransactions.$inferSelect;
+export type SelectRewardsRedemption = typeof rewardsRedemptions.$inferSelect;

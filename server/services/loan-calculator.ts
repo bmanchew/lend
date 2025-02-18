@@ -1,28 +1,106 @@
+import { rewardService } from './reward';
+import { shifiRewardsService } from './shifi-rewards';
 
 export function calculateMonthlyPayment(
   amount: number,
-  annualInterestRate: number,
-  termMonths: number
+  annualInterestRate: number = 0, // Default to 0% for 24-month contracts
+  termMonths: number = 24 // Default to 24 months
 ): number {
-  // Convert annual interest rate to monthly decimal rate
-  const monthlyRate = (annualInterestRate / 100) / 12;
-  
   // Calculate loan amount after 5% down payment
   const downPayment = amount * 0.05;
   const principalAfterDownPayment = amount - downPayment;
-  
-  // Use amortization formula: PMT = P * (r(1+r)^n)/((1+r)^n-1)
-  const numerator = monthlyRate * Math.pow(1 + monthlyRate, termMonths);
-  const denominator = Math.pow(1 + monthlyRate, termMonths) - 1;
-  
-  return principalAfterDownPayment * (numerator / denominator);
+
+  // For 0% interest, simply divide by term
+  return principalAfterDownPayment / termMonths;
 }
 
 export function calculateTotalInterest(
   monthlyPayment: number,
   amount: number,
-  termMonths: number
+  termMonths: number = 24
 ): number {
-  const downPayment = amount * 0.05;
-  return (monthlyPayment * termMonths) - (amount - downPayment);
+  // With 0% interest, total interest is 0
+  return 0;
+}
+
+export async function processDownPayment(
+  userId: number,
+  contractId: number,
+  amount: number
+): Promise<void> {
+  const basePoints = Math.floor(amount / 10);
+
+  await shifiRewardsService.addTransaction({
+    userId,
+    contractId,
+    amount: basePoints,
+    type: 'DOWN_PAYMENT',
+    description: `Earned ${basePoints} coins for down payment of $${amount}`,
+    metadata: { downPaymentAmount: amount }
+  });
+}
+
+export async function processEarlyPayment(
+  userId: number,
+  contractId: number,
+  amount: number,
+  monthsEarly: number,
+  isFullPayoff: boolean
+): Promise<void> {
+  const reward = rewardService.calculateEarlyPaymentReward(amount, monthsEarly, isFullPayoff);
+
+  await shifiRewardsService.addTransaction({
+    userId,
+    contractId,
+    amount: reward.totalPoints,
+    type: isFullPayoff ? 'FULL_PAYOFF' : 'EARLY_PAYMENT',
+    description: `Earned ${reward.totalPoints} coins for ${isFullPayoff ? 'full payoff' : 'early payment'} of $${amount}`,
+    metadata: {
+      amount,
+      monthsEarly,
+      basePoints: reward.basePoints,
+      bonusPoints: reward.bonusPoints
+    }
+  });
+}
+
+export async function processAdditionalPayment(
+  userId: number,
+  contractId: number,
+  additionalAmount: number
+): Promise<void> {
+  const reward = rewardService.calculateAdditionalPaymentReward(additionalAmount);
+
+  await shifiRewardsService.addTransaction({
+    userId,
+    contractId,
+    amount: reward.totalPoints,
+    type: 'ADDITIONAL_PAYMENT',
+    description: `Earned ${reward.totalPoints} coins for additional payment of $${additionalAmount}`,
+    metadata: {
+      additionalAmount,
+      basePoints: reward.basePoints,
+      bonusPoints: reward.bonusPoints
+    }
+  });
+}
+
+export function calculatePotentialRewards(
+  remainingBalance: number,
+  remainingMonths: number,
+  additionalPayment: number = 0
+): { earlyPayoff: number, additional: number } {
+  const earlyPayoffReward = rewardService.calculatePotentialEarlyPayoffReward(
+    remainingBalance,
+    remainingMonths
+  );
+
+  const additionalPaymentReward = additionalPayment > 0 
+    ? rewardService.calculateAdditionalPaymentReward(additionalPayment)
+    : { totalPoints: 0 };
+
+  return {
+    earlyPayoff: earlyPayoffReward.totalPoints,
+    additional: additionalPaymentReward.totalPoints
+  };
 }
