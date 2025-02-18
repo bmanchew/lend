@@ -1,13 +1,13 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { LoginResponse } from "@/types";
+import type { LoginResponse, LoginData } from "@/types";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -17,7 +17,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function MerchantLogin() {
-  const navigate = useNavigate();
+  const [_, setLocation] = useLocation();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
 
@@ -37,11 +37,13 @@ export default function MerchantLogin() {
         timestamp: new Date().toISOString()
       });
 
-      const response = await loginMutation.mutateAsync({
+      const loginData: LoginData = {
         username: data.username,
         password: data.password,
         loginType: "merchant"
-      }) as LoginResponse;
+      };
+
+      const response = await loginMutation.mutateAsync(loginData) as LoginResponse;
 
       if (!response || !response.token) {
         console.error("[MerchantLogin] Invalid response:", response);
@@ -56,7 +58,7 @@ export default function MerchantLogin() {
           title: "Success",
           description: "Successfully logged in",
         });
-        navigate('/merchant/dashboard');
+        setLocation('/merchant/dashboard');
       } else {
         toast({
           title: "Access Denied",

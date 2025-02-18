@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import express, { RequestHandler } from 'express';
+import express, { Router } from 'express';
 import NodeCache from 'node-cache';
 import { Server as SocketIOServer } from 'socket.io';
 import { smsService } from "./services/sms";
@@ -15,22 +15,22 @@ import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
-import type { LoginData } from '@/types';
+import type { LoginData, JWTPayload, User } from '@/types';
+
+// Initialize LedgerManager singleton
+const ledgerManager = LedgerManager.getInstance({
+  minBalance: 1000,
+  maxBalance: 100000,
+  sweepThreshold: 500,
+  sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+});
 
 // Type declarations
-export type UserRole = 'admin' | 'merchant' | 'customer';
-
-interface JWTPayload {
-  id: number;
-  role: UserRole;
-  name?: string;
-  email?: string;
-  phoneNumber?: string;
-}
-
 interface RequestWithUser extends Request {
   user?: JWTPayload;
 }
+
+export type UserRole = 'admin' | 'merchant' | 'customer';
 
 // Custom error class for API errors
 class APIError extends Error {
@@ -46,19 +46,11 @@ class APIError extends Error {
 }
 
 export function registerRoutes(app: Express): Server {
-  // Initialize LedgerManager with configuration
-  const ledgerManager = LedgerManager.getInstance({
-    minBalance: 1000,
-    maxBalance: 100000,
-    sweepThreshold: 500,
-    sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-  });
-
-  // Create API router
-  const apiRouter = express.Router();
+  // Initialize cache middleware
+  const apiCache = new NodeCache({ stdTTL: 300 }); // 5 minutes default TTL
 
   // Request tracking middleware
-  const requestTrackingMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+  const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     req.headers['x-request-id'] = requestId;
 
@@ -73,10 +65,8 @@ export function registerRoutes(app: Express): Server {
   };
 
   // Cache middleware
-  const cacheMiddleware = (duration: number): RequestHandler => {
-    const apiCache = new NodeCache({ stdTTL: duration });
-
-    return (req, res, next) => {
+  const cacheMiddleware = (duration: number) => {
+    return (req: Request, res: Response, next: NextFunction) => {
       if (req.method !== 'GET') return next();
 
       const key = `__express__${req.originalUrl}`;
@@ -98,7 +88,7 @@ export function registerRoutes(app: Express): Server {
   };
 
   // JWT verification middleware
-  const verifyJWT: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'No token provided' });
@@ -115,59 +105,83 @@ export function registerRoutes(app: Express): Server {
     }
   };
 
-  // Error handling middleware
-  const errorHandlingMiddleware: RequestHandler = (
-    err: Error | APIError,
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
-    const errorId = Date.now().toString(36);
-    const isAPIError = err instanceof APIError;
+  // Create API router
+  const apiRouter = Router();
 
-    const errorDetails = {
-      id: errorId,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      name: err.name,
-      message: err.message,
-      status: isAPIError ? err.status : 500,
-      code: isAPIError ? err.code : undefined,
-      details: isAPIError ? err.details : undefined,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    };
-
-    logger.error('API Error:', errorDetails);
-
-    if (!res.headersSent) {
-      res.status(errorDetails.status).json({
-        status: 'error',
-        message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
-        errorId
-      });
-    }
-
-    next();
-  };
-
-  // Helper function for rewards calculation
-  const calculatePotentialRewards = (amount: number, monthsEarly: number, additionalPayment: number = 0): { earlyPayoff: number; additional: number } => {
-    const earlyPayoff = monthsEarly > 0 ? Math.floor(amount * (1 + (monthsEarly * 0.1))) : 0;
-    const additional = additionalPayment > 0 ? Math.floor(additionalPayment / 25) : 0;
-    return { earlyPayoff, additional };
-  };
-
-  // Register middleware in correct order
+  // Register middleware
   apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(cacheMiddleware(300)); // 5 mins cache
+  apiRouter.use(cacheMiddleware(300));
+
+  // Auth routes - no JWT verification needed for these
+  apiRouter.post("/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { username, password, loginType } = req.body as LoginData;
+
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      // Get user from database
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, username))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Verify password
+      const isValid = await authService.verifyPassword(password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // For merchant login, verify merchant status
+      if (loginType === 'merchant') {
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .where(eq(merchants.userId, user.id))
+          .limit(1);
+
+        if (!merchant) {
+          return res.status(403).json({ error: "Account is not a merchant" });
+        }
+
+        if (merchant.status !== 'active') {
+          return res.status(403).json({ error: "Merchant account is not active" });
+        }
+      }
+
+      // Generate JWT token
+      const token = jwt.sign({
+        id: user.id,
+        role: user.role,
+        name: user.name || undefined,
+        email: user.email,
+        phoneNumber: user.phoneNumber || undefined
+      } as JWTPayload, process.env.JWT_SECRET!);
+
+      // Return response
+      res.json({
+        token,
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        email: user.email,
+        username: user.username
+      });
+    } catch (err) {
+      logger.error("Login error:", err);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Protected routes - require JWT verification
   apiRouter.use(verifyJWT);
-  apiRouter.use(errorHandlingMiddleware);
 
-  // Mount API router
-  app.use('/api', apiRouter);
-
-  // Define routes
   apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
     try {
       if (!req.user) {
@@ -180,7 +194,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/contracts/:id/status", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.post("/contracts/:id/status",  async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -680,7 +694,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/rewards/balance", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -928,7 +942,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/auth/me", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -939,7 +953,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/auth/logout", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -961,7 +975,7 @@ export function registerRoutes(app: Express): Server {
     try {
       const { username, password, email, name, role, phoneNumber } = req.body;
       if (!username || !password || !email || !name || !role || !phoneNumber) {
-        return res.status(400).json({ error: "Allfields are required" });
+        return res.status(400).json({ error: "All fields are required" });
       }
       const hashedPassword = await authService.hashPassword(password);
       const user = await db.insert(users).values({
@@ -973,71 +987,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/auth/login", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-    try {
-      const { username, password, loginType } = req.body as LoginData;
-
-      if (!username || !password) {
-        return res.status(400).json({ error: "Username and password are required" });
-      }
-
-      // Get user from database
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, username))
-        .limit(1);
-
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      // For merchant login, verify merchant status
-      if (loginType === 'merchant') {
-        const [merchant] = await db
-          .select()
-          .from(merchants)
-          .where(eq(merchants.userId, user.id))
-          .limit(1);
-
-        if (!merchant || user.role !== 'merchant') {
-          return res.status(401).json({ error: "Invalid merchant account" });
-        }
-      }
-
-      // Verify password
-      const isValidPassword = await authService.verifyPassword(password, user.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      // Generate JWT token with proper typing
-      const tokenPayload: JWTPayload = {
-        id: user.id,
-        role: user.role as UserRole,
-        name: user.name || undefined,
-        email: user.email,
-        phoneNumber: user.phoneNumber || undefined
-      };
-
-      const token = await authService.generateJWT(tokenPayload);
-
-      // Return the login response with proper typing
-      res.json({ 
-        token,
-        id: user.id,
-        role: user.role as UserRole,
-        name: user.name || '',
-        email: user.email
-      });
-
-    } catch (err) {
-      logger.error("[Auth] Login error:", err);
-      next(err);
-    }
-  });
-
-  apiRouter.get("/rewards/transactions", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/transactions", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });}
@@ -1049,7 +999,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/rewards/calculate", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/calculate", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { type, amount } = req.query;
 
@@ -1414,9 +1364,13 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Mount API router with prefix
   app.use('/api', apiRouter);
 
-  return createServer(app);
+  // Create HTTP server
+  const server = createServer(app);
+
+  return server;
 }
 
 // Helper function declarations
@@ -1476,3 +1430,5 @@ export interface DiditWebhookPayload {
     };
   };
 }
+
+export type UserRole = 'admin' | 'merchant' | 'customer';
