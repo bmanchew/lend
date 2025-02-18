@@ -18,18 +18,27 @@ export class PlaidService {
   private static isSandbox = process.env.PLAID_ENV === 'sandbox';
 
   private static async validateSandboxSetup() {
+    if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+      throw new Error('PLAID_SWEEP_ACCESS_TOKEN not configured');
+    }
+
     if (this.isSandbox && !this.sweepAccountId) {
       logger.info('Initializing sandbox sweep account');
-      const authData = await this.getAuthData(process.env.PLAID_SWEEP_ACCESS_TOKEN!);
+      
+      try {
+        const authData = await this.getAuthData(process.env.PLAID_SWEEP_ACCESS_TOKEN);
+        if (!authData?.accounts?.length) {
+          throw new Error('No accounts found in auth data');
+        }
 
-      logger.info('Available sandbox accounts:', {
-        accounts: authData.accounts.map(acc => ({
-          id: acc.account_id,
-          type: acc.type,
-          subtype: acc.subtype,
-          balances: acc.balances
-        }))
-      });
+        logger.info('Available sandbox accounts:', {
+          accounts: authData.accounts.map(acc => ({
+            id: acc.account_id,
+            type: acc.type,
+            subtype: acc.subtype,
+            balances: acc.balances
+          }))
+        });
 
       const fundingAccount = authData.accounts.find(acc => 
         acc.type === 'depository' && acc.subtype === 'checking'
@@ -84,10 +93,19 @@ export class PlaidService {
   }
 
   static async exchangePublicToken(publicToken: string) {
+    if (!publicToken) {
+      throw new Error('Public token is required');
+    }
+    
     try {
       const response = await plaidClient.itemPublicTokenExchange({
         public_token: publicToken,
       });
+      
+      if (!response?.data?.access_token) {
+        throw new Error('Invalid response from Plaid token exchange');
+      }
+      
       return response.data;
     } catch (error: any) {
       logger.error('Error exchanging public token:', {
@@ -218,8 +236,14 @@ export class PlaidService {
   }
 
   static async initiatePayment(accessToken: string, amount: number, accountId: string) {
+    if (!accessToken || !accountId || amount <= 0) {
+      throw new Error('Invalid payment parameters');
+    }
+
     try {
-      // Create transfer authorization first
+      await this.validateSandboxSetup();
+      
+      // Create transfer authorization first  
       const authRequest: TransferAuthorizationCreateRequest = {
         access_token: accessToken,
         account_id: accountId,
