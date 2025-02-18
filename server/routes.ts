@@ -3,8 +3,6 @@ import { createServer, type Server } from "http";
 import { db } from "@db";
 import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { setupAuth } from "./auth.js";
-import { authService } from "./auth";
 import express, { RequestHandler } from 'express';
 import NodeCache from 'node-cache';
 import { Server as SocketIOServer } from 'socket.io';
@@ -18,6 +16,7 @@ import { PlaidService } from './services/plaid';
 import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
+import { authService } from "./auth";
 
 // Type declarations
 export type UserRole = 'admin' | 'merchant' | 'customer';
@@ -141,19 +140,6 @@ const errorHandlingMiddleware: RequestHandler = (
   next();
 };
 
-// Initialize ledger manager
-const ledgerManager = new LedgerManager({
-  minBalance: 1000,
-  maxBalance: 100000,
-  sweepThreshold: 500,
-  sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-});
-
-// Initialize ledger sweeps
-ledgerManager.initializeSweeps().catch(error => {
-  logger.error('Failed to initialize ledger sweeps:', error);
-});
-
 export function registerRoutes(app: Express): Server {
   // Create API router
   const apiRouter = express.Router();
@@ -161,8 +147,8 @@ export function registerRoutes(app: Express): Server {
   // Register middleware
   apiRouter.use(requestTrackingMiddleware);
   apiRouter.use(verifyJWT);
-  apiRouter.use(errorHandlingMiddleware);
   apiRouter.use(cacheMiddleware(300)); // 5 mins cache
+  apiRouter.use(errorHandlingMiddleware);
 
   // Define routes
   apiRouter.get("/auth/me", verifyJWT, (req: RequestWithUser, res: Response) => {
@@ -985,13 +971,12 @@ export function registerRoutes(app: Express): Server {
         type,
         amount: Number(amount)
       });
-    } catch (err) {
-      next(err);
+    } catch (err) {      next(err);
     }
   });
 
   // Fix the early_payment case syntax error and update the rewards calculation
-  apiRouter.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/potential", async (req: RequestWithUser,res: Response, next: NextFunction) => {
     try {
       const amount = parseFloat(req.query.amount as string);
       const type = req.query.type as string;
