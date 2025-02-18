@@ -85,6 +85,27 @@ const waitForPort = async (port: number, retries = 20, interval = 250): Promise<
 };
 
 const startServer = async () => {
+  let httpServer: Server;
+  
+  // Graceful shutdown handler
+  const shutdown = async () => {
+    logger.info('Received shutdown signal');
+    try {
+      if (httpServer) {
+        await new Promise((resolve) => httpServer.close(resolve));
+        logger.info('HTTP server closed');
+      }
+      process.exit(0);
+    } catch (err) {
+      logger.error('Error during shutdown:', err);
+      process.exit(1);
+    }
+  };
+
+  // Handle shutdown signals
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
   try {
     // Initialize auth
     await setupAuth(app);

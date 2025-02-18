@@ -93,34 +93,29 @@ class AuthService {
   }
 
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
-    this.logger.debug("Comparing passwords", {
-      suppliedLength: supplied?.length,
-      storedHashLength: stored?.length,
-      storedHashPrefix: stored ? stored.substring(0, 10) + "..." : null,
-      timestamp: new Date().toISOString(),
-      hasSupplied: !!supplied,
-      hasStored: !!stored,
-      storedType: typeof stored,
-      suppliedType: typeof supplied
-    });
-
     try {
       if (!supplied || !stored) {
         this.logger.error("Missing password:", { supplied: !!supplied, stored: !!stored });
-        throw new Error("Missing credentials");
+        return false;
+      }
+
+      this.logger.debug("Comparing passwords", {
+        suppliedLength: supplied.length,
+        storedHashLength: stored.length,
+        validHash: stored.startsWith('$2')
+      });
+
+      if (!stored.startsWith('$2')) {
+        this.logger.error("Invalid hash format");
+        return false;
       }
 
       const isMatch = await bcrypt.compare(supplied, stored);
       this.logger.debug("Password comparison result:", { isMatch });
-      
-      if (!isMatch) {
-        throw new Error("Invalid credentials");
-      }
-      
       return isMatch;
     } catch (error) {
       this.logger.error("Password comparison error:", error);
-      throw error;
+      return false;
     }
   }
 }
