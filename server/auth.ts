@@ -9,7 +9,7 @@ declare module 'express-session' {
 
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import rateLimit from "express-rate-limit";
 import connectPg from "connect-pg-simple";
@@ -20,6 +20,24 @@ import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms";
 import jwt from 'jsonwebtoken';
+
+interface JWTPayload {
+  id: number;
+  role: UserRole;
+  email: string;
+  name: string | null;
+  phoneNumber: string | null;
+}
+
+interface RequestWithUser extends Request {
+  user?: JWTPayload;
+}
+
+const logger = { // Placeholder logger - replace with actual logger
+  info: (message: string, meta?: any) => console.log(`[Auth] ${message}`, meta),
+  error: (message: string, meta?: any) => console.error(`[Auth] ${message}`, meta),
+  debug: (message: string, meta?: any) => console.debug(`[Auth] ${message}`, meta)
+};
 
 const PostgresSessionStore = connectPg(session);
 
@@ -107,11 +125,11 @@ class AuthService {
 
       const isMatch = await bcrypt.compare(supplied, stored);
       this.logger.debug("Password comparison result:", { isMatch });
-      
+
       if (!isMatch) {
         throw new Error("Invalid credentials");
       }
-      
+
       return isMatch;
     } catch (error) {
       this.logger.error("Password comparison error:", error);
@@ -159,6 +177,43 @@ export async function setupAuth(app: Express): Promise<void> {
 
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Public routes - no JWT verification needed
+  const publicRoutes = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/sendOTP'
+  ];
+
+  // Modify JWT verification middleware to skip public routes
+  const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
+    // Skip verification for public routes
+    if (publicRoutes.includes(req.path)) {
+      return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    if (!token) {
+      logger.info("[Auth] No token provided in request");
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    try {
+      const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+      const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
+      req.user = decoded;
+      logger.info("[Auth] JWT verification successful:", { userId: decoded.id, role: decoded.role });
+      next();
+    } catch (err) {
+      logger.error('[Auth] JWT verification failed:', err);
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  };
+
+  app.use(verifyJWT); // Apply JWT verification middleware
+
 
   passport.use(
     new LocalStrategy({
