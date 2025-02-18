@@ -3,7 +3,7 @@ declare module 'express-session' {
   interface SessionData {
     userId: number;
     userRole: string;
-    phoneNumber: string;
+    phoneNumber?: string;
   }
 }
 
@@ -19,12 +19,14 @@ import { db } from "@db";
 import { eq, or, sql } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 import SMSService from "./services/sms";
+import jwt from 'jsonwebtoken';
 
 const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
 
 // Add types for user roles
 type UserRole = "admin" | "customer" | "merchant";
+
 interface User {
   id: number;
   username: string;
@@ -35,6 +37,10 @@ interface User {
   phoneNumber: string;
   lastOtpCode: string | null;
   otpExpiry: Date | null;
+  platform?: string;
+  kycStatus?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 interface AuthResult {
@@ -62,6 +68,27 @@ class AuthService {
     error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta),
     debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta)
   };
+
+  async generateJWT(user: User): Promise<string> {
+    this.logger.debug("Generating JWT for user:", { userId: user.id, role: user.role });
+
+    const payload = {
+      id: user.id,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+      phoneNumber: user.phoneNumber
+    };
+
+    if (!process.env.REPL_ID) {
+      throw new Error('JWT secret (REPL_ID) is not configured');
+    }
+
+    return jwt.sign(payload, process.env.REPL_ID, {
+      expiresIn: '30d', // Match session duration
+      algorithm: 'HS256'
+    });
+  }
 
   async hashPassword(password: string): Promise<string> {
     this.logger.debug("Generating password hash");
@@ -147,15 +174,14 @@ export async function setupAuth(app: Express): Promise<void> {
         timestamp: new Date().toISOString(),
         userAgent: req.headers['user-agent']
       });
+
       try {
         const loginType = req.body.loginType || 'customer';
 
-        // Ensure we have required credentials
         if (!username || !password) {
           return done(null, false, { message: "Missing credentials" });
         }
 
-        // For admin/merchant, use username & password
         if (loginType === 'admin' || loginType === 'merchant') {
           const [userRecord] = await db.select().from(users)
             .where(eq(users.username, username))
@@ -170,95 +196,49 @@ export async function setupAuth(app: Express): Promise<void> {
             return done(null, false, { message: "Invalid credentials" });
           }
 
-          return done(null, userRecord);
+          const user: User = {
+            ...userRecord,
+            name: userRecord.name || '',
+            phoneNumber: userRecord.phoneNumber || ''
+          };
+
+          return done(null, user);
         }
 
-        // For customers, use phone & OTP only
-        // Format phone consistently
-        const formatPhone = (phone: string): string => {
-          if (!phone) {
-            console.error('[Auth] Empty phone number provided');
-            throw new Error('Phone number is required');
-          }
+        // Handle customer login with OTP
+        const formattedPhone = username.replace(/\D/g, '').slice(-10);
+        if (formattedPhone.length !== 10) {
+          return done(null, false, { message: "Invalid phone number format" });
+        }
 
-          // Remove all non-digits and get last 10 digits
-          const clean = phone.toString().replace(/\D/g, '').slice(-10);
-
-          if (clean.length !== 10) {
-            console.error('[Auth] Invalid phone number format:', {
-              phone,
-              clean,
-              length: clean.length
-            });
-            throw new Error('Phone number must be 10 digits');
-          }
-
-          // Always format as +1XXXXXXXXXX
-          const formatted = '+1' + clean;
-          return formatted;
-        };
-
-        // Format phone consistently
-        const formattedPhone = formatPhone(username);
-        let [userRecord] = await db.select().from(users)
-          .where(eq(users.phoneNumber, formattedPhone))
+        const [userRecord] = await db.select().from(users)
+          .where(eq(users.phoneNumber, `+1${formattedPhone}`))
           .limit(1);
 
-        if (!userRecord) {
-          // Create customer account if doesn't exist
-          const [newUser] = await db.insert(users).values({
-            username: formattedPhone.replace(/\D/g, ''),
-            password: await authService.hashPassword(Math.random().toString(36).slice(-8)),
-            email: `${formattedPhone.replace(/\D/g, '')}@temp.shifi.com`,
-            name: '',
-            role: 'customer',
-            phoneNumber: formattedPhone,
-            platform: 'mobile',
-            kycStatus: 'pending'
-          }).returning();
-
-          userRecord = newUser;
+        if (!userRecord || userRecord.role !== 'customer') {
+          return done(null, false, { message: "Invalid account" });
         }
 
-        if (userRecord.role !== 'customer') {
-          return done(null, false, { message: "Invalid account type for OTP login" });
+        if (!userRecord.lastOtpCode || !userRecord.otpExpiry || new Date() > userRecord.otpExpiry) {
+          return done(null, false, { message: "OTP expired or invalid" });
         }
 
-        // Verify OTP
-        if (!userRecord.lastOtpCode || !userRecord.otpExpiry) {
-          return done(null, false, { message: "No active OTP found" });
+        if (userRecord.lastOtpCode.trim() !== password.trim()) {
+          return done(null, false, { message: "Invalid OTP" });
         }
 
-        // Check if OTP is expired
-        const now = new Date();
-        const expiry = new Date(userRecord.otpExpiry);
-        if (now > expiry) {
-          return done(null, false, { message: "Verification code has expired" });
-        }
-
-        // Normalize OTP input
-        const normalizedInputOTP = password.trim();
-        const normalizedStoredOTP = userRecord.lastOtpCode.trim();
-
-        if (normalizedStoredOTP !== normalizedInputOTP) {
-          return done(null, false, { message: "Invalid verification code" });
-        }
-
-        // Set session data
-        if (!req.session) {
-          return done(new Error('Session initialization failed'));
-        }
-
-        req.session.userId = userRecord.id;
-        req.session.userRole = userRecord.role;
-        req.session.phoneNumber = userRecord.phoneNumber;
+        const user: User = {
+          ...userRecord,
+          name: userRecord.name || '',
+          phoneNumber: userRecord.phoneNumber || ''
+        };
 
         // Clear used OTP
         await db.update(users)
           .set({ lastOtpCode: null, otpExpiry: null })
           .where(eq(users.id, userRecord.id));
 
-        return done(null, userRecord);
+        return done(null, user);
       } catch (err) {
         console.error('Auth error:', err);
         return done(err);
@@ -274,9 +254,20 @@ export async function setupAuth(app: Express): Promise<void> {
 
   passport.deserializeUser(async (id: number, done) => {
     try {
-      const [user] = await db.select().from(users)
+      const [userRecord] = await db.select().from(users)
         .where(eq(users.id, id))
         .limit(1);
+
+      if (!userRecord) {
+        return done(null, false);
+      }
+
+      const user: User = {
+        ...userRecord,
+        name: userRecord.name || '',
+        phoneNumber: userRecord.phoneNumber || ''
+      };
+
       done(null, user);
     } catch (err) {
       done(err);

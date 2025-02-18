@@ -1,25 +1,44 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema"; // Added import for rewardsBalances
+import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
-import { testSendGridConnection, sendVerificationEmail, generateVerificationToken, sendMerchantCredentials } from "./services/email";
 import express from 'express';
 import NodeCache from 'node-cache';
-import morgan from 'morgan';
 import { Server as SocketIOServer } from 'socket.io';
 import { DiditSessionConfig } from './services/didit';
 import { diditService } from "./services/didit";
 import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { logger } from "./lib/logger";
-import { slackService } from "./services/slack"; // Add import for slack service
+import { slackService } from "./services/slack";
 import { PlaidService } from './services/plaid';
 import { LedgerManager } from './services/ledger-manager';
-import { shifiRewardsService } from './services/shifi-rewards'; // Added import for shifiRewardsService
+import { shifiRewardsService } from './services/shifi-rewards';
+import jwt from 'jsonwebtoken';
 
+// Create apiRouter at the top level
+const apiRouter = express.Router();
+
+// JWT verification middleware
+const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.REPL_ID!);
+    req.user = decoded as Express.User;
+    next();
+  } catch (err) {
+    console.error('JWT verification failed:', err);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // Global type declarations
 declare global {
@@ -153,9 +172,27 @@ const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
 };
 
 export function registerRoutes(app: Express): Server {
-  const apiRouter = express.Router();
+  // Register middleware
+  apiRouter.use(requestTrackingMiddleware);
+  apiRouter.use(verifyJWT);
+  apiRouter.use(errorHandlingMiddleware);
 
-  // Add proper error handling middleware
+  // Initialize LedgerManager singleton with config
+  const ledgerConfig = {
+    minBalance: 1000,
+    maxBalance: 100000,
+    sweepThreshold: 500,
+    sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+  };
+
+  const ledgerManager = LedgerManager.getInstance(ledgerConfig);
+
+  // Initialize ledger sweeps
+  ledgerManager.initializeSweeps().catch(error => {
+    logger.error('Failed to initialize ledger sweeps:', error);
+  });
+
+  // Update webhook event error handling
   const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
     const errorId = Date.now().toString(36);
     const isAPIError = err instanceof APIError;
@@ -173,6 +210,19 @@ export function registerRoutes(app: Express): Server {
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     };
 
+    // Update webhook event with error
+    if (req.headers['x-webhook-id']) {
+      db.update(webhookEvents)
+        .set({
+          status: 'error',
+          error: err.message,
+          processedAt: new Date()
+        })
+        .where(eq(webhookEvents.sessionId, req.headers['x-webhook-id'] as string))
+        .execute()
+        .catch(console.error);
+    }
+
     logger.error('API Error:', errorDetails);
 
     if (!res.headersSent) {
@@ -185,10 +235,6 @@ export function registerRoutes(app: Express): Server {
 
     next();
   };
-
-  // Register middleware
-  apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(errorHandlingMiddleware);
 
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
@@ -646,10 +692,9 @@ export function registerRoutes(app: Express): Server {
         eventType,
         sessionId,
         status: 'pending',
-        payload,
+        payload: JSON.stringify(payload),
         error: null,
         retryCount: 0,
-        nextRetryAt: null,
         processedAt: null
       } as typeof webhookEvents.$inferInsert);
 
@@ -660,7 +705,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add rewards endpoints with proper types
-  apiRouter.get("/rewards/balance", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/balance", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -775,11 +820,9 @@ export function registerRoutes(app: Express): Server {
 
       // Store webhook event before sending SMS
       await db.insert(webhookEvents).values({
-        session_id: requestId,
-        event_type: 'loan_application_attempt',
+        eventType: 'loan_application_attempt',
+        sessionId: requestId,
         status: 'pending',
-        error: null,
-        error_message: null,
         payload: JSON.stringify({
           merchantId: parseInt(req.params.id),
           merchantName: merchant.companyName,
@@ -788,10 +831,10 @@ export function registerRoutes(app: Express): Server {
           timestamp: new Date().toISOString(),
           requestId
         }),
-        created_at: new Date(),
-        processed_at: null,
-        retry_count: 0
-      });
+        error: null,
+        retryCount: 0,
+        processedAt: null
+      } as typeof webhookEvents.$inferInsert);
 
       // Send SMS with enhanced error handling
       const smsResult = await smsService.sendLoanApplicationLink(
@@ -809,10 +852,9 @@ export function registerRoutes(app: Express): Server {
           .set({
             status: 'failed',
             error: smsResult.error,
-            error_message: `Failed to send SMS: ${smsResult.error}`,
-            processed_at: new Date()
+            processedAt: new Date()
           })
-          .where(eq(webhookEvents.session_id, requestId));
+          .where(eq(webhookEvents.sessionId, requestId));
 
         logger.error('[LoanApplication] Failed to send SMS', {
           error: smsResult.error,
@@ -839,9 +881,9 @@ export function registerRoutes(app: Express): Server {
       await db.update(webhookEvents)
         .set({
           status: 'sent',
-          processed_at: new Date()
+          processedAt: new Date()
         })
-        .where(eq(webhookEvents.session_id, requestId));
+        .where(eq(webhookEvents.sessionId, requestId));
 
       debugLog('Successfully sent application link', {
         phone: formattedPhone,
@@ -864,16 +906,16 @@ export function registerRoutes(app: Express): Server {
         .set({
           status: 'error',
           error: error instanceof Error ? error.message : 'Unknown error',
-          error_message: 'Unexpected error during loan application process',
-          processed_at: new Date()
+          processedAt: new Date()
         })
-        .where(eq(webhookEvents.session_id, requestId));
+        .where(eq(webhookEvents.sessionId, requestId));
 
       next(error);
     }
   });
 
-  apiRouter.get("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
+  // Fix customer authentication endpoint
+  apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber, otp } = req.body;
       if (!phoneNumber || !otp) {
@@ -889,11 +931,21 @@ export function registerRoutes(app: Express): Server {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      if (user.lastOtpCode !== otp || user.otpExpiry < new Date()) {
-        return res.status(401).json({ error: "Invalid OTP" });
+
+      // Check if OTP is valid and not expired
+      if (!user.lastOtpCode || !user.otpExpiry || user.lastOtpCode !== otp || new Date() > user.otpExpiry) {
+        return res.status(401).json({ error: "Invalid or expired OTP" });
       }
 
-      const token = await authService.generateJWT(user);
+      // Generate JWT token
+      const token = await authService.generateJWT({
+        id: user.id,
+        role: user.role,
+        name: user.name || '',
+        email: user.email,
+        phoneNumber: user.phoneNumber || ''
+      });
+
       res.json({ token });
 
     } catch (err) {
@@ -901,7 +953,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/auth/me", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/auth/me", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -912,7 +964,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/auth/logout", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/auth/logout", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -947,7 +999,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add rewards endpoints
-  apiRouter.get("/rewards/balance", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/balance", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -969,7 +1021,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/rewards/transactions", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/transactions", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -977,6 +1029,52 @@ export function registerRoutes(app: Express): Server {
 
       const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
       res.json(transactions);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Fix rewards calculation endpoint with proper types
+  apiRouter.get("/rewards/calculate", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { type, amount } = req.query;
+
+      if (!type || !amount || isNaN(Number(amount))) {
+        return res.status(400).json({ error: 'Invalid parameters' });
+      }
+
+      let totalPoints = 0;
+      let details: Record<string, any> = {};
+
+      switch (type) {
+        case 'down_payment':
+          totalPoints = Math.floor(Number(amount) / 10); // Basic reward for down payment
+          details = { basePoints: totalPoints };
+          break;
+
+        case 'early_payment':
+          const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
+          const earlyPayoff = Math.floor(Number(amount) * (1 + (monthsEarly * 0.1)));
+          totalPoints = earlyPayoff;
+          details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
+          break;
+
+        case 'additional_payment':
+          const additionalPoints = Math.floor(Number(amount) / 25);
+          totalPoints = additionalPoints;
+          details = { basePoints: additionalPoints };
+          break;
+
+        default:
+          return res.status(400).json({ error: 'Invalid reward type' });
+      }
+
+      res.json({
+        totalPoints,
+        details,
+        type,
+        amount: Number(amount)
+      });
     } catch (err) {
       next(err);
     }
@@ -992,24 +1090,34 @@ export function registerRoutes(app: Express): Server {
       }
 
       let totalPoints = 0;
+      let details = {};
+
       switch (type) {
         case 'down_payment':
           totalPoints = Math.floor(amount / 10); // Basic reward for down payment
+          details = { basePoints: totalPoints };
           break;
+
         case 'early_payment':
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
           const { earlyPayoff } = calculatePotentialRewards(amount, monthsEarly);
           totalPoints = earlyPayoff;
-          break;        case 'additional_payment':
+          details = { monthsEarly, basePoints: Math.floor(amount / 20) };
+          break;
+
+        case 'additional_payment':
           const { additional } = calculatePotentialRewards(0, 0, amount);
           totalPoints = additional;
+          details = { basePoints: Math.floor(amount / 25) };
           break;
+
         default:
           return res.status(400).json({ error: 'Invalid reward type' });
       }
 
       res.json({
         totalPoints,
+        details,
         type,
         amount
       });
@@ -1062,8 +1170,8 @@ export function registerRoutes(app: Express): Server {
       await db.update(contracts)
         .set({
           status: 'payment_processing',
-          last_payment_id: transfer.id,
-          last_payment_status: transfer.status
+          lastPaymentId: transfer.id,
+          lastPaymentStatus: transfer.status
         })
         .where(eq(contracts.id, contractId));
 
@@ -1101,7 +1209,7 @@ export function registerRoutes(app: Express): Server {
 
       // Update contract with latest status
       await db.update(contracts)
-        .set({ last_payment_status: transfer.status })
+        .set({ lastPaymentStatus: transfer.status })
         .where(eq(contracts.id, contract.id));
 
       res.json({
@@ -1262,7 +1370,6 @@ export function registerRoutes(app: Express): Server {
 
   const httpServer = createServer(app);
 
-  //The existing errorHandlingMiddleware is removed here.
   // Register error handling middleware
   app.use(errorHandlingMiddleware);
   return httpServer;
@@ -1278,3 +1385,41 @@ function calculatePotentialRewards(amount: number, monthsEarly: number, addition
 
   return { earlyPayoff, additional };
 }
+// Fix contract status update endpoint
+apiRouter.post("/contracts/:id/status", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const [contract] = await db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, parseInt(id)))
+      .limit(1);
+
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+
+    const updates: Partial<typeof contracts.$inferInsert> = {
+      status,
+      lastPaymentId: req.body.lastPaymentId || null,
+      lastPaymentStatus: req.body.lastPaymentStatus || null
+    };
+
+    const [updatedContract] = await db
+      .update(contracts)
+      .set(updates)
+      .where(eq(contracts.id, parseInt(id)))
+      .returning();
+
+    // Update ledger if needed
+    if (status === 'funded') {
+      await ledgerManager.manualSweep('deposit', updatedContract.amount);
+    }
+
+    res.json(updatedContract);
+  } catch (err) {
+    next(err);
+  }
+});
