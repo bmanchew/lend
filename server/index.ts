@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
+import { LedgerManager } from "./services/ledger-manager";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -78,6 +79,26 @@ const startServer = async () => {
 
     // Register API routes first
     const httpServer = registerRoutes(app);
+
+    // Initialize LedgerManager with default configuration
+    const ledgerManager = LedgerManager.getInstance({
+      minBalance: 10000, // $10,000 minimum balance
+      maxBalance: 50000, // $50,000 maximum balance
+      sweepThreshold: 1000, // Minimum $1,000 for sweep
+      sweepSchedule: '*/15 * * * *' // Every 15 minutes
+    });
+
+    // Start automated sweeps if PLAID_SWEEP_ACCESS_TOKEN is configured
+    if (process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+      try {
+        await ledgerManager.initializeSweeps();
+        logger.info('Automated ledger sweeps initialized');
+      } catch (error) {
+        logger.error('Failed to initialize ledger sweeps:', error);
+      }
+    } else {
+      logger.warn('PLAID_SWEEP_ACCESS_TOKEN not configured, automated sweeps disabled');
+    }
 
     // Enterprise error handling middleware
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {

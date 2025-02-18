@@ -17,6 +17,7 @@ import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan
 import { logger } from "./lib/logger";
 import { slackService } from "./services/slack"; // Add import for slack service
 import { PlaidService } from './services/plaid';
+import { LedgerManager } from './services/ledger-manager';
 
 // Global type declarations
 declare global {
@@ -983,7 +984,8 @@ export function registerRoutes(app: Express): Server {
       });
 
       // Get merchant info for the SMS
-      const [merchant] = await db        .select()
+      const [merchant] = await db
+        .select()
         .from(merchants)
         .where(eq(merchants.id, parseInt(req.params.id)))
         .limit(1);
@@ -1339,40 +1341,98 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Initialize ledger manager with default config
+  const ledgerManager = LedgerManager.getInstance({
+    minBalance: 10000, // $10,000 minimum balance
+    maxBalance: 50000, // $50,000 maximum balance
+    sweepThreshold: 1000, // Minimum $1,000 for sweep
+    sweepSchedule: '*/15 * * * *' // Every 15 minutes
+  });
+
   // Add these new endpoints after existing Plaid routes
+  apiRouter.post("/plaid/ledger/start-sweeps", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Sweep access token not configured'
+        });
+      }
+
+      await ledgerManager.initializeSweeps();
+      res.json({
+        status: 'success',
+        message: 'Ledger sweep monitoring started'
+      });
+    } catch (error: any) {
+      logger.error('Failed to start sweeps:', error);
+      next(error);
+    }
+  });
+
+  apiRouter.post("/plaid/ledger/stop-sweeps", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      ledgerManager.stopSweeps();
+      res.json({
+        status: 'success',
+        message: 'Ledger sweep monitoring stopped'
+      });
+    } catch (error: any) {
+      logger.error('Failed to stop sweeps:', error);
+      next(error);
+    }
+  });
+
+  apiRouter.post("/plaid/ledger/manual-sweep", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { type, amount } = req.body;
+
+      if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Sweep access token not configured'
+        });
+      }
+
+      if (!['withdraw', 'deposit'].includes(type)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid sweep type. Must be either "withdraw" or "deposit".'
+        });
+      }
+
+      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid amount. Must be a positive number.'
+        });
+      }
+
+      const result = await ledgerManager.manualSweep(type, amount.toString());
+      res.json(result);
+    } catch (error: any) {
+      logger.error('Manual sweep failed:', error);
+      next(error);
+    }
+  });
+
   apiRouter.get("/plaid/ledger/balance", async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Sweep access token not configured'
+        });
+      }
+
       const balance = await PlaidService.getLedgerBalance();
-      res.json(balance);
-    } catch (err) {
-      console.error('Error fetching Ledger balance:', err);
-      next(err);
-    }
-  });
-
-  apiRouter.post("/plaid/ledger/withdraw", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { amount } = req.body;
-      const idempotencyKey = `withdraw-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-      const response = await PlaidService.withdrawFromLedger(amount.toString(), idempotencyKey);
-      res.json(response);
-    } catch (err) {
-      console.error('Error withdrawing from Ledger:', err);
-      next(err);
-    }
-  });
-
-  apiRouter.post("/plaid/ledger/deposit", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { amount } = req.body;
-      const idempotencyKey = `deposit-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-      const response = await PlaidService.depositToLedger(amount.toString(), idempotencyKey);
-      res.json(response);
-    } catch (err) {
-      console.error('Error depositing to Ledger:', err);
-      next(err);
+      res.json({
+        status: 'success',
+        data: balance
+      });
+    } catch (error: any) {
+      logger.error('Failed to fetch ledger balance:', error);
+      next(error);
     }
   });
 
