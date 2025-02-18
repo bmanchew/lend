@@ -266,7 +266,6 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to send OTP" });
   }
 });
-  try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
       return res.status(400).json({ error: "Phone number is required" });
