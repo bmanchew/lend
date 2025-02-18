@@ -18,7 +18,6 @@ import { logger } from "./lib/logger";
 import { slackService } from "./services/slack"; // Add import for slack service
 import { PlaidService } from './services/plaid';
 
-
 // Global type declarations
 declare global {
   namespace Express {
@@ -984,8 +983,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       // Get merchant info for the SMS
-      const [merchant] = await db
-        .select()
+      const [merchant] = await db        .select()
         .from(merchants)
         .where(eq(merchants.id, parseInt(req.params.id)))
         .limit(1);
@@ -1242,11 +1240,38 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/plaid/payment-status/:transferId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { transferId } = req.params;
-      const status = await PlaidService.getTransferStatus(transferId);
+      const transfer = await PlaidService.getTransferStatus(transferId);
 
-      res.json({ status });
+      // Update contract payment status
+      if (transfer.id) {
+        await db.update(contracts)
+          .set({
+            lastPaymentId: transfer.id,
+            lastPaymentStatus: transfer.status,
+          })
+          .where(eq(contracts.lastPaymentId, transferId));
+      }
+
+      res.json({
+        status: transfer.status,
+        transferId: transfer.id,
+      });
     } catch (err) {
       console.error('Error checking payment status:', err);
+      next(err);
+    }
+  });
+
+  apiRouter.post("/plaid/create-link-token", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const linkToken = await PlaidService.createLinkToken(req.user.id.toString());
+      res.json({ link_token: linkToken.link_token });
+    } catch (err) {
+      console.error('Error creating link token:', err);
       next(err);
     }
   });
@@ -1310,6 +1335,43 @@ export function registerRoutes(app: Express): Server {
       res.json({ received: true });
     } catch (err) {
       console.error('Error processing Plaid webhook:', err);
+      next(err);
+    }
+  });
+
+  // Add these new endpoints after existing Plaid routes
+  apiRouter.get("/plaid/ledger/balance", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const balance = await PlaidService.getLedgerBalance();
+      res.json(balance);
+    } catch (err) {
+      console.error('Error fetching Ledger balance:', err);
+      next(err);
+    }
+  });
+
+  apiRouter.post("/plaid/ledger/withdraw", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount } = req.body;
+      const idempotencyKey = `withdraw-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      const response = await PlaidService.withdrawFromLedger(amount.toString(), idempotencyKey);
+      res.json(response);
+    } catch (err) {
+      console.error('Error withdrawing from Ledger:', err);
+      next(err);
+    }
+  });
+
+  apiRouter.post("/plaid/ledger/deposit", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { amount } = req.body;
+      const idempotencyKey = `deposit-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      const response = await PlaidService.depositToLedger(amount.toString(), idempotencyKey);
+      res.json(response);
+    } catch (err) {
+      console.error('Error depositing to Ledger:', err);
       next(err);
     }
   });

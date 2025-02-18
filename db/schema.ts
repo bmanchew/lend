@@ -66,6 +66,8 @@ export const contracts = pgTable('contracts', {
   underwritingStatus: text('underwriting_status'),
   borrowerEmail: text('borrower_email'),
   borrowerPhone: text('borrower_phone'),
+  lastPaymentId: text('last_payment_id'), // Store Plaid transfer ID
+  lastPaymentStatus: text('last_payment_status'), // Store Plaid transfer status
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').default(true)
 });

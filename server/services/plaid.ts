@@ -40,8 +40,20 @@ export class PlaidService {
     return response.data;
   }
 
+  static async getLedgerBalance() {
+    const response = await plaidClient.transferBalanceGet();
+    return response.data;
+  }
+
   static async initiatePayment(accessToken: string, amount: number, accountId: string) {
     try {
+      // First check Ledger balance for credit transfers
+      const ledgerBalance = await this.getLedgerBalance();
+
+      if (ledgerBalance.available && parseFloat(amount.toString()) > parseFloat(ledgerBalance.available.toString())) {
+        throw new Error('Insufficient funds in Plaid Ledger');
+      }
+
       // Create a transfer authorization
       const authorizationResponse = await plaidClient.transferAuthorizationCreate({
         access_token: accessToken,
@@ -60,10 +72,10 @@ export class PlaidService {
         access_token: accessToken,
         account_id: accountId,
         authorization_id: authorizationResponse.data.authorization.id,
+        description: 'Loan Down Payment',
         type: TransferType.Debit,
         network: TransferNetwork.Ach,
         amount: amount.toString(),
-        description: 'Loan Down Payment',
         ach_class: ACHClass.Ppd,
       });
 
@@ -84,23 +96,65 @@ export class PlaidService {
     return response.data.transfer;
   }
 
-  // New method to handle Plaid Ledger events
+  // Handle Plaid Ledger sweeps and events
   static async syncTransferEvents(afterId?: number) {
     const response = await plaidClient.transferEventSync({
-      after_id: afterId,
+      after_id: afterId ? afterId : 0,
     });
 
     const events = response.data.transfer_events;
 
     // Process new Ledger events
     for (const event of events) {
+      // Handle sweep events
       if (event.event_type.startsWith('sweep.')) {
-        // Handle new sweep events (pending, posted, settled, returned, failed)
-        console.log('Processing sweep event:', event);
-        // TODO: Update your database with sweep status
+        console.log('Processing sweep event:', {
+          eventType: event.event_type,
+          timestamp: new Date().toISOString(),
+          eventId: event.event_id,
+          accountId: event.account_id,
+        });
+
+        // Update your database or trigger notifications based on sweep status
+        switch (event.event_type) {
+          case 'sweep.pending':
+            // Sweep initiated
+            break;
+          case 'sweep.posted':
+            // Funds have been debited/credited
+            break;
+          case 'sweep.settled':
+            // Sweep completed successfully
+            break;
+          case 'sweep.returned':
+            // Sweep was returned
+            break;
+          case 'sweep.failed':
+            // Sweep failed
+            break;
+        }
       }
     }
 
+    return response.data;
+  }
+
+  // New methods for Ledger management
+  static async withdrawFromLedger(amount: string, idempotencyKey: string) {
+    const response = await plaidClient.transferLedgerWithdraw({
+      amount,
+      idempotency_key: idempotencyKey,
+      network: TransferNetwork.Ach,
+    });
+    return response.data;
+  }
+
+  static async depositToLedger(amount: string, idempotencyKey: string) {
+    const response = await plaidClient.transferLedgerDeposit({
+      amount,
+      idempotency_key: idempotencyKey,
+      network: TransferNetwork.Ach,
+    });
     return response.data;
   }
 }
