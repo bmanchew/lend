@@ -12,9 +12,9 @@ import { createServer as createNetServer } from 'net';
 
 // Rate limiter configuration
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minute window
-  max: 2000, // Higher limit
-  message: { error: "Too many requests, please try again in 15 minutes" }
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 1000, // Set very high for testing
+  message: { error: "Too many requests from this IP, please try again later" }
 });
 
 const app = express();
@@ -107,23 +107,13 @@ const startServer = async () => {
       });
     });
 
-    // Find available port starting from 3001
+    // Find available port
     const port = await portfinder.getPortPromise({ 
-      port: 3001,
-      stopPort: 3999
+      port: process.env.PORT ? parseInt(process.env.PORT) : 3000 
     });
 
-    // Handle cleanup on termination signals
-    const cleanup = () => {
-      logger.info('Received termination signal');
-      httpServer.close(() => {
-        logger.info('HTTP server closed');
-        process.exit(0);
-      });
-    };
-
-    process.on('SIGTERM', cleanup);
-    process.on('SIGINT', cleanup);
+    // Wait for port to be available before starting
+    await waitForPort(port);
 
     // Start server
     const server = httpServer.listen(port, "0.0.0.0", () => {

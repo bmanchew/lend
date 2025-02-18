@@ -17,8 +17,14 @@ import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
 import type { LoginData, JWTPayload, User } from '@/types';
-import crypto from 'crypto';
 
+// Initialize LedgerManager singleton
+const ledgerManager = LedgerManager.getInstance({
+  minBalance: 1000,
+  maxBalance: 100000,
+  sweepThreshold: 500,
+  sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+});
 
 // Type declarations
 interface RequestWithUser extends Request {
@@ -27,15 +33,7 @@ interface RequestWithUser extends Request {
 
 const router = Router();
 
-// Initialize singleton services
-const ledgerManager = LedgerManager.getInstance({
-  minBalance: 1000,
-  maxBalance: 100000,
-  sweepThreshold: 500,
-  sweepSchedule: '0 */15 * * * *'
-});
-
-// Custom error handling
+// Custom error class for API errors
 class APIError extends Error {
   constructor(
     public status: number,
@@ -48,38 +46,47 @@ class APIError extends Error {
   }
 }
 
-// Middleware
+// Request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
+
   logger.info(`[API] ${req.method} ${req.path}`, {
     requestId,
     query: req.query,
     body: req.body,
     headers: { ...req.headers, authorization: undefined }
   });
+
   next();
 };
 
+// Cache middleware
 const cacheMiddleware = (duration: number) => {
   const apiCache = new NodeCache({ stdTTL: duration });
+
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET') return next();
+
     const key = `__express__${req.originalUrl}`;
     const cachedResponse = apiCache.get(key);
+
     if (cachedResponse) {
-      return res.send(cachedResponse);
+      res.send(cachedResponse);
+      return;
     }
+
     const originalSend = res.send;
     res.send = function(body: any): any {
       apiCache.set(key, body, duration);
-      res.send = originalSend;
       return originalSend.call(this, body);
     };
+
     next();
   };
 };
 
+// JWT verification middleware
 const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -87,9 +94,10 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
     return res.status(401).json({ error: 'No token provided' });
   }
 
+  const token = authHeader.split(' ')[1];
   try {
-    const token = authHeader.split(' ')[1];
     const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+    logger.info("[Auth] Verifying JWT token");
     const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     req.user = decoded;
     logger.info("[Auth] JWT verification successful:", { userId: decoded.id, role: decoded.role });
@@ -100,11 +108,7 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
   }
 };
 
-// Register global middleware
-router.use(requestTrackingMiddleware);
-router.use(cacheMiddleware(300));
-
-// Auth Routes
+// Auth routes - no JWT verification needed for these
 router.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const { username, password, loginType } = req.body as LoginData;
@@ -114,30 +118,71 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Username and password are required" });
     }
 
+    logger.debug("[Auth] Login attempt details:", {
+      username,
+      loginType,
+      requestHeaders: req.headers,
+      timestamp: new Date().toISOString(),
+      path: req.path
+    });
+
+    // Get user from database
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.email, username))
       .limit(1);
 
-    if (!user || !await authService.comparePasswords(password, user.password)) {
-      logger.info("[Auth] Invalid credentials for user:", username);
+    if (!user) {
+      logger.info("[Auth] User not found:", username);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (loginType !== user.role) {
-      logger.info("[Auth] Role mismatch:", { expected: loginType, actual: user.role });
-      return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+    logger.debug("[Auth] Found user:", {
+      userId: user.id,
+      role: user.role,
+      hasPassword: !!user.password,
+      timestamp: new Date().toISOString()
+    });
+
+    // Verify password using authService
+    const isValid = await authService.comparePasswords(password, user.password);
+
+    if (!isValid) {
+      logger.info("[Auth] Invalid password for user:", username);
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    // Check if loginType matches user role
+    if (loginType !== user.role) {
+      logger.info("[Auth] Role mismatch:", { 
+        expected: loginType, 
+        actual: user.role,
+        username,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ 
+        error: `This login is for ${loginType} accounts only.`
+      });
+    }
+
+    // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
     const token = jwt.sign({
       id: user.id,
       role: user.role,
       name: user.name || undefined,
       email: user.email,
       phoneNumber: user.phoneNumber || undefined
-    } as JWTPayload, process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret');
+    } as JWTPayload, jwtSecret);
 
+    logger.info("[Auth] Login successful:", {
+      userId: user.id,
+      role: user.role,
+      timestamp: new Date().toISOString()
+    });
+
+    // Return response
     res.json({
       token,
       id: user.id,
@@ -152,7 +197,11 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-// Protected routes
+// Register middleware
+router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
+
+// Protected routes - require JWT verification
 router.use(verifyJWT);
 
 router.get("/auth/me", async (req: RequestWithUser, res: Response) => {
@@ -453,6 +502,41 @@ router.post("/merchants/create", async (req: RequestWithUser, res: Response, nex
   }
 });
 
+router.get("/merchants", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  logger.info("[Merchants] Fetching all merchants");
+  try {
+    const allMerchants = await db
+      .select({
+        merchant: merchants,
+        user: users,
+        program: programs
+      })
+      .from(merchants)
+      .leftJoin(users, eq(merchants.userId, users.id))
+      .leftJoin(programs, eq(merchants.id, programs.merchantId));
+
+    const merchantsMap = new Map();
+    allMerchants.forEach(row => {
+      if (!merchantsMap.has(row.merchant.id)) {
+        merchantsMap.set(row.merchant.id, {
+          ...row.merchant,
+          user: row.user,
+          programs: []
+        });
+      }
+      if (row.program) {
+        merchantsMap.get(row.merchant.id).programs.push(row.program);
+      }
+    });
+
+    const merchantsWithPrograms = Array.from(merchantsMap.values());
+
+    res.json(merchantsWithPrograms);
+  } catch (err: any) {
+    logger.error("Error fetching all merchants:", err);
+    next(err);
+  }
+});
 
 router.post("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
@@ -484,6 +568,45 @@ router.get("/merchants/:id/programs", async (req: RequestWithUser, res: Response
     res.json(merchantPrograms);
   } catch (err: any) {
     logger.error("Error fetching merchant programs:", err);
+    next(err);
+  }
+});
+
+router.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    const { status, merchantId } = req.query;
+
+    // Start with base query
+    const baseQuery = db
+      .select({
+        contract: contracts,
+        merchant: merchants,
+        user: users
+      })
+      .from(contracts)
+      .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
+      .leftJoin(users, eq(contracts.customerId, users.id));
+
+    // Build conditions array for filtering
+    const conditions = [];
+    if (status) {
+      conditions.push(eq(contracts.status, status as string));
+    }
+    if (merchantId) {
+      conditions.push(eq(contracts.merchantId, parseInt(merchantId as string)));
+    }
+
+    // Apply conditions if any exist
+    const query = conditions.length > 0
+      ? baseQuery.where(and(...conditions))
+      : baseQuery;
+
+    const allContracts = await query.orderBy(desc(contracts.createdAt));
+
+    logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length });
+    res.json(allContracts);
+  } catch (err) {
+    logger.error("[Routes] Error fetching contracts:", err);
     next(err);
   }
 });
@@ -593,6 +716,297 @@ router.post("/webhooks/process", async (req: RequestWithUser, res: Response, nex
   }
 });
 
+router.get("/rewards/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const balance = await shifiRewardsService.getBalance(req.user.id);
+    const [balanceData] = await db
+      .select()
+      .from(rewardsBalances)
+      .where(eq(rewardsBalances.userId, req.user.id))
+      .limit(1);
+
+    res.json({
+      balance: balance,
+      lifetimeEarned: balanceData?.lifetimeEarned || 0
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const requestId = Date.now().toString(36);
+  const debugLog = (message: string, data?: any) => {
+    logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
+  };
+
+  debugLog('Received application request', {
+    body: req.body,
+    merchantId: req.params.id,
+    timestamp: new Date().toISOString()
+  });
+
+  try {
+    // Enhanced phone number validation and formatting
+    let phone = req.body.phone?.replace(/[^0-9+]/g, ''); // Keep + sign but remove other non-digits
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number is required'
+      });
+    }
+
+    debugLog('Initial phone cleaning', {
+      original: req.body.phone,
+      cleaned: phone
+    });
+
+    // Handle various phone formats
+    if (phone.startsWith('+1')) {
+      phone = phone.substring(2);
+    } else if (phone.startsWith('1')) {
+      phone = phone.substring(1);
+    }
+
+    if (phone.length !== 10) {
+      logger.error('[LoanApplication] Invalid phone number format', {
+        originalPhone: req.body.phone,
+        cleanedPhone: phone,
+        length: phone.length,
+        requestId
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid phone number format. Please provide a 10-digit US phone number.'
+      });
+    }
+
+    const formattedPhone = `+1${phone}`;
+    debugLog('Formatted phone number', {
+      original: req.body.phone,
+      intermediate: phone,
+      formatted: formattedPhone
+    });
+
+    //// Get merchant info for the SMS
+    const [merchant] = await db
+      .select()
+      .from(merchants)
+      .where(eq(merchants.id, parseInt(req.params.id)))
+      .limit(1);
+
+    if (!merchant) {
+      logger.error('[LoanApplication] Merchant not found', {
+        merchantId: req.params.id,
+        requestId
+      });
+      return res.status(404).json({
+        success: false,
+        error: 'Merchant not found'
+      });
+    }
+
+    // Generate application URL with proper encoding
+    const appUrl = process.env.APP_URL || '';
+    if (!appUrl) {
+      logger.error('[LoanApplication] Missing APP_URL environment variable');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error'
+      });
+    }
+
+    const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
+    const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
+
+    debugLog('Generated application URL', {
+      baseUrl,
+      applicationUrl,
+      phone: formattedPhone
+    });
+
+    // Store webhook event before sending SMS
+    await db.insert(webhookEvents).values({
+      eventType: 'loan_application_attempt',
+      sessionId: requestId,
+      status: 'pending',
+      payload: JSON.stringify({
+        merchantId: parseInt(req.params.id),
+        merchantName: merchant.companyName,
+        phone: formattedPhone,
+        applicationUrl,
+        timestamp: new Date().toISOString(),
+        requestId
+      }),
+      error: null,
+      retryCount: 0,
+      processedAt: null
+    } as typeof webhookEvents.$inferInsert);
+
+    // Send SMS with enhanced error handling
+    const smsResult = await smsService.sendLoanApplicationLink(
+      formattedPhone,
+      applicationUrl,
+      merchant.companyName,
+      {
+        requestId,
+        merchantName: merchant.companyName
+      }
+    );
+
+    if (!smsResult.success) {
+      // Update webhook event with error
+      await db.update(webhookEvents)
+        .set({
+          status: 'failed',
+          error: smsResult.error,
+          processedAt: new Date()
+        })
+        .where(eq(webhookEvents.sessionId, requestId));
+
+      logger.error('[LoanApplication] Failed to send SMS', {
+        error: smsResult.error,
+        phone: formattedPhone,
+        requestId
+      });
+
+      // Provide more user-friendly error message based on error type
+      let userErrorMessage = 'Failed to send application link';
+      if (smsResult.error?.includes('Invalid \'To\' Phone Number')) {
+        userErrorMessage = 'Please provide a valid mobile phone number that can receive SMS messages';
+      } else if (smsResult.error?.includes('unsubscribed')) {
+        userErrorMessage = 'This phone number has opted out of receiving messages. Please use a different number or contact support.';
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: userErrorMessage,
+        details: process.env.NODE_ENV === 'development' ? smsResult.error : undefined
+      });
+    }
+
+    // Update webhook event with success
+    await db.update(webhookEvents)
+      .set({
+        status: 'sent',
+        processedAt: new Date()
+      })
+      .where(eq(webhookEvents.sessionId, requestId));
+
+    debugLog('Successfully sent application link', {
+      phone: formattedPhone,
+      url: applicationUrl
+    });
+
+    return res.json({
+      success: true,
+      message: 'Application link sent successfully'
+    });
+
+  } catch (error) {
+    logger.error('[LoanApplication] Unexpected error', {
+      error,
+      requestId
+    });
+
+    // Update webhook event with error
+    await db.update(webhookEvents)
+      .set({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        processedAt: new Date()
+      })
+      .where(eq(webhookEvents.sessionId, requestId));
+
+    next(error);
+  }
+});
+
+router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    const { phoneNumber, otp } = req.body;
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.phoneNumber, phoneNumber))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if OTP is valid and not expired
+    if (!user.lastOtpCode || !user.otpExpiry || user.lastOtpCode !== otp || new Date() > user.otpExpiry) {
+      return res.status(401).json({ error: "Invalid or expired OTP" });
+    }
+
+    // Generate JWT token with proper UserRole type
+    const token = await authService.generateJWT({
+      id: user.id,
+      role: user.role as UserRole,
+      name: user.name || '',
+      email: user.email,
+      phoneNumber: user.phoneNumber || ''
+    });
+
+    res.json({ token });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    res.json(req.user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    req.session.destroy(err => {
+      if (err) {
+        next(err);
+      } else {
+        res.json({ success: true });
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+router.post("/auth/register", async (req: RequestWithUser, res: Response, nextFunction) => {
+  try {
+    const { username, password, email, name, role, phoneNumber } = req.body;
+    if (!username || !password || !email || !name || !role || !phoneNumber) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+    const hashedPassword= await authService.hashPassword(password);
+    const user = await db.insert(users).values({
+      username, password: hashedPassword, email, name, role,phoneNumber
+    } as typeof users.$inferInsert).returning();
+    res.json(user);
+  } catch(err) {
+    next(err);
+  }
+});
+
 router.get("/rewards/transactions", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user?.id) {
@@ -660,11 +1074,11 @@ router.get("/rewards/potential", async (req: RequestWithUser, res: Response, nex
     }
 
     let totalPoints = 0;
-    const details: Record<string, any> = {}; 
+    const details: Record<string, any> = {}; // Fix letdetails typo
 
     switch (type) {
       case 'down_payment':
-        totalPoints = Math.floor(amount / 10); 
+        totalPoints = Math.floor(amount / 10); // Basic reward for down payment
         details.basePoints = totalPoints;
         break;
 
@@ -698,7 +1112,6 @@ router.get("/rewards/potential", async (req: RequestWithUser, res: Response, nex
     next(err);
   }
 });
-
 
 // Update PlaidContractUpdate interface to match schema
 interface PlaidContractUpdate {
@@ -971,381 +1384,32 @@ router.post("/plaid/create-link-token", async (req: RequestWithUser, res: Respon
   }
 });
 
-router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const requestId = Date.now().toString(36);
-  const debugLog = (message: string, data?: any) => {
-    logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
-  };
+// Mount API router with prefix
+//app.use('/api', apiRouter);  //This line is removed as it's handled differently in the edited code.
 
-  debugLog('Received application request', {
-    body: req.body,
-    merchantId: req.params.id,
-    timestamp: new Date().toISOString()
-  });
 
-  try {
-    // Enhanced phone number validation and formatting
-    let phone = req.body.phone?.replace(/[^0-9+]/g, ''); 
-    if (!phone) {
-      return res.status(400).json({
-        success: false,
-        error: 'Phone number is required'
-      });
-    }
+// Create HTTP server
+//const server = createServer(app); //This line is removed as it's handled differently in the edited code.
 
-    debugLog('Initial phone cleaning', {
-      original: req.body.phone,
-      cleaned: phone
-    });
+//return server; //This line is removed as it's handled differently in the edited code.
 
-    // Handle various phone formats
-    if (phone.startsWith('+1')) {
-      phone = phone.substring(2);
-    } else if (phone.startsWith('1')) {
-      phone = phone.substring(1);
-    }
-
-    if (phone.length !== 10) {
-      logger.error('[LoanApplication] Invalid phone number format', {
-        originalPhone: req.body.phone,
-        cleanedPhone: phone,
-        length: phone.length,
-        requestId
-      });
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid phone number format. Please provide a 10-digit US phone number.'
-      });
-    }
-
-    const formattedPhone = `+1${phone}`;
-    debugLog('Formatted phone number', {
-      original: req.body.phone,
-      intermediate: phone,
-      formatted: formattedPhone
-    });
-
-    //// Get merchant info for the SMS
-    const [merchant] = await db
-      .select()
-      .from(merchants)
-      .where(eq(merchants.id, parseInt(req.params.id)))
-      .limit(1);
-
-    if (!merchant) {
-      logger.error('[LoanApplication] Merchant not found', {
-        merchantId: req.params.id,
-        requestId
-      });
-      return res.status(404).json({
-        success: false,
-        error: 'Merchant not found'
-      });
-    }
-
-    // Generate application URL with proper encoding
-    const appUrl = process.env.APP_URL || '';
-    if (!appUrl) {
-      logger.error('[LoanApplication] Missing APP_URL environment variable');
-      return res.status(500).json({
-        success: false,
-        error: 'Server configuration error'
-      });
-    }
-
-    const baseUrl = appUrl.replace(/\/$/, ''); 
-    const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
-
-    debugLog('Generated application URL', {
-      baseUrl,
-      applicationUrl,
-      phone: formattedPhone
-    });
-
-    // Store webhook event before sending SMS
-    await db.insert(webhookEvents).values({
-      eventType: 'loan_application_attempt',
-      sessionId: requestId,
-      status: 'pending',
-      payload: JSON.stringify({
-        merchantId: parseInt(req.params.id),
-        merchantName: merchant.companyName,
-        phone: formattedPhone,
-        applicationUrl,
-        timestamp: new Date().toISOString(),
-        requestId
-      }),
-      error: null,
-      retryCount: 0,
-      processedAt: null
-    } as typeof webhookEvents.$inferInsert);
-
-    // Send SMS with enhanced error handling
-    const smsResult = await smsService.sendLoanApplicationLink(
-      formattedPhone,
-      applicationUrl,
-      merchant.companyName,
-      {
-        requestId,
-        merchantName: merchant.companyName
-      }
-    );
-
-    if (!smsResult.success) {
-      // Update webhook event with error
-      await db.update(webhookEvents)
-        .set({
-          status: 'failed',
-          error: smsResult.error,
-          processedAt: new Date()
-        })
-        .where(eq(webhookEvents.sessionId, requestId));
-
-      logger.error('[LoanApplication] Failed to send SMS', {
-        error: smsResult.error,
-        phone: formattedPhone,
-        requestId
-      });
-
-      // Provide more user-friendly error message based on error type
-      let userErrorMessage = 'Failed to send application link';
-      if (smsResult.error?.includes('Invalid \'To\' Phone Number')) {
-        userErrorMessage = 'Please provide a valid mobile phone number that can receive SMS messages';
-      } else if (smsResult.error?.includes('unsubscribed')) {
-        userErrorMessage = 'This phone number has opted out of receiving messages. Please use a different number or contact support.';
-      }
-
-      return res.status(400).json({
-        success: false,
-        error: userErrorMessage,
-        details: process.env.NODE_ENV === 'development' ? smsResult.error : undefined
-      });
-    }
-
-    // Update webhook event with success
-    await db.update(webhookEvents)
-      .set({
-        status: 'sent',
-        processedAt: new Date()
-      })
-      .where(eq(webhookEvents.sessionId, requestId));
-
-    debugLog('Successfully sent application link', {
-      phone: formattedPhone,
-      url: applicationUrl
-    });
-
-    return res.json({
-      success: true,
-      message: 'Application link sent successfully'
-    });
-
-  } catch (error) {
-    logger.error('[LoanApplication] Unexpected error', {
-      error,
-      requestId
-    });
-
-    // Update webhook event with error
-    await db.update(webhookEvents)
-      .set({
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        processedAt: new Date()
-      })
-      .where(eq(webhookEvents.sessionId, requestId));
-
-    next(error);
-  }
-});
-
-router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    const { phoneNumber, otp } = req.body;
-    if (!phoneNumber || !otp) {
-      return res.status(400).json({ error: "Phone number and OTP are required" });
-    }
-
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.phoneNumber, phoneNumber))
-      .limit(1);
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Check if OTP is valid and not expired
-    if (!user.lastOtpCode || !user.otpExpiry || user.lastOtpCode !== otp || new Date() > user.otpExpiry) {
-      return res.status(401).json({ error: "Invalid or expired OTP" });
-    }
-
-    // Generate JWT token with proper UserRole type
-    const token = await authService.generateJWT({
-      id: user.id,
-      role: user.role as UserRole,
-      name: user.name || '',
-      email: user.email,
-      phoneNumber: user.phoneNumber || ''
-    });
-
-    res.json({ token });
-
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/auth/me", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    res.json(req.user);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/auth/logout", async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    req.session.destroy(err => {
-      if (err) {
-        next(err);
-      } else {
-        res.json({ success: true });
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/auth/register", async (req: RequestWithUser, res: Response, nextFunction) => {
-  try {
-    const { username, password, email, name, role, phoneNumber } = req.body;
-    if (!username || !password || !email || !name || !role || !phoneNumber) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
-    const hashedPassword= await authService.hashPassword(password);
-    const user = await db.insert(users).values({
-      username, password: hashedPassword, email, name, role,phoneNumber
-    } as typeof users.$inferInsert).returning();
-    res.json(user);
-  } catch(err) {
-    next(err);
-  }
-});
-
-router.get("/merchants", async (req: RequestWithUser, res: Response) => {
-  try {
-    const allMerchants = await db
-      .select({
-        merchant: merchants,
-        user: users,
-        program: programs
-      })
-      .from(merchants)
-      .leftJoin(users, eq(merchants.userId, users.id))
-      .leftJoin(programs, eq(merchants.id, programs.merchantId));
-
-    const merchantsWithPrograms = Array.from(allMerchants.reduce((map, row) => {
-      if (!map.has(row.merchant.id)) {
-        map.set(row.merchant.id, {
-          ...row.merchant,
-          user: row.user,
-          programs: []
-        });
-      }
-      if (row.program) {
-        map.get(row.merchant.id).programs.push(row.program);
-      }
-      return map;
-    }, new Map()).values());
-
-    res.json(merchantsWithPrograms);
-  } catch (err) {
-    logger.error("Error fetching merchants:", err);
-    res.status(500).json({ error: "Failed to fetch merchants" });
-  }
-});
-
-router.get("/contracts", async (req: RequestWithUser, res: Response) => {
-  try {
-    const { status, merchantId } = req.query;
-    const conditions = [];
-
-    if (status) conditions.push(eq(contracts.status, status as string));
-    if (merchantId) conditions.push(eq(contracts.merchantId, parseInt(merchantId as string)));
-
-    const query = db
-      .select({
-        contract: contracts,
-        merchant: merchants,
-        user: users
-      })
-      .from(contracts)
-      .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
-      .leftJoin(users, eq(contracts.customerId, users.id));
-
-    const allContracts = await (conditions.length > 0
-      ? query.where(and(...conditions))
-      : query).orderBy(desc(contracts.createdAt));
-
-    res.json(allContracts);
-  } catch (err) {
-    logger.error("Error fetching contracts:", err);
-    res.status(500).json({ error: "Failed to fetch contracts" });
-  }
-});
-
-router.get("/rewards/balance", async (req: RequestWithUser, res: Response) => {
-  try {
-    if (!req.user?.id) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const balance = await shifiRewardsService.getBalance(req.user.id);
-    const [balanceData] = await db
-      .select()
-      .from(rewardsBalances)
-      .where(eq(rewardsBalances.userId, req.user.id))
-      .limit(1);
-
-    res.json({
-      balance,
-      lifetimeEarned: balanceData?.lifetimeEarned || 0
-    });
-  } catch (err) {
-    logger.error("Error fetching rewards balance:", err);
-    res.status(500).json({ error: "Failed to fetch rewards balance" });
-  }
-});
-
-// Helper Functions
+// Helper function declarations
 async function generateVerificationToken(): Promise<string> {
-  return crypto.randomBytes(32).toString('hex');
+  throw new Error("Function not implemented.");
 }
 
 async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
-  // Implementation
-  return true;
+  throw new Error("Function not implemented.");
 }
 
 async function sendMerchantCredentials(email: string, username: string, password: string): Promise<void> {
-  // Implementation
+  throw new Error("Function not implemented.");
 }
 
 async function testSendGridConnection(): Promise<boolean> {
-  // Implementation
-  return true;
+  throw new Error("Function not implemented.");
 }
 
-// Type declarations
 declare global {
   namespace Express {
     interface User {
@@ -1355,6 +1419,7 @@ declare global {
       name?: string;
       phoneNumber?: string;
     }
+
     interface Request {
       user?: User;
     }
@@ -1363,6 +1428,29 @@ declare global {
 }
 
 export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+
+export interface DiditWebhookPayload {
+  session_id: string;
+  status: VerificationStatus;
+  created_at: number;
+  timestamp: number;
+  userId: string;
+  data?: {
+    verificationStatus: string;
+    documentData?: any;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+  vendor_data?: string;
+  decision?: {
+    kyc?: {
+      document_data?: any;
+    };
+  };
+}
+
 export type UserRole = 'admin' | 'merchant' | 'customer';
 
 export default router;
