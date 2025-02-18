@@ -70,9 +70,11 @@ const cacheMiddleware = (duration: number) => {
     if (cachedResponse) {
       return res.send(cachedResponse);
     }
+    const originalSend = res.send;
     res.send = function(body: any): any {
       apiCache.set(key, body, duration);
-      return res.send.call(this, body);
+      res.send = originalSend;
+      return originalSend.call(this, body);
     };
     next();
   };
