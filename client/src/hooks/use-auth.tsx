@@ -47,7 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       const res = await apiRequest("POST", "/api/auth/login", {
-        ...credentials,
+        username: credentials.username,
+        password: credentials.password,
+        loginType: credentials.loginType,
         deviceInfo: {
           isMobile,
           platform: navigator.platform,
