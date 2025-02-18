@@ -22,72 +22,6 @@ import jwt from 'jsonwebtoken';
 // Create apiRouter at the top level
 const apiRouter = express.Router();
 
-// JWT verification middleware
-const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, process.env.REPL_ID!);
-    req.user = decoded as Express.User;
-    next();
-  } catch (err) {
-    console.error('JWT verification failed:', err);
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Global type declarations
-declare global {
-  namespace Express {
-    interface User {
-      id: number;
-      role: string;
-      email?: string;
-      name?: string;
-      phoneNumber?: string;
-      platform?: string;
-      kycStatus?: string;
-      otpExpiry?: Date | null;
-      lastOtpCode?: string | null;
-      createdAt?: Date;
-      updatedAt?: Date;
-    }
-
-    interface Request {
-      user?: User;
-    }
-  }
-  var io: SocketIOServer;
-}
-
-export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
-
-export interface DiditWebhookPayload {
-  session_id: string;
-  status: VerificationStatus;
-  created_at: number;
-  timestamp: number;
-  userId: string;
-  data?: {
-    verificationStatus: string;
-    documentData?: any;
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
-  vendor_data?: string;
-  decision?: {
-    kyc?: {
-      document_data?: any;
-    };
-  };
-}
-
 // Custom error class for API errors
 class APIError extends Error {
   constructor(
@@ -101,30 +35,7 @@ class APIError extends Error {
   }
 }
 
-// Route type definitions with improved typing
-type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
-
-interface RouteConfig {
-  path: string;
-  method: 'get' | 'post' | 'put' | 'delete';
-  handler: RouteHandler;
-  middleware?: any[];
-  description?: string;
-}
-
-// Route grouping by domain
-interface RouteGroup {
-  prefix: string;
-  routes: RouteConfig[];
-}
-
-// Middleware type declarations
-type RequestTrackingMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => void;
-
+// Error handling middleware type declaration
 type ErrorHandlingMiddleware = (
   err: Error | APIError,
   req: Request,
@@ -132,51 +43,76 @@ type ErrorHandlingMiddleware = (
   next: NextFunction
 ) => void;
 
-// Request tracking middleware
-const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
+// Define error handling middleware before use
+const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
+  const errorId = Date.now().toString(36);
+  const isAPIError = err instanceof APIError;
 
-  console.log(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
-  });
+  const errorDetails = {
+    id: errorId,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+    name: err.name,
+    message: err.message,
+    status: isAPIError ? err.status : 500,
+    code: isAPIError ? err.code : undefined,
+    details: isAPIError ? err.details : undefined,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  };
+
+  // Update webhook event with error
+  if (req.headers['x-webhook-id']) {
+    db.update(webhookEvents)
+      .set({
+        status: 'error',
+        error: err.message,
+        processedAt: new Date()
+      })
+      .where(eq(webhookEvents.sessionId, req.headers['x-webhook-id'] as string))
+      .execute()
+      .catch(console.error);
+  }
+
+  logger.error('API Error:', errorDetails);
+
+  if (!res.headersSent) {
+    res.status(errorDetails.status).json({
+      status: 'error',
+      message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
+      errorId
+    });
+  }
 
   next();
 };
 
-// Cache middleware
-const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
-  const apiCache = new NodeCache({ stdTTL: duration });
+// JWT verification middleware with proper types
+const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
 
-  return (req, res, next) => {
-    if (req.method !== 'GET') return next();
-
-    const key = `__express__${req.originalUrl}`;
-    const cachedResponse = apiCache.get(key);
-
-    if (cachedResponse) {
-      res.send(cachedResponse);
-      return;
-    }
-
-    const originalSend = res.send;
-    res.send = function (body: any): any {
-      apiCache.set(key, body, duration);
-      return originalSend.call(this, body);
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.REPL_ID!) as {
+      id: number;
+      role: string;
+      email?: string;
+      name?: string;
+      phoneNumber?: string;
     };
+
+    req.user = decoded;
     next();
-  };
+  } catch (err) {
+    console.error('JWT verification failed:', err);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 };
 
 export function registerRoutes(app: Express): Server {
-  // Register middleware
-  apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(verifyJWT);
-  apiRouter.use(errorHandlingMiddleware);
-
   // Initialize LedgerManager singleton with config
   const ledgerConfig = {
     minBalance: 1000,
@@ -192,49 +128,15 @@ export function registerRoutes(app: Express): Server {
     logger.error('Failed to initialize ledger sweeps:', error);
   });
 
-  // Update webhook event error handling
-  const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
-    const errorId = Date.now().toString(36);
-    const isAPIError = err instanceof APIError;
+  // Register middleware
+  apiRouter.use(requestTrackingMiddleware);
+  apiRouter.use(verifyJWT); // Added JWT verification middleware
+  apiRouter.use(errorHandlingMiddleware);
 
-    const errorDetails = {
-      id: errorId,
-      path: req.path,
-      method: req.method,
-      timestamp: new Date().toISOString(),
-      name: err.name,
-      message: err.message,
-      status: isAPIError ? err.status : 500,
-      code: isAPIError ? err.code : undefined,
-      details: isAPIError ? err.details : undefined,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    };
-
-    // Update webhook event with error
-    if (req.headers['x-webhook-id']) {
-      db.update(webhookEvents)
-        .set({
-          status: 'error',
-          error: err.message,
-          processedAt: new Date()
-        })
-        .where(eq(webhookEvents.sessionId, req.headers['x-webhook-id'] as string))
-        .execute()
-        .catch(console.error);
-    }
-
-    logger.error('API Error:', errorDetails);
-
-    if (!res.headersSent) {
-      res.status(errorDetails.status).json({
-        status: 'error',
-        message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
-        errorId
-      });
-    }
-
-    next();
-  };
+  // Protected routes - add verifyJWT middleware
+  apiRouter.get("/auth/me", verifyJWT, async (req: Request, res: Response) => {
+    res.json(req.user);
+  });
 
 
   apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
@@ -704,7 +606,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add rewards endpoints with proper types
+  // Rewards endpoints
   apiRouter.get("/rewards/balance", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
@@ -998,28 +900,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add rewards endpoints
-  apiRouter.get("/rewards/balance", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      const balance = await shifiRewardsService.getBalance(req.user.id);
-      const [balanceData] = await db
-        .select()
-        .from(rewardsBalances)
-        .where(eq(rewardsBalances.userId, req.user.id))
-        .limit(1);
-
-      res.json({
-        balance: balance,
-        lifetimeEarned: balanceData?.lifetimeEarned || 0
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
+  //Rewards endpoints (removed duplicate)
 
   apiRouter.get("/rewards/transactions", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1095,7 +976,7 @@ export function registerRoutes(app: Express): Server {
       switch (type) {
         case 'down_payment':
           totalPoints = Math.floor(amount / 10); // Basic reward for down payment
-          details = { basePoints: totalPoints };
+          details= { basePoints: totalPoints };
           break;
 
         case 'early_payment':
@@ -1369,8 +1250,7 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', apiRouter);
 
   const httpServer = createServer(app);
-
-  // Register error handling middleware
+  // Register error handling middleware (moved to after route registration)
   app.use(errorHandlingMiddleware);
   return httpServer;
 }
@@ -1423,3 +1303,123 @@ apiRouter.post("/contracts/:id/status", verifyJWT, async (req: Request, res: Res
     next(err);
   }
 });
+
+// Request tracking middleware (Needed for complete code)
+const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
+  const requestId = Date.now().toString(36);
+  req.headers['x-request-id'] = requestId;
+
+  console.log(`[API] ${req.method} ${req.path}`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: { ...req.headers, authorization: undefined }
+  });
+
+  next();
+};
+
+// Cache middleware (Needed for complete code)
+const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
+  const apiCache = new NodeCache({ stdTTL: duration });
+
+  return (req, res, next) => {
+    if (req.method !== 'GET') return next();
+
+    const key = `__express__${req.originalUrl}`;
+    const cachedResponse = apiCache.get(key);
+
+    if (cachedResponse) {
+      res.send(cachedResponse);
+      return;
+    }
+
+    const originalSend = res.send;
+    res.send = function (body: any): any {
+      apiCache.set(key, body, duration);
+      return originalSend.call(this, body);
+    };
+    next();
+  };
+};
+
+// Type declarations (Needed for complete code)
+type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
+
+interface RouteConfig {
+  path: string;
+  method: 'get' | 'post' | 'put' | 'delete';
+  handler: RouteHandler;
+  middleware?: any[];
+  description?: string;
+}
+
+interface RouteGroup {
+  prefix: string;
+  routes: RouteConfig[];
+}
+
+type RequestTrackingMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => void;
+
+
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      role: string;
+      email?: string;
+      name?: string;
+      phoneNumber?: string;
+    }
+
+    interface Request {
+      user?: User;
+    }
+  }
+  var io: SocketIOServer;
+}
+
+export type VerificationStatus = 'initialized' | 'retrieved' | 'confirmed' | 'declined' | 'Approved' | 'Declined';
+
+export interface DiditWebhookPayload {
+  session_id: string;
+  status: VerificationStatus;
+  created_at: number;
+  timestamp: number;
+  userId: string;
+  data?: {
+    verificationStatus: string;
+    documentData?: any;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+  vendor_data?: string;
+  decision?: {
+    kyc?: {
+      document_data?: any;
+    };
+  };
+}
+
+//Missing functions (Placeholder - replace with actual implementations)
+async function generateVerificationToken(): Promise<string> {
+  throw new Error("Function not implemented.");
+}
+
+async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
+  throw new Error("Function not implemented.");
+}
+
+async function sendMerchantCredentials(email: string, username: string, password: string): Promise<void> {
+  throw new Error("Function not implemented.");
+}
+
+async function testSendGridConnection(): Promise<boolean> {
+  throw new Error("Function not implemented.");
+}
