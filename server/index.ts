@@ -71,11 +71,11 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 
 app.use(requestLogger);
 
-// Initialize auth before routes
-await setupAuth(app);
-
 const startServer = async () => {
   try {
+    // Initialize auth before routes
+    await setupAuth(app);
+
     // Register API routes first
     const httpServer = registerRoutes(app);
 
@@ -115,7 +115,7 @@ const startServer = async () => {
 
     const portfinder = await import('portfinder');
 
-    // Configure portfinder
+    // Configure portfinder with base port
     const PORT = await portfinder.getPortPromise({
       port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
       stopPort: 9000
@@ -123,33 +123,33 @@ const startServer = async () => {
 
     // Start server and wait for port to be available
     await new Promise<void>((resolve, reject) => {
-      httpServer.listen(PORT, "0.0.0.0", () => {
+      const server = httpServer.listen(PORT, "0.0.0.0", () => {
         log(`Server running at http://0.0.0.0:${PORT}`);
         console.log('Environment:', process.env.NODE_ENV);
         console.log('WebSocket status: enabled');
         resolve();
       }).on('error', reject);
-    });
 
-    // Initialize Socket.IO after server is running
-    const io = new Server(httpServer, {
-      cors: { origin: "*" },
-      path: '/socket.io/'
-    });
-
-    // Make io globally available
-    (global as any).io = io;
-
-    io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
-
-      socket.on('join_merchant_room', (merchantId: number) => {
-        socket.join(`merchant_${merchantId}`);
-        console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+      // Initialize Socket.IO after server is running
+      const io = new Server(server, {
+        cors: { origin: "*" },
+        path: '/socket.io/'
       });
 
-      socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+      // Make io globally available
+      (global as any).io = io;
+
+      io.on('connection', (socket) => {
+        console.log('Client connected:', socket.id);
+
+        socket.on('join_merchant_room', (merchantId: number) => {
+          socket.join(`merchant_${merchantId}`);
+          console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+        });
+
+        socket.on('disconnect', () => {
+          console.log('Client disconnected:', socket.id);
+        });
       });
     });
 

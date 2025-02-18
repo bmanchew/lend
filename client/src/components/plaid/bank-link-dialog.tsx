@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { Alert, AlertDescription } from '../ui/alert';
 
 interface BankLinkDialogProps {
   contractId: number;
@@ -27,6 +28,7 @@ export function BankLinkDialog({
   const [isProcessing, setIsProcessing] = useState(false);
   const [transferId, setTransferId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
   // Poll for payment status
   useEffect(() => {
@@ -38,6 +40,7 @@ export function BankLinkDialog({
       try {
         const { data } = await axios.get(`/api/plaid/payment-status/${transferId}`);
         setStatusMessage(getStatusMessage(data.status));
+        setError(null);
 
         switch (data.status) {
           case 'posted':
@@ -54,28 +57,31 @@ export function BankLinkDialog({
           case 'returned':
           case 'canceled':
             clearInterval(pollInterval);
+            const errorMsg = data.status === 'returned' 
+              ? "The payment was returned by your bank. Please try again or use a different account."
+              : "There was an issue processing your payment. Please try again.";
+            setError(errorMsg);
             toast({
               title: "Payment Failed",
-              description: data.status === 'returned' 
-                ? "The payment was returned by your bank. Please try again or use a different account."
-                : "There was an issue processing your payment. Please try again.",
+              description: errorMsg,
               variant: "destructive"
             });
             setIsProcessing(false);
             break;
-          // Continue polling for other statuses
           case 'pending':
           case 'processing':
           case 'approved':
-            // Keep polling
+            // Continue polling
             break;
         }
       } catch (error) {
         console.error('Error checking payment status:', error);
         clearInterval(pollInterval);
+        const errorMsg = "Unable to check payment status. Please contact support.";
+        setError(errorMsg);
         toast({
           title: "Error",
-          description: "Unable to check payment status. Please contact support.",
+          description: errorMsg,
           variant: "destructive"
         });
         setIsProcessing(false);
@@ -117,13 +123,16 @@ export function BankLinkDialog({
     try {
       setIsProcessing(true);
       setStatusMessage('Verifying bank account...');
+      setError(null);
 
       // Check Plaid Ledger balance first
       const balanceResponse = await axios.get('/api/plaid/ledger/balance');
       if (!balanceResponse.data.available || balanceResponse.data.available < amount) {
+        const errorMsg = "Payment system temporarily unavailable. Please try again later.";
+        setError(errorMsg);
         toast({
           title: "Payment Failed",
-          description: "Insufficient funds available for processing. Please try again later.",
+          description: errorMsg,
           variant: "destructive"
         });
         setIsProcessing(false);
@@ -150,11 +159,12 @@ export function BankLinkDialog({
       } else {
         throw new Error('Payment initiation failed');
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to process payment';
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.message || error.message || 'Failed to process payment';
+      setError(errorMsg);
       toast({
         title: "Error",
-        description: errorMessage,
+        description: errorMsg,
         variant: "destructive",
       });
       setIsProcessing(false);
@@ -177,13 +187,15 @@ export function BankLinkDialog({
     async function getToken() {
       try {
         setIsLoading(true);
+        setError(null);
         const { data } = await axios.post('/api/plaid/create-link-token');
         setLinkToken(data.link_token);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize bank connection';
+      } catch (error: any) {
+        const errorMsg = error?.response?.data?.message || error.message || 'Failed to initialize bank connection';
+        setError(errorMsg);
         toast({
           title: "Error",
-          description: errorMessage,
+          description: errorMsg,
           variant: "destructive",
         });
       } finally {
@@ -206,14 +218,23 @@ export function BankLinkDialog({
             )}
           </DialogDescription>
         </DialogHeader>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <Button 
           onClick={() => open()} 
           disabled={!ready || isLoading || isProcessing}
           className="w-full"
+          variant={error ? "secondary" : "default"}
           aria-busy={isLoading || isProcessing}
         >
           {isProcessing ? statusMessage || "Processing Payment..." : 
            isLoading ? "Connecting..." : 
+           error ? "Try Again" :
            `Pay ${formatCurrency(amount)} with Plaid`}
         </Button>
       </DialogContent>
