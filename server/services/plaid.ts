@@ -1,4 +1,4 @@
-import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransferType, TransferNetwork, ACHClass, LinkTokenCreateRequest, TransferAuthorizationCreateRequest, TransferCreateRequest } from 'plaid';
+import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransferType, TransferNetwork, ACHClass, LinkTokenCreateRequest, TransferAuthorizationCreateRequest, TransferCreateRequest, SandboxItemSetVerificationStatusRequest, DepositoryAccountSubtype, SandboxItemSetVerificationStatusRequestVerificationStatusEnum } from 'plaid';
 import { logger } from '../lib/logger';
 
 const configuration = new Configuration({
@@ -74,8 +74,8 @@ export class PlaidService {
         country_codes: [CountryCode.Us],
         language: 'en',
         account_filters: {
-          transfer: {
-            account_subtypes: ['checking']
+          depository: {
+            account_subtypes: [DepositoryAccountSubtype.Checking]
           }
         }
       };
@@ -260,10 +260,6 @@ export class PlaidService {
         ach_class: ACHClass.Ppd,
         user: {
           legal_name: 'John Doe' // Should come from user profile
-        },
-        device: {
-          ip_address: '127.0.0.1',
-          user_agent: 'Plaid/NodeSDK/Transfer'
         }
       };
 
@@ -289,10 +285,6 @@ export class PlaidService {
         ach_class: ACHClass.Ppd,
         user: {
           legal_name: 'John Doe' // Should come from user profile
-        },
-        device: {
-          ip_address: '127.0.0.1',
-          user_agent: 'Plaid/NodeSDK/Transfer'
         }
       };
 
@@ -509,11 +501,13 @@ export class PlaidService {
         environment: this.isSandbox ? 'sandbox' : 'production'
       });
 
-      const response = await plaidClient.sandboxItemSetVerificationStatus({
+      const request: SandboxItemSetVerificationStatusRequest = {
         access_token: accessToken,
         account_id: accountId,
-        verification_status: 'verification_expired'
-      });
+        verification_status: SandboxItemSetVerificationStatusRequestVerificationStatusEnum.VerificationExpired
+      };
+
+      const response = await plaidClient.sandboxItemSetVerificationStatus(request);
 
       logger.info('ACH verification initiated:', {
         accountId,
@@ -539,16 +533,17 @@ export class PlaidService {
       });
 
       if (this.isSandbox) {
-        // In sandbox, we simulate verification success
-        await plaidClient.sandboxItemSetVerificationStatus({
+        const request: SandboxItemSetVerificationStatusRequest = {
           access_token: accessToken,
           account_id: accountId,
-          verification_status: 'automatically_verified'
-        });
+          verification_status: SandboxItemSetVerificationStatusRequestVerificationStatusEnum.AutomaticallyVerified
+        };
+        await plaidClient.sandboxItemSetVerificationStatus(request);
         return { verified: true };
       }
 
-      const response = await plaidClient.authMicrodepositsVerify({
+      // For production, use verify endpoint
+      const response = await plaidClient.itemVerify({
         access_token: accessToken,
         account_id: accountId,
         amounts: amounts.map(amount => amount.toFixed(2))

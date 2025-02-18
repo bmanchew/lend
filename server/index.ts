@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import { LedgerManager } from "./services/ledger-manager";
+import portfinder from 'portfinder';
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -72,6 +73,18 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 
 app.use(requestLogger);
 
+const findAvailablePort = async (basePort: number): Promise<number> => {
+  try {
+    portfinder.basePort = basePort;
+    const port = await portfinder.getPortPromise();
+    logger.info(`Found available port: ${port}`);
+    return port;
+  } catch (error) {
+    logger.error('Error finding available port:', error);
+    throw error;
+  }
+};
+
 const startServer = async () => {
   try {
     // Initialize auth before routes
@@ -81,8 +94,15 @@ const startServer = async () => {
     const httpServer = registerRoutes(app);
 
     // Configure port with proper retries and logging 
-    const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-    let retries = 5;
+    const preferredPort = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    let port: number;
+
+    try {
+      port = await findAvailablePort(preferredPort);
+    } catch (error) {
+      logger.error('Failed to find available port:', error);
+      process.exit(1);
+    }
 
     // Initialize LedgerManager in background if Plaid is configured
     if (process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) {
@@ -106,60 +126,67 @@ const startServer = async () => {
       res.json({ 
         status: 'ok', 
         uptime: process.uptime(),
-        port: PORT,
+        port,
         timestamp: new Date().toISOString()
       });
     });
 
-    const startListening = () => {
-      return new Promise<void>((resolve, reject) => {
-        const server = httpServer.listen(PORT, "0.0.0.0", () => {
-          // Signal that the server is ready by writing to the console first
-          console.log('Server listening on port', PORT);
+    const maxRetries = 5;
+    let currentRetry = 0;
 
-          logger.info(`Server is running on port ${PORT}`);
-          logger.info(`Server URL: http://0.0.0.0:${PORT}`);
-          logger.info('Environment:', process.env.NODE_ENV);
-          logger.info('Server ready for connections');
+    const startListening = async (): Promise<void> => {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const server = httpServer.listen(port, "0.0.0.0", () => {
+            logger.info(`Server is running on port ${port}`);
+            logger.info(`Server URL: http://0.0.0.0:${port}`);
+            logger.info('Environment:', process.env.NODE_ENV);
+            logger.info('Server ready for connections');
 
-          // Initialize Socket.IO after port binding is confirmed
-          const io = new Server(server, {
-            cors: { origin: "*" },
-            path: '/socket.io/'
-          });
-
-          // Make io globally available
-          (global as any).io = io;
-
-          io.on('connection', (socket) => {
-            logger.info('Client connected:', socket.id);
-
-            socket.on('join_merchant_room', (merchantId: number) => {
-              socket.join(`merchant_${merchantId}`);
-              logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
+            // Initialize Socket.IO after port binding is confirmed
+            const io = new Server(server, {
+              cors: { origin: "*" },
+              path: '/socket.io/'
             });
 
-            socket.on('disconnect', () => {
-              logger.info('Client disconnected:', socket.id);
-            });
-          });
+            // Make io globally available
+            (global as any).io = io;
 
-          resolve();
-        })
-        .on('error', (err: any) => {
-          if (err.code === 'EADDRINUSE' && retries > 0) {
-            retries--;
-            logger.warn(`Port ${PORT} in use, retrying... (${retries} attempts left)`);
-            setTimeout(() => {
+            io.on('connection', (socket) => {
+              logger.info('Client connected:', socket.id);
+
+              socket.on('join_merchant_room', (merchantId: number) => {
+                socket.join(`merchant_${merchantId}`);
+                logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
+              });
+
+              socket.on('disconnect', () => {
+                logger.info('Client disconnected:', socket.id);
+              });
+            });
+
+            resolve();
+          }).on('error', async (err: any) => {
+            if (err.code === 'EADDRINUSE' && currentRetry < maxRetries) {
+              currentRetry++;
+              logger.warn(`Port ${port} in use, retrying... (attempt ${currentRetry}/${maxRetries})`);
+
+              // Close the server and try the next port
               server.close();
+              port = await findAvailablePort(port + 1);
               startListening().then(resolve).catch(reject);
-            }, 1000);
-          } else {
-            logger.error('Server failed to start:', err);
-            reject(err);
-          }
+            } else {
+              logger.error('Server failed to start:', err);
+              reject(err);
+            }
+          });
         });
-      });
+      } catch (error) {
+        if (currentRetry >= maxRetries) {
+          throw new Error(`Failed to start server after ${maxRetries} attempts`);
+        }
+        throw error;
+      }
     };
 
     await startListening();
