@@ -95,37 +95,7 @@ const startServer = async () => {
 
     // Configure port with proper retries and logging 
     const preferredPort = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-    let port: number;
-
-    try {
-      port = await findAvailablePort(preferredPort);
-    } catch (error) {
-      logger.error('Failed to find available port:', error);
-      process.exit(1);
-    }
-
-    // Initialize LedgerManager in background if Plaid is configured
-    if (process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET && process.env.PLAID_ENV) {
-      try {
-        const ledgerConfig = {
-          minBalance: 1000,
-          maxBalance: 100000,
-          sweepThreshold: 500,
-          sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-        };
-
-        const ledgerManager = LedgerManager.getInstance(ledgerConfig);
-        // Make this non-blocking
-        ledgerManager.initializeSweeps().catch(error => {
-          logger.warn('Ledger sweeps initialization had issues:', error);
-        });
-      } catch (error) {
-        logger.warn('Failed to initialize ledger manager:', error);
-        // Continue server startup even if ledger manager fails
-      }
-    } else {
-      logger.warn('Plaid integration not fully configured - ledger sweeps will be disabled');
-    }
+    let port = await findAvailablePort(preferredPort);
 
     // Add health check endpoint before starting server
     app.get('/health', (_req, res) => {
@@ -137,81 +107,44 @@ const startServer = async () => {
       });
     });
 
-    const maxRetries = 5;
-    let currentRetry = 0;
+    logger.info('Attempting to start server on port:', port);
+    httpServer.listen(port, "0.0.0.0", () => {
+      logger.info(`Server is running on port ${port}`);
+      logger.info(`Server URL: http://0.0.0.0:${port}`);
+      logger.info('Environment:', process.env.NODE_ENV);
+      logger.info('Server ready for connections');
 
-    const startListening = async (): Promise<void> => {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          logger.info('Attempting to start server on port:', port);
+      // Initialize Socket.IO after port binding is confirmed
+      const io = new Server(httpServer, {
+        cors: { origin: "*" },
+        path: '/socket.io/'
+      });
 
-          const server = httpServer.listen(port, "0.0.0.0", () => {
-            logger.info(`Server is running on port ${port}`);
-            logger.info(`Server URL: http://0.0.0.0:${port}`);
-            logger.info('Environment:', process.env.NODE_ENV);
-            logger.info('Server ready for connections');
+      // Make io globally available
+      (global as any).io = io;
 
-            // Initialize Socket.IO after port binding is confirmed
-            const io = new Server(server, {
-              cors: { origin: "*" },
-              path: '/socket.io/'
-            });
+      io.on('connection', (socket) => {
+        logger.info('Client connected:', socket.id);
 
-            // Make io globally available
-            (global as any).io = io;
-
-            io.on('connection', (socket) => {
-              logger.info('Client connected:', socket.id);
-
-              socket.on('join_merchant_room', (merchantId: number) => {
-                socket.join(`merchant_${merchantId}`);
-                logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
-              });
-
-              socket.on('disconnect', () => {
-                logger.info('Client disconnected:', socket.id);
-              });
-            });
-
-            resolve();
-          }).on('error', async (err: any) => {
-            logger.error('Server listen error:', {
-              error: err.message,
-              code: err.code,
-              port
-            });
-
-            if (err.code === 'EADDRINUSE' && currentRetry < maxRetries) {
-              currentRetry++;
-              logger.warn(`Port ${port} in use, retrying... (attempt ${currentRetry}/${maxRetries})`);
-
-              // Close the server and try the next port
-              server.close();
-              port = await findAvailablePort(port + 1);
-              startListening().then(resolve).catch(reject);
-            } else {
-              logger.error('Server failed to start:', err);
-              reject(err);
-            }
-          });
-        });
-      } catch (error: any) {
-        logger.error('Error in startListening:', {
-          error: error.message,
-          stack: error.stack,
-          currentRetry,
-          maxRetries
+        socket.on('join_merchant_room', (merchantId: number) => {
+          socket.join(`merchant_${merchantId}`);
+          logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
         });
 
-        if (currentRetry >= maxRetries) {
-          throw new Error(`Failed to start server after ${maxRetries} attempts`);
-        }
-        throw error;
-      }
-    };
+        socket.on('disconnect', () => {
+          logger.info('Client disconnected:', socket.id);
+        });
+      });
+    }).on('error', (err: Error) => {
+      logger.error('Server listen error:', {
+        error: err.message,
+        port
+      });
+      process.exit(1);
+    });
 
-    await startListening();
-    logger.info('Server initialization complete');
+    // Setup Vite after server is started
+    await setupVite(app, httpServer);
 
   } catch (error: any) {
     logger.error('Failed to start server:', {

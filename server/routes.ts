@@ -6,8 +6,6 @@ import { eq, and, desc } from "drizzle-orm";
 import express, { RequestHandler } from 'express';
 import NodeCache from 'node-cache';
 import { Server as SocketIOServer } from 'socket.io';
-import { DiditSessionConfig } from './services/didit';
-import { diditService } from "./services/didit";
 import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { logger } from "./lib/logger";
@@ -46,113 +44,178 @@ class APIError extends Error {
   }
 }
 
-// Request tracking middleware
-const requestTrackingMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
-
-  logger.info(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
+export function registerRoutes(app: Express): Server {
+  // Initialize LedgerManager with configuration
+  const ledgerManager = LedgerManager.getInstance({
+    minBalance: 1000,
+    maxBalance: 100000,
+    sweepThreshold: 500,
+    sweepSchedule: '0 */15 * * * *' // Every 15 minutes
   });
 
-  next();
-};
+  // Create API router and HTTP server
+  const apiRouter = express.Router();
+  const httpServer = createServer(app);
 
-// Cache middleware
-const cacheMiddleware = (duration: number): RequestHandler => {
-  const apiCache = new NodeCache({ stdTTL: duration });
+  // Request tracking middleware
+  const requestTrackingMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+    const requestId = Date.now().toString(36);
+    req.headers['x-request-id'] = requestId;
 
-  return (req, res, next) => {
-    if (req.method !== 'GET') return next();
+    logger.info(`[API] ${req.method} ${req.path}`, {
+      requestId,
+      query: req.query,
+      body: req.body,
+      headers: { ...req.headers, authorization: undefined }
+    });
 
-    const key = `__express__${req.originalUrl}`;
-    const cachedResponse = apiCache.get(key);
+    next();
+  };
 
-    if (cachedResponse) {
-      res.send(cachedResponse);
-      return;
+  // Cache middleware
+  const cacheMiddleware = (duration: number): RequestHandler => {
+    const apiCache = new NodeCache({ stdTTL: duration });
+
+    return (req, res, next) => {
+      if (req.method !== 'GET') return next();
+
+      const key = `__express__${req.originalUrl}`;
+      const cachedResponse = apiCache.get(key);
+
+      if (cachedResponse) {
+        res.send(cachedResponse);
+        return;
+      }
+
+      const originalSend = res.send;
+      res.send = function(body: any): any {
+        apiCache.set(key, body, duration);
+        return originalSend.call(this, body);
+      };
+
+      next();
+    };
+  };
+
+  // JWT verification middleware
+  const verifyJWT: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
     }
 
-    const originalSend = res.send;
-    res.send = function(body: any): any {
-      apiCache.set(key, body, duration);
-      return originalSend.call(this, body);
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
+      req.user = decoded;
+      next();
+    } catch (err) {
+      logger.error('JWT verification failed:', err);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  };
+
+  // Error handling middleware
+  const errorHandlingMiddleware: RequestHandler = (
+    err: Error | APIError,
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    const errorId = Date.now().toString(36);
+    const isAPIError = err instanceof APIError;
+
+    const errorDetails = {
+      id: errorId,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      name: err.name,
+      message: err.message,
+      status: isAPIError ? err.status : 500,
+      code: isAPIError ? err.code : undefined,
+      details: isAPIError ? err.details : undefined,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     };
 
+    logger.error('API Error:', errorDetails);
+
+    if (!res.headersSent) {
+      res.status(errorDetails.status).json({
+        status: 'error',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
+        errorId
+      });
+    }
+
     next();
   };
-};
 
-// JWT verification middleware
-const verifyJWT: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
-    (req as RequestWithUser).user = decoded;
-    next();
-  } catch (err) {
-    logger.error('JWT verification failed:', err);
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Error handling middleware
-const errorHandlingMiddleware: RequestHandler = (
-  err: Error | APIError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const errorId = Date.now().toString(36);
-  const isAPIError = err instanceof APIError;
-
-  const errorDetails = {
-    id: errorId,
-    path: req.path,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-    name: err.name,
-    message: err.message,
-    status: isAPIError ? err.status : 500,
-    code: isAPIError ? err.code : undefined,
-    details: isAPIError ? err.details : undefined,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  // Helper function for rewards calculation
+  const calculatePotentialRewards = (amount: number, monthsEarly: number, additionalPayment: number = 0): { earlyPayoff: number; additional: number } => {
+    const earlyPayoff = monthsEarly > 0 ? Math.floor(amount * (1 + (monthsEarly * 0.1))) : 0;
+    const additional = additionalPayment > 0 ? Math.floor(additionalPayment / 25) : 0;
+    return { earlyPayoff, additional };
   };
 
-  logger.error('API Error:', errorDetails);
-
-  if (!res.headersSent) {
-    res.status(errorDetails.status).json({
-      status: 'error',
-      message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
-      errorId
-    });
-  }
-
-  next();
-};
-
-export function registerRoutes(app: Express): Server {
-  // Create API router
-  const apiRouter = express.Router();
-
-  // Register middleware
+  // Register middleware in correct order
   apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(verifyJWT);
   apiRouter.use(cacheMiddleware(300)); // 5 mins cache
+  apiRouter.use(verifyJWT);
   apiRouter.use(errorHandlingMiddleware);
 
+  // Mount API router
+  app.use('/api', apiRouter);
+
   // Define routes
-  apiRouter.get("/auth/me", verifyJWT, (req: RequestWithUser, res: Response) => {
-    res.json(req.user);
+  apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      res.json(req.user);
+    } catch (err) {
+      logger.error("Error in /auth/me:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  apiRouter.post("/contracts/:id/status", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const [contract] = await db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.id, parseInt(id)))
+        .limit(1);
+
+      if (!contract) {
+        return res.status(404).json({ error: 'Contract not found' });
+      }
+
+      const updates: Partial<typeof contracts.$inferInsert> = {
+        status,
+        lastPaymentId: req.body.lastPaymentId || null,
+        lastPaymentStatus: req.body.lastPaymentStatus || null
+      };
+
+      const [updatedContract] = await db
+        .update(contracts)
+        .set(updates)
+        .where(eq(contracts.id, parseInt(id)))
+        .returning();
+
+      // Update ledger if needed
+      if (status === 'funded') {
+        await ledgerManager.manualSweep('deposit', updatedContract.amount);
+      }
+
+      res.json(updatedContract);
+    } catch (err) {
+      next(err);
+    }
   });
 
   apiRouter.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -323,7 +386,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix the merchant creation endpoint with proper types
   apiRouter.post("/merchants/create", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       logger.info("[Merchant Creation] Received request:", {
@@ -474,7 +536,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix the contracts table query with proper types
   apiRouter.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { status, merchantId } = req.query;
@@ -514,7 +575,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix contract creation with proper types
   apiRouter.post("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const {
@@ -600,7 +660,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix webhook event handling with proper types
   apiRouter.post("/webhooks/process", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { eventType, sessionId, payload } = req.body;
@@ -621,7 +680,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Rewards endpoints
   apiRouter.get("/rewards/balance", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
@@ -644,7 +702,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix the SMS service call with proper arguments
   apiRouter.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
@@ -833,7 +890,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix the authentication types
   apiRouter.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber, otp } = req.body;
@@ -905,14 +961,14 @@ export function registerRoutes(app: Express): Server {
     try {
       const { username, password, email, name, role, phoneNumber } = req.body;
       if (!username || !password || !email || !name || !role || !phoneNumber) {
-        return res.status(400).json({ error: "All fields are required" });
+        return res.status(400).json({ error: "Allfields are required" });
       }
       const hashedPassword = await authService.hashPassword(password);
       const user = await db.insert(users).values({
         username, password: hashedPassword, email, name, role, phoneNumber
       } as typeof users.$inferInsert).returning();
       res.json(user);
-    } catch (err) {
+    } catch(err) {
       next(err);
     }
   });
@@ -930,7 +986,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix rewards calculation endpoint with proper types
   apiRouter.get("/rewards/calculate", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { type, amount } = req.query;
@@ -958,7 +1013,7 @@ export function registerRoutes(app: Express): Server {
         case 'additional_payment':
           const additionalPoints = Math.floor(Number(amount) / 25);
           totalPoints = additionalPoints;
-          details = { basePoints: additionalPoints};
+          details = { basePoints: additionalPoints };
           break;
 
         default:
@@ -971,12 +1026,12 @@ export function registerRoutes(app: Express): Server {
         type,
         amount: Number(amount)
       });
-    } catch (err) {      next(err);
+    } catch (err) {
+      next(err);
     }
   });
 
-  // Fix the early_payment case syntax error and update the rewards calculation
-  apiRouter.get("/rewards/potential", async (req: RequestWithUser,res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const amount = parseFloat(req.query.amount as string);
       const type = req.query.type as string;
@@ -1035,7 +1090,6 @@ export function registerRoutes(app: Express): Server {
     lastPaymentStatus?: string | null;
   }
 
-  // Update contract patch endpoint
   apiRouter.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const contractId = parseInt(req.params.id);
@@ -1060,44 +1114,6 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
-
-  // Request tracking middleware (Needed for complete code)
-  //const requestTrackingMiddleware: RequestHandler = (req, res, next) => { ... }; //Already defined above
-
-  // Cache middleware (Needed for complete code)
-  //const cacheMiddleware = (duration: number): RequestHandler => { ... }; //Already defined above
-
-  // Type declarations (Needed for complete code)
-  type RouteHandler = (req: RequestWithUser, res: Response, next: NextFunction) => Promise<void>;
-
-  interface RouteConfig {
-    path: string;
-    method: 'get' | 'post' | 'put' | 'delete';
-    handler: RouteHandler;
-    middleware?: any[];
-    description?: string;
-  }
-
-  interface RouteGroup {
-    prefix: string;
-    routes: RouteConfig[];
-  }
-
-  type RequestTrackingMiddleware = (
-    req: RequestWithUser,
-    res: Response,
-    next: NextFunction
-  ) => void;
-
-
-  interface PlaidContractUpdate {
-    status?: string;
-    plaidAccessToken?: string | null;
-    plaidAccountId?: string | null;
-    achVerificationStatus?: string | null;
-    lastPaymentId?: string | null;
-    lastPaymentStatus?: string | null;
-  }
 
   apiRouter.post("/plaid/process-payment", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
@@ -1315,7 +1331,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add new route for creating Plaid link tokens
   apiRouter.post("/plaid/create-link-token", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.id;
@@ -1336,78 +1351,29 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Apply cache middleware
-  //apiRouter.use(cacheMiddleware(300)); // 5 mins cache - already applied above
-
-  // Mount API router
-  //app.use('/api', apiRouter); //This line is removed since we are not creating the server here.
-
-  //const httpServer = createServer(app); //This line is removed since we are not creating the server here.
-  // Register error handling middleware (moved to after route registration)
-  //app.use(errorHandlingMiddleware as RequestHandler); //This line is removed since we are not creating the server here.
-  //return httpServer; //This line is removed since we are not creating the server here.
-  //apiRouter.use(errorHandlingMiddleware); //This line is added to handle errors properly - already applied above
-
-  // Apply cache middleware - already applied above
-
-  // Mount API router - already applied above
-
-  // Create HTTP server
-  //const httpServer = createServer(app); // already done above
-
-  // Mount API router
   app.use('/api', apiRouter);
 
-  // Create HTTP server
   const httpServer = createServer(app);
 
   return httpServer;
 }
 
-// Helper function for rewards calculation
-function calculatePotentialRewards(amount: number, monthsEarly: number, additionalPayment: number = 0): { earlyPayoff: number; additional: number } {
-  const earlyPayoff = monthsEarly > 0 ? Math.floor(amount * (1 + (monthsEarly * 0.1))) : 0;
-  const additional = additionalPayment > 0 ? Math.floor(additionalPayment / 25) : 0;
-  return { earlyPayoff, additional };
+// Helper function declarations
+async function generateVerificationToken(): Promise<string> {
+  throw new Error("Function not implemented.");
 }
-// Fix contract status update endpoint
-apiRouter.post("/contracts/:id/status", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
 
-    const [contract] = await db
-      .select()
-      .from(contracts)
-      .where(eq(contracts.id, parseInt(id)))
-      .limit(1);
+async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
+  throw new Error("Function not implemented.");
+}
 
-    if (!contract) {
-      return res.status(404).json({ error: 'Contract not found' });
-    }
+async function sendMerchantCredentials(email: string, username: string, password: string): Promise<void> {
+  throw new Error("Function not implemented.");
+}
 
-    const updates: Partial<typeof contracts.$inferInsert> = {
-      status,
-      lastPaymentId: req.body.lastPaymentId || null,
-      lastPaymentStatus: req.body.lastPaymentStatus || null
-    };
-
-    const [updatedContract] = await db
-      .update(contracts)
-      .set(updates)
-      .where(eq(contracts.id, parseInt(id)))
-      .returning();
-
-    // Update ledger if needed
-    if (status === 'funded') {
-      await ledgerManager.manualSweep('deposit', updatedContract.amount);
-    }
-
-    res.json(updatedContract);
-  } catch (err) {
-    next(err);
-  }
-});
+async function testSendGridConnection(): Promise<boolean> {
+  throw new Error("Function not implemented.");
+}
 
 declare global {
   namespace Express {
@@ -1448,21 +1414,4 @@ export interface DiditWebhookPayload {
       document_data?: any;
     };
   };
-}
-
-//Missing functions (Placeholder - replace with actual implementations)
-async function generateVerificationToken(): Promise<string> {
-  throw new Error("Function not implemented.");
-}
-
-async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
-  throw new Error("Function not implemented.");
-}
-
-async function sendMerchantCredentials(email: string, username: string, password: string): Promise<void> {
-  throw new Error("Function not implemented.");
-}
-
-async function testSendGridConnection(): Promise<boolean> {
-  throw new Error("Function not implemented.");
 }
