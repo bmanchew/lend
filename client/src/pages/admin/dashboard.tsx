@@ -3,10 +3,8 @@ import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { SelectMerchant, SelectContract } from "@db/schema";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
@@ -17,23 +15,19 @@ import { useState } from "react";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
-  const { data: contracts = [], error: contractsError, isLoading: contractsLoading } = useQuery({
+  const { data: contracts = [], error: contractsError, isLoading: contractsLoading } = useQuery<SelectContract[]>({
     queryKey: ["/api/contracts"],
     retry: 1,
     throwOnError: false
   });
 
-  const { data: merchants = [], error: merchantsError, isLoading: merchantsLoading } = useQuery({
+  const { data: merchants = [], error: merchantsError, isLoading: merchantsLoading } = useQuery<SelectMerchant[]>({
     queryKey: ["/api/merchants"],
     retry: 1,
-    throwOnError: false,
-    onError: (error: Error) => {
-      console.error("[AdminDashboard] Error loading merchants:", error);
-    }
+    throwOnError: false
   });
 
   const contractColumns: ColumnDef<SelectContract>[] = [
@@ -42,8 +36,12 @@ export default function AdminDashboard() {
       header: "Contract #",
     },
     {
-      accessorKey: "merchants.companyName",
+      accessorKey: "merchantId",
       header: "Merchant",
+      cell: ({ row }) => {
+        const merchant = merchants.find(m => m.id === row.original.merchantId);
+        return merchant?.companyName || 'N/A';
+      },
     },
     {
       accessorKey: "amount",
@@ -70,8 +68,8 @@ export default function AdminDashboard() {
     {
       accessorKey: "createdAt",
       header: "Created",
-      cell: ({ getValue }) => {
-        const value = getValue();
+      cell: ({ row }) => {
+        const value = row.getValue("createdAt");
         if (!value) return "N/A";
         try {
           return format(new Date(value), "MMM d, yyyy");
@@ -82,10 +80,10 @@ export default function AdminDashboard() {
     },
   ];
 
-  const filteredContracts = (contracts as SelectContract[]).filter(contract => {
+  const filteredContracts = contracts.filter(contract => {
     const matchesSearch = 
       (contract?.contractNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (contract?.merchants?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+      (merchants.find(m => m.id === contract.merchantId)?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === "all" || contract?.status === selectedStatus;
     return matchesSearch && matchesStatus;
   });
@@ -99,10 +97,11 @@ export default function AdminDashboard() {
   }
 
   if (contractsError || merchantsError) {
+    console.error("[AdminDashboard] Errors:", { contractsError, merchantsError });
     return (
       <PortalLayout>
         <div className="p-8 text-red-500">
-          Error loading data: {((contractsError || merchantsError) as Error)?.message}
+          Error loading data. Please try again later.
         </div>
       </PortalLayout>
     );
@@ -119,7 +118,7 @@ export default function AdminDashboard() {
               <CardTitle>Total Contracts</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{contracts?.length ?? 0}</p>
+              <p className="text-2xl font-bold">{contracts.length}</p>
             </CardContent>
           </Card>
 
@@ -129,7 +128,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                {(contracts as SelectContract[])?.filter(c => c.status === "active").length ?? 0}
+                {contracts.filter(c => c.status === "active").length}
               </p>
             </CardContent>
           </Card>
@@ -140,10 +139,10 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${(contracts as SelectContract[])
-                  ?.filter(c => c.status === 'active')
-                  .reduce((sum, c) => sum + (parseFloat(c.amount?.toString() || '0') || 0), 0)
-                  .toFixed(2) ?? "0.00"}
+                ${contracts
+                  .filter(c => c.status === 'active')
+                  .reduce((sum, c) => sum + (parseFloat(String(c.amount)) || 0), 0)
+                  .toFixed(2)}
               </p>
             </CardContent>
           </Card>
@@ -153,7 +152,7 @@ export default function AdminDashboard() {
               <CardTitle>Merchants</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{merchants?.length ?? 0}</p>
+              <p className="text-2xl font-bold">{merchants.length}</p>
             </CardContent>
           </Card>
         </div>
@@ -205,7 +204,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {(merchants as SelectMerchant[])?.map((merchant) => (
+                  {merchants.map((merchant) => (
                     <Collapsible key={merchant.id}>
                       <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-2">
@@ -221,11 +220,11 @@ export default function AdminDashboard() {
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 <Mail className="h-4 w-4" />
-                                <span>{merchant.email}</span>
+                                <span>{merchant.email || 'N/A'}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Phone className="h-4 w-4" />
-                                <span>{merchant.phoneNumber}</span>
+                                <span>{merchant.phone || 'N/A'}</span>
                               </div>
                             </div>
                           </div>
@@ -233,10 +232,10 @@ export default function AdminDashboard() {
                             <h4 className="font-medium mb-2">Performance</h4>
                             <div className="space-y-2">
                               <div>Total Contracts: {
-                                (contracts as SelectContract[])?.filter(c => c.merchantId === merchant.id).length ?? 0
+                                contracts.filter(c => c.merchantId === merchant.id).length
                               }</div>
                               <div>Active Contracts: {
-                                (contracts as SelectContract[])?.filter(c => c.merchantId === merchant.id && c.status === "active").length ?? 0
+                                contracts.filter(c => c.merchantId === merchant.id && c.status === "active").length
                               }</div>
                             </div>
                           </div>
