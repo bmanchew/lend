@@ -89,22 +89,23 @@ const cacheMiddleware = (duration: number) => {
 // JWT verification middleware
 const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+  // If no token, and this is not a public endpoint, reject
+  if (!token) {
     logger.info("[Auth] No token provided in request");
-    return res.status(401).json({ error: 'No token provided' });
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
-    logger.info("[Auth] Verifying JWT token");
     const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     req.user = decoded;
     logger.info("[Auth] JWT verification successful:", { userId: decoded.id, role: decoded.role });
     next();
   } catch (err) {
     logger.error('[Auth] JWT verification failed:', err);
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
@@ -252,6 +253,56 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
 });
 
 // OTP endpoint is already defined above
+
+// Public routes - no auth required
+router.post("/sendOTP", async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
+    
+    // Format phone number consistently
+    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
+    
+    // Create user if doesn't exist
+    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
+    
+    if (!user) {
+      [user] = await db.insert(users)
+        .values({
+          phoneNumber: formattedPhone,
+          role: 'customer',
+          username: formattedPhone,
+          password: '',
+          email: '',
+          name: ''
+        } as typeof users.$inferInsert)
+        .returning();
+    }
+
+    const otp = smsService.generateOTP();
+    const sent = await smsService.sendOTP(formattedPhone, otp);
+
+    if (sent) {
+      await db.update(users)
+        .set({
+          lastOtpCode: otp,
+          otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+        })
+        .where(eq(users.phoneNumber, formattedPhone));
+
+      res.json({ message: "OTP sent successfully" });
+    } else {
+      res.status(500).json({ error: "Failed to send OTP" });
+    }
+  } catch (error) {
+    logger.error('[SMS] OTP send error:', error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Protected routes - require JWT verification  
 router.use(verifyJWT);
