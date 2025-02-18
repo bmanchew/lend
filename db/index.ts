@@ -111,14 +111,24 @@ class DatabaseInstance {
     }
   }
 
+  private isCleaningUp = false;
+
   public async cleanup(): Promise<void> {
+    if (this.isCleaningUp) {
+      console.log('[Database] Cleanup already in progress');
+      return;
+    }
+
     if (this.pool) {
+      this.isCleaningUp = true;
       console.log('[Database] Starting cleanup...');
       try {
         await this.pool.end();
         console.log('[Database] Cleanup completed, all connections closed');
       } catch (error) {
         console.error('[Database] Cleanup failed:', error);
+      } finally {
+        this.isCleaningUp = false;
       }
     } else {
       console.log('[Database] No pool to clean up');
