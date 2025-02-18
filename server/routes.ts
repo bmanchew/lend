@@ -232,8 +232,7 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
-// Public routes - no auth required
-router.post("/sendOTP", async (req: Request, res: Response) => {
+// Protected routes - require JWT verification
   try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
