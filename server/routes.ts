@@ -1203,42 +1203,56 @@ export function registerRoutes(app: Express): Server {
 
   apiRouter.post("/plaid/process-payment", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { public_token, account_id, amount, contractId } = req.body;
+      const { public_token, account_id, amount, contractId, requireAchVerification } = req.body;
 
       // Exchange public token for access token
-      const exchangeResponse = await PlaidService.exchangePublicToken(public_token);
-      const accessToken = exchangeResponse.access_token;
+      const tokenResponse = await PlaidService.exchangePublicToken(public_token);
+      const accessToken = tokenResponse.access_token;
 
-      // Initiate payment using Plaid
-      const paymentResponse = await PlaidService.initiatePayment(
+      // If ACH verification is required, initiate micro-deposits
+      if (requireAchVerification) {
+        await PlaidService.initiateAchVerification(accessToken, account_id);
+
+        // Store the verification details in the database
+        await db.update(contracts)
+          .set({
+            status: 'ach_verification_pending',
+            plaid_access_token: accessToken,
+            plaid_account_id: account_id,
+            ach_verification_status: 'pending'
+          })
+          .where(eq(contracts.id, contractId));
+
+        return res.json({
+          status: 'pending',
+          achConfirmationRequired: true,
+          message: 'ACH verification initiated'
+        });
+      }
+
+      // If no verification required or already verified, proceed with payment
+      const transfer = await PlaidService.createTransfer({
         accessToken,
-        amount,
-        account_id
-      );
+        accountId: account_id,
+        amount: amount.toString(),
+        description: `Contract ${contractId} Payment`,
+        achClass: 'ppd'
+      });
 
-      // Update contract with payment details
-      const [updatedContract] = await db
-        .update(contracts)
+      // Update contract with transfer details
+      await db.update(contracts)
         .set({
           status: 'payment_processing',
-          downPayment: amount.toString(),
-          lastPaymentId: paymentResponse.transferId,
-          lastPaymentStatus: paymentResponse.status
+          last_payment_id: transfer.id,
+          last_payment_status: transfer.status
         })
-        .where(eq(contracts.id, contractId))
-        .returning();
-
-      console.log('[Plaid Payment] Payment initiated:', {
-        transferId: paymentResponse.transferId,
-        status: paymentResponse.status,
-        contractId,
-        amount
-      });
+        .where(eq(contracts.id, contractId));
 
       res.json({
-        status: 'processing',
-        transferId: paymentResponse.transferId
+        status: transfer.status,
+        transferId: transfer.id
       });
+
     } catch (err) {
       console.error('Error processing Plaid payment:', err);
       next(err);
@@ -1248,114 +1262,75 @@ export function registerRoutes(app: Express): Server {
   apiRouter.get("/plaid/payment-status/:transferId", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { transferId } = req.params;
-      const transfer = await PlaidService.getTransferStatus(transferId);
 
-      // Update contract payment status
-      if (transfer.id) {
-        await db.update(contracts)
-          .set({
-            lastPaymentId: transfer.id,
-            lastPaymentStatus: transfer.status,
-          })
-          .where(eq(contracts.lastPaymentId, transferId));
+      // Get transfer status from Plaid
+      const transfer = await PlaidService.getTransfer(transferId);
+
+      // Get contract details
+      const [contract] = await db.select()
+        .from(contracts)
+        .where(eq(contracts.lastPaymentId, transferId))
+        .limit(1);
+
+      if (!contract) {
+        return res.status(404).json({ error: 'Contract not found' });
       }
+
+      // Check if ACH verification is still pending
+      const achConfirmationRequired = contract.ach_verification_status === 'pending';
+      const achConfirmed = contract.ach_verification_status === 'verified';
+
+      // Update contract with latest status
+      await db.update(contracts)
+        .set({ last_payment_status: transfer.status })
+        .where(eq(contracts.id, contract.id));
 
       res.json({
         status: transfer.status,
-        transferId: transfer.id,
+        achConfirmationRequired,
+        achConfirmed
       });
+
     } catch (err) {
       console.error('Error checking payment status:', err);
       next(err);
     }
   });
 
-  apiRouter.post("/plaid/create-link-token", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/verify-micro-deposits", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'User not authenticated' });
+      const { contractId, amounts } = req.body;
+
+      // Get contract details
+      const [contract] = await db.select()
+        .from(contracts)
+        .where(eq(contracts.id, contractId))
+        .limit(1);
+
+      if (!contract || !contract.plaid_access_token || !contract.plaid_account_id) {
+        return res.status(404).json({ error: 'Contract or Plaid details not found' });
       }
 
-      const linkToken = await PlaidService.createLinkToken(req.user.id.toString());
-      res.json({ link_token: linkToken.link_token });
+      // Verify micro-deposits with Plaid
+      await PlaidService.verifyMicroDeposits(
+        contract.plaid_access_token,
+        contract.plaid_account_id,
+        amounts
+      );
+
+      // Update contract verification status
+      await db.update(contracts)
+        .set({ ach_verification_status: 'verified' })
+        .where(eq(contracts.id, contractId));
+
+      res.json({ status: 'success', message: 'ACH verification completed' });
+
     } catch (err) {
-      console.error('Error creating link token:', err);
+      console.error('Error verifying micro-deposits:', err);
       next(err);
     }
   });
 
-  // Handle Plaid webhooks for payment status updates
-  apiRouter.post("/plaid/webhooks", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { webhook_type, webhook_code, transfer_id, transfer_status } = req.body;
-
-      // Log webhook event
-      console.log('[Plaid Webhook] Received webhook:', {
-        type: webhook_type,
-        code: webhook_code,
-        transferId: transfer_id,
-        status: transfer_status,
-        timestamp: new Date().toISOString()
-      });
-
-      // Handle transfer status updates
-      if (webhook_type === 'TRANSFER' && transfer_id) {
-        const [contract] = await db
-          .select()
-          .from(contracts)
-          .where(eq(contracts.lastPaymentId, transfer_id))
-          .limit(1);
-
-        if (contract) {
-          let contractStatus = contract.status;
-
-          switch (transfer_status) {
-            case 'posted':
-              contractStatus = 'active';
-              break;
-            case 'failed':
-            case 'returned':
-              contractStatus = 'payment_failed';
-              break;
-            default:
-              // Keep existing status for other transfer states
-              break;
-          }
-
-          // Update contract status
-          await db
-            .update(contracts)
-            .set({
-              status: contractStatus,
-              lastPaymentStatus: transfer_status
-            })
-            .where(eq(contracts.id, contract.id));
-
-          // Emit socket event for real-time updates
-          global.io?.to(`contract_${contract.id}`).emit('payment_update', {
-            contractId: contract.id,
-            status: transfer_status
-          });
-        }
-      }
-
-      // Always acknowledge webhook
-      res.json({ received: true });
-    } catch (err) {
-      console.error('Error processing Plaid webhook:', err);
-      next(err);
-    }
-  });
-
-  // Initialize ledger manager with default config
-  const ledgerManager = LedgerManager.getInstance({
-    minBalance: 10000, // $10,000 minimum balance
-    maxBalance: 50000, // $50,000 maximum balance
-    sweepThreshold: 1000, // Minimum $1,000 for sweep
-    sweepSchedule: '*/15 * * * *' // Every 15 minutes
-  });
-
-  // Add these new endpoints after existing Plaid routes
   apiRouter.post("/plaid/ledger/start-sweeps", async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {

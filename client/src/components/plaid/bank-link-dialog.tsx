@@ -29,6 +29,7 @@ export function BankLinkDialog({
   const [transferId, setTransferId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [achConfirmationStatus, setAchConfirmationStatus] = useState<'pending' | 'verified' | 'failed' | null>(null);
 
   // Poll for payment status
   useEffect(() => {
@@ -41,6 +42,12 @@ export function BankLinkDialog({
         const { data } = await axios.get(`/api/plaid/payment-status/${transferId}`);
         setStatusMessage(getStatusMessage(data.status));
         setError(null);
+
+        if (data.achConfirmationRequired && !data.achConfirmed) {
+          setAchConfirmationStatus('pending');
+          setStatusMessage('ACH verification pending...');
+          return;
+        }
 
         switch (data.status) {
           case 'posted':
@@ -139,17 +146,21 @@ export function BankLinkDialog({
         return;
       }
 
-      setStatusMessage('Initiating payment...');
+      setStatusMessage('Initiating ACH verification...');
 
-      // Exchange public token for access token and initiate payment
+      // Exchange public token and initiate ACH verification
       const response = await axios.post('/api/plaid/process-payment', {
         public_token: publicToken,
         account_id: metadata.account_id,
         amount,
         contractId,
+        requireAchVerification: true
       });
 
-      if (response.data.status === 'processing' || response.data.status === 'pending') {
+      if (response.data.achConfirmationRequired) {
+        setAchConfirmationStatus('pending');
+        setStatusMessage('ACH verification initiated. Please check your bank account for micro-deposits.');
+      } else if (response.data.status === 'processing' || response.data.status === 'pending') {
         setTransferId(response.data.transferId);
         toast({ 
           title: "Payment Initiated", 
@@ -188,7 +199,9 @@ export function BankLinkDialog({
       try {
         setIsLoading(true);
         setError(null);
-        const { data } = await axios.post('/api/plaid/create-link-token');
+        const { data } = await axios.post('/api/plaid/create-link-token', {
+          requireAchVerification: true
+        });
         setLinkToken(data.link_token);
       } catch (error: any) {
         const errorMsg = error?.response?.data?.message || error.message || 'Failed to initialize bank connection';
@@ -213,6 +226,12 @@ export function BankLinkDialog({
           <DialogDescription>
             Connect your bank account to make a payment of {formatCurrency(amount)}.
             The amount will be directly debited from your selected account.
+            {achConfirmationStatus === 'pending' && (
+              <p className="mt-2 text-sm font-medium text-yellow-600">
+                Please check your bank account for micro-deposits to verify your account.
+                This process may take 1-2 business days.
+              </p>
+            )}
             {statusMessage && (
               <p className="mt-2 text-sm font-medium text-primary">{statusMessage}</p>
             )}
@@ -227,7 +246,7 @@ export function BankLinkDialog({
 
         <Button 
           onClick={() => open()} 
-          disabled={!ready || isLoading || isProcessing}
+          disabled={!ready || isLoading || isProcessing || achConfirmationStatus === 'pending'}
           className="w-full"
           variant={error ? "secondary" : "default"}
           aria-busy={isLoading || isProcessing}
@@ -235,6 +254,7 @@ export function BankLinkDialog({
           {isProcessing ? statusMessage || "Processing Payment..." : 
            isLoading ? "Connecting..." : 
            error ? "Try Again" :
+           achConfirmationStatus === 'pending' ? "Awaiting Verification" :
            `Pay ${formatCurrency(amount)} with Plaid`}
         </Button>
       </DialogContent>

@@ -501,4 +501,148 @@ export class PlaidService {
       throw error;
     }
   }
+
+  static async initiateAchVerification(accessToken: string, accountId: string) {
+    try {
+      logger.info('Initiating ACH verification:', {
+        accountId,
+        environment: this.isSandbox ? 'sandbox' : 'production'
+      });
+
+      const response = await plaidClient.authGet({
+        access_token: accessToken
+      });
+
+      // Check if account exists and is valid for ACH
+      const account = response.data.accounts.find(acc => acc.account_id === accountId);
+      if (!account) {
+        throw new Error('Account not found');
+      }
+
+      const verificationResponse = await plaidClient.sandboxItemVerificationExpediatedUpdate({
+        access_token: accessToken,
+        account_id: accountId
+      });
+
+      logger.info('ACH verification initiated:', {
+        accountId,
+        response: verificationResponse.data
+      });
+
+      return verificationResponse.data;
+    } catch (error: any) {
+      logger.error('Error initiating ACH verification:', {
+        error: error?.response?.data || error.message,
+        plaidError: error?.response?.data?.error_code,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  static async verifyMicroDeposits(accessToken: string, accountId: string, amounts: number[]) {
+    try {
+      logger.info('Verifying micro-deposits:', {
+        accountId,
+        environment: this.isSandbox ? 'sandbox' : 'production'
+      });
+
+      const response = await plaidClient.itemMicrodepositsVerify({
+        access_token: accessToken,
+        account_id: accountId,
+        amounts: amounts.map(amount => amount.toString())
+      });
+
+      logger.info('Micro-deposits verified:', {
+        accountId,
+        response: response.data
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('Error verifying micro-deposits:', {
+        error: error?.response?.data || error.message,
+        plaidError: error?.response?.data?.error_code,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  static async createTransfer(params: {
+    accessToken: string;
+    accountId: string;
+    amount: string;
+    description: string;
+    achClass: string;
+  }) {
+    try {
+      logger.info('Creating transfer:', {
+        accountId: params.accountId,
+        amount: params.amount,
+        description: params.description,
+        environment: this.isSandbox ? 'sandbox' : 'production'
+      });
+
+      // First create authorization
+      const authorization = await this.createTransferAuthorization(
+        TransferType.Debit,
+        params.amount,
+        params.description
+      );
+
+      const transferRequest: TransferCreateRequest = {
+        authorization_id: authorization.id,
+        access_token: params.accessToken,
+        account_id: params.accountId,
+        description: params.description,
+        network: TransferNetwork.Ach,
+        amount: params.amount,
+        ach_class: params.achClass as ACHClass,
+        user: {
+          legal_name: 'John Doe' // Should come from user profile
+        }
+      };
+
+      const response = await plaidClient.transferCreate(transferRequest);
+
+      logger.info('Transfer created:', {
+        transferId: response.data.transfer.id,
+        status: response.data.transfer.status
+      });
+
+      return response.data.transfer;
+    } catch (error: any) {
+      logger.error('Error creating transfer:', {
+        error: error?.response?.data || error.message,
+        plaidError: error?.response?.data?.error_code,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  static async getTransfer(transferId: string) {
+    try {
+      logger.info('Getting transfer status:', { transferId });
+
+      const response = await plaidClient.transferGet({
+        transfer_id: transferId
+      });
+
+      logger.info('Retrieved transfer status:', {
+        transferId,
+        status: response.data.transfer.status
+      });
+
+      return response.data.transfer;
+    } catch (error: any) {
+      logger.error('Error getting transfer:', {
+        error: error?.response?.data || error.message,
+        plaidError: error?.response?.data?.error_code,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
 }
