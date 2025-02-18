@@ -18,6 +18,7 @@ import { PlaidService } from './services/plaid';
 import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
+import { UserRole } from '@db/schema'; // Add this import
 
 // Create apiRouter at the top level
 const apiRouter = express.Router();
@@ -629,6 +630,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Fix the SMS service call with proper arguments
   apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
@@ -742,9 +744,10 @@ export function registerRoutes(app: Express): Server {
       const smsResult = await smsService.sendLoanApplicationLink(
         formattedPhone,
         applicationUrl,
+        merchant.companyName,
         {
-          merchantName: merchant.companyName,
-          requestId
+          requestId,
+          merchantName: merchant.companyName
         }
       );
 
@@ -816,7 +819,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Fix customer authentication endpoint
+  // Fix the authentication types
   apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber, otp } = req.body;
@@ -839,10 +842,10 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ error: "Invalid or expired OTP" });
       }
 
-      // Generate JWT token
+      // Generate JWT token with proper UserRole type
       const token = await authService.generateJWT({
         id: user.id,
-        role: user.role,
+        role: user.role as UserRole,
         name: user.name || '',
         email: user.email,
         phoneNumber: user.phoneNumber || ''
@@ -972,7 +975,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       let totalPoints = 0;
-      let details: Record<string, any> = {};
+      letdetails: Record<string, any> = {};
 
       switch (type) {
         case 'down_payment':
@@ -984,8 +987,8 @@ export function registerRoutes(app: Express): Server {
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
           const earlyPayoff = Math.floor(amount * (1 + (monthsEarly * 0.1)));
           totalPoints = earlyPayoff;
-          details = { 
-            monthsEarly, 
+          details = {
+            monthsEarly,
             basePoints: Math.floor(amount / 20),
             multiplier: 1 + (monthsEarly * 0.1)
           };
@@ -994,7 +997,7 @@ export function registerRoutes(app: Express): Server {
         case 'additional_payment':
           const additionalPoints = Math.floor(amount / 25) * 2;
           totalPoints = additionalPoints;
-          details = { 
+          details = {
             basePoints: Math.floor(amount / 25),
             multiplier: 2
           };
@@ -1487,6 +1490,36 @@ type RequestTrackingMiddleware = (
   next: NextFunction
 ) => void;
 
+
+interface PlaidContractUpdate {
+  status?: string;
+  plaidAccessToken?: string;
+  plaidAccountId?: string;
+  achVerificationStatus?: string;
+}
+
+apiRouter.patch("/contracts/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const contractId = parseInt(req.params.id);
+    const updates: PlaidContractUpdate = {};
+
+    // Map the updates properly
+    if (req.body.status) updates.status = req.body.status;
+    if (req.body.plaid_access_token) updates.plaidAccessToken = req.body.plaid_access_token;
+    if (req.body.plaid_account_id) updates.plaidAccountId = req.body.plaid_account_id;
+    if (req.body.ach_verification_status) updates.achVerificationStatus = req.body.ach_verification_status;
+
+    const [updatedContract] = await db
+      .update(contracts)
+      .set(updates)
+      .where(eq(contracts.id, contractId))
+      .returning();
+
+    res.json(updatedContract);
+  } catch (err) {
+    next(err);
+  }
+});
 
 declare global {
   namespace Express {
