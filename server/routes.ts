@@ -113,7 +113,7 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
 router.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const { username, password, loginType } = req.body as LoginData;
-    
+
     logger.debug("[Auth] Login attempt details:", {
       username,
       loginType,
@@ -217,107 +217,6 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-// Register core middleware
-router.use(requestTrackingMiddleware);
-router.use(cacheMiddleware(300));
-
-// Public routes - no auth required
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-    
-    // Format phone number consistently
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-    
-    // Create user if doesn't exist
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-    
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
-
-    await db.update(users)
-      .set({
-        lastOtpCode: otp,
-        otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-      })
-      .where(eq(users.phoneNumber, formattedPhone));
-
-    res.json({ message: "OTP sent successfully" });
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Failed to send OTP" });
-  }
-});
-
-router.post("/sendOTP", async (req: Request, res: Response) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
-    }
-
-    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-    
-    // Format phone number consistently
-    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-    
-    // Create user if doesn't exist
-    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-    
-    if (!user) {
-      [user] = await db.insert(users)
-        .values({
-          phoneNumber: formattedPhone,
-          role: 'customer',
-          username: formattedPhone,
-          password: '',
-          email: '',
-          name: ''
-        } as typeof users.$inferInsert)
-        .returning();
-    }
-
-    const otp = smsService.generateOTP();
-    const sent = await smsService.sendOTP(formattedPhone, otp);
-
-    if (sent) {
-      await db.update(users)
-        .set({
-          lastOtpCode: otp,
-          otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-        })
-        .where(eq(users.phoneNumber, formattedPhone));
-
-      res.json({ message: "OTP sent successfully" });
-    } else {
-      res.status(500).json({ error: "Failed to send OTP" });
-    }
-  } catch (error) {
-    logger.error('[SMS] OTP send error:', error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-
-
 // Public route for sending OTP
 router.post("/sendOTP", async (req: Request, res: Response) => {
   try {
@@ -327,13 +226,13 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
     }
 
     logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
-    
+
     // Format phone number consistently
     const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
-    
+
     // Create user if doesn't exist
     let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
-    
+
     if (!user) {
       [user] = await db.insert(users)
         .values({
@@ -364,7 +263,11 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
-// Apply JWT verification middleware for protected routes
+// Register core middleware
+router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
+
+// Protected routes below
 router.use(verifyJWT);
 
 // Protected routes below
@@ -1095,8 +998,7 @@ router.post("/merchants/:id/send-loan-application", async (req: RequestWithUser,
 router.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { phoneNumber, otp } = req.body;
-    if (!phoneNumber || !otp) {
-      return res.status(400).json({ error: "Phone number and OTP are required" });
+    if (!phoneNumber || !otp) {      return res.status(400).json({ error: "Phone number and OTP are required" });
     }
 
     const [user] = await db
