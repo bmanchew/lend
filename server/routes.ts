@@ -976,7 +976,7 @@ export function registerRoutes(app: Express): Server {
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
           const earlyPayoff = Math.floor(Number(amount) * (1 + (monthsEarly * 0.1)));
           totalPoints = earlyPayoff;
-          details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
+          details = { monthsEarly, basePoints: Mathfloor(Number(amount) / 20) };
           break;
 
         case 'additional_payment':
