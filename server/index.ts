@@ -143,6 +143,8 @@ const startServer = async () => {
     const startListening = async (): Promise<void> => {
       try {
         await new Promise<void>((resolve, reject) => {
+          logger.info('Attempting to start server on port:', port);
+
           const server = httpServer.listen(port, "0.0.0.0", () => {
             logger.info(`Server is running on port ${port}`);
             logger.info(`Server URL: http://0.0.0.0:${port}`);
@@ -173,6 +175,12 @@ const startServer = async () => {
 
             resolve();
           }).on('error', async (err: any) => {
+            logger.error('Server listen error:', {
+              error: err.message,
+              code: err.code,
+              port
+            });
+
             if (err.code === 'EADDRINUSE' && currentRetry < maxRetries) {
               currentRetry++;
               logger.warn(`Port ${port} in use, retrying... (attempt ${currentRetry}/${maxRetries})`);
@@ -187,7 +195,14 @@ const startServer = async () => {
             }
           });
         });
-      } catch (error) {
+      } catch (error: any) {
+        logger.error('Error in startListening:', {
+          error: error.message,
+          stack: error.stack,
+          currentRetry,
+          maxRetries
+        });
+
         if (currentRetry >= maxRetries) {
           throw new Error(`Failed to start server after ${maxRetries} attempts`);
         }
@@ -198,8 +213,11 @@ const startServer = async () => {
     await startListening();
     logger.info('Server initialization complete');
 
-  } catch (error) {
-    logger.error('Failed to start server:', error);
+  } catch (error: any) {
+    logger.error('Failed to start server:', {
+      error: error.message,
+      stack: error.stack
+    });
     process.exit(1);
   }
 };
