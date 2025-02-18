@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
+import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances, type UserRole } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
@@ -18,7 +18,26 @@ import { PlaidService } from './services/plaid';
 import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '@db/schema'; // Add this import
+
+// Type declarations first
+interface JWTPayload {
+  id: number;
+  role: UserRole;
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+}
+
+type RequestWithUser = Request & {
+  user?: JWTPayload;
+};
+
+// Middleware type declarations
+type RequestTrackingMiddleware = (
+  req: RequestWithUser,
+  res: Response,
+  next: NextFunction
+) => void;
 
 // Create apiRouter at the top level
 const apiRouter = express.Router();
@@ -36,16 +55,74 @@ class APIError extends Error {
   }
 }
 
-// Error handling middleware type declaration
+// JWT verification middleware
+const verifyJWT = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
+    req.user = decoded;
+    next();
+  } catch (err) {
+    logger.error('JWT verification failed:', err);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Request tracking middleware
+const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
+  const requestId = Date.now().toString(36);
+  req.headers['x-request-id'] = requestId;
+
+  logger.info(`[API] ${req.method} ${req.path}`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: { ...req.headers, authorization: undefined }
+  });
+
+  next();
+};
+
+
+// Cache middleware
+const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
+  const apiCache = new NodeCache({ stdTTL: duration });
+
+  return (req, res, next) => {
+    if (req.method !== 'GET') return next();
+
+    const key = `__express__${req.originalUrl}`;
+    const cachedResponse = apiCache.get(key);
+
+    if (cachedResponse) {
+      res.send(cachedResponse);
+      return;
+    }
+
+    const originalSend = res.send;
+    res.send = function(body: any): any {
+      apiCache.set(key, body, duration);
+      return originalSend.call(this, body);
+    };
+
+    next();
+  };
+};
+
+// Error handling middleware
 type ErrorHandlingMiddleware = (
   err: Error | APIError,
-  req: Request,
+  req: RequestWithUser,
   res: Response,
   next: NextFunction
 ) => void;
 
-// Define error handling middleware before use
-const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
+const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: RequestWithUser, res: Response, next: NextFunction) => {
   const errorId = Date.now().toString(36);
   const isAPIError = err instanceof APIError;
 
@@ -88,33 +165,9 @@ const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError,
   next();
 };
 
-// JWT verification middleware with proper types
-const verifyJWT = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, process.env.REPL_ID!) as {
-      id: number;
-      role: string;
-      email?: string;
-      name?: string;
-      phoneNumber?: string;
-    };
-
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('JWT verification failed:', err);
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
 
 export function registerRoutes(app: Express): Server {
-  // Initialize LedgerManager singleton with config
+  // Initialize ledger manager with config
   const ledgerConfig = {
     minBalance: 1000,
     maxBalance: 100000,
@@ -131,16 +184,17 @@ export function registerRoutes(app: Express): Server {
 
   // Register middleware
   apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(verifyJWT); // Added JWT verification middleware
+  apiRouter.use(verifyJWT);
   apiRouter.use(errorHandlingMiddleware);
 
-  // Protected routes - add verifyJWT middleware
-  apiRouter.get("/auth/me", verifyJWT, async (req: Request, res: Response) => {
+
+  // Protected routes
+  apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
     res.json(req.user);
   });
 
 
-  apiRouter.get("/customers/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const userId = parseInt(req.params.id);
       if (isNaN(userId)) {
@@ -151,17 +205,17 @@ export function registerRoutes(app: Express): Server {
         .where(eq(contracts.customerId, userId))
         .orderBy(desc(contracts.createdAt));
 
-      console.log("Found contracts for customer:", customerContracts);
+      logger.info("Found contracts for customer:", customerContracts);
       res.json(customerContracts);
     } catch (err: any) {
-      console.error("Error fetching customer contracts:", err);
+      logger.error("Error fetching customer contracts:", err);
       next(err);
     }
   });
 
-  apiRouter.post("/test-verification-email", async (req: Request, res: Response) => {
+  apiRouter.post("/test-verification-email", async (req: RequestWithUser, res: Response) => {
     try {
-      console.log('Received test email request:', req.body);
+      logger.info('Received test email request:', req.body);
       const testEmail = req.body.email;
 
       if (!testEmail) {
@@ -178,27 +232,27 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      console.log('Generating verification token for:', testEmail);
+      logger.info('Generating verification token for:', testEmail);
       const token = await generateVerificationToken();
 
-      console.log('Attempting to send verification email to:', testEmail);
+      logger.info('Attempting to send verification email to:', testEmail);
       const sent = await sendVerificationEmail(testEmail, token);
 
       if (sent) {
-        console.log('Email sent successfully to:', testEmail);
+        logger.info('Email sent successfully to:', testEmail);
         return res.json({
           status: "success",
           message: "Verification email sent successfully"
         });
       } else {
-        console.error('Failed to send email to:', testEmail);
+        logger.error('Failed to send email to:', testEmail);
         return res.status(500).json({
           status: "error",
           message: "Failed to send verification email"
         });
       }
     } catch (err: any) {
-      console.error('Test verification email error:', err);
+      logger.error('Test verification email error:', err);
       return res.status(500).json({
         status: "error",
         message: err.message || "Failed to send test email"
@@ -206,7 +260,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/verify-sendgrid", async (req: Request, res: Response) => {
+  apiRouter.get("/verify-sendgrid", async (req: RequestWithUser, res: Response) => {
     try {
       const apiKey = process.env.SENDGRID_API_KEY;
       if (!apiKey || !apiKey.startsWith('SG.')) {
@@ -228,7 +282,7 @@ export function registerRoutes(app: Express): Server {
         });
       }
     } catch (err: any) {
-      console.error('SendGrid verification error:', err);
+      logger.error('SendGrid verification error:', err);
       res.status(500).json({
         status: "error",
         message: err.message || "SendGrid verification failed"
@@ -236,7 +290,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/test-email", async (req: Request, res: Response) => {
+  apiRouter.get("/test-email", async (req: RequestWithUser, res: Response) => {
     try {
       const isConnected = await testSendGridConnection();
       if (isConnected) {
@@ -251,7 +305,7 @@ export function registerRoutes(app: Express): Server {
         });
       }
     } catch (err: any) {
-      console.error('SendGrid test error:', err);
+      logger.error('SendGrid test error:', err);
       res.status(500).json({
         status: "error",
         message: err.message || "SendGrid test failed"
@@ -259,26 +313,25 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/merchants/by-user/:userId", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const userId = parseInt(req.params.userId);
-      console.log("[Merchant Lookup] Attempting to find merchant for userId:", userId);
+      logger.info("[Merchant Lookup] Attempting to find merchant for userId:", userId);
 
       if (isNaN(userId)) {
-        console.log("[Merchant Lookup] Invalid userId provided:", req.params.userId);
+        logger.info("[Merchant Lookup] Invalid userId provided:", req.params.userId);
         return res.status(400).json({ error: 'Invalid user ID' });
       }
 
-      console.log("[Merchant Lookup] Executing query for userId:", userId);
+      logger.info("[Merchant Lookup] Executing query for userId:", userId);
       const merchantResults = await db
         .select()
         .from(merchants)
         .where(eq(merchants.userId, userId))
         .limit(1);
 
-      console.log("[Merchant Lookup] Query results:", merchantResults);
-
-      console.log("[Merchant Lookup] Query results:", merchantResults);
+      logger.info("[Merchant Lookup] Query results:", merchantResults);
+      logger.info("[Merchant Lookup] Query results:", merchantResults);
 
       const [merchant] = merchantResults;
 
@@ -286,15 +339,15 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ error: 'Merchant not found' });
       }
 
-      console.log("Found merchant:", merchant);
+      logger.info("Found merchant:", merchant);
       res.json(merchant);
     } catch (err: any) {
-      console.error("Error fetching merchant by user:", err);
+      logger.error("Error fetching merchant by user:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants/:id/contracts", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/merchants/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const merchantContracts = await db.query.contracts.findMany({
         where: eq(contracts.merchantId, parseInt(req.params.id)),
@@ -304,15 +357,15 @@ export function registerRoutes(app: Express): Server {
       });
       res.json(merchantContracts);
     } catch (err: any) {
-      console.error("Error fetching merchant contracts:", err);
+      logger.error("Error fetching merchant contracts:", err);
       next(err);
     }
   });
 
   // Fix the merchant creation endpoint with proper types
-  apiRouter.post("/merchants/create", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/merchants/create", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
-      console.log("[Merchant Creation] Received request:", {
+      logger.info("[Merchant Creation] Received request:", {
         body: req.body,
         timestamp: new Date().toISOString()
       });
@@ -322,12 +375,12 @@ export function registerRoutes(app: Express): Server {
 
       // Validate required fields
       if (!email || !companyName) {
-        console.error("[Merchant Creation] Missing required fields");
+        logger.error("[Merchant Creation] Missing required fields");
         return res.status(400).json({ error: 'Email and company name are required' });
       }
 
       // Check for existing user first
-      console.log("[Merchant Creation] Checking for existing user with email:", email);
+      logger.info("[Merchant Creation] Checking for existing user with email:", email);
       const existingUser = await db
         .select()
         .from(users)
@@ -342,13 +395,13 @@ export function registerRoutes(app: Express): Server {
           .set({ role: 'merchant' })
           .where(eq(users.id, existingUser[0].id))
           .returning();
-        console.log("[Merchant Creation] Updated existing user to merchant:", merchantUser);
+        logger.info("[Merchant Creation] Updated existing user to merchant:", merchantUser);
       } else {
 
-        console.log("[Merchant Creation] Generated temporary password");
+        logger.info("[Merchant Creation] Generated temporary password");
         const hashedPassword = await authService.hashPassword(tempPassword);
 
-        console.log("[Merchant Creation] Creating new merchant user account");
+        logger.info("[Merchant Creation] Creating new merchant user account");
         [merchantUser] = await db
           .insert(users)
           .values({
@@ -362,7 +415,7 @@ export function registerRoutes(app: Express): Server {
           .returning();
       }
 
-      console.log("[Merchant Creation] Created merchant user:", {
+      logger.info("[Merchant Creation] Created merchant user:", {
         id: merchantUser.id,
         email: merchantUser.email,
         role: merchantUser.role
@@ -385,13 +438,13 @@ export function registerRoutes(app: Express): Server {
 
       res.status(201).json({ merchant, user: merchantUser });
     } catch (err) {
-      console.error("Error creating merchant:", err);
+      logger.error("Error creating merchant:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants", async (req: Request, res: Response, next: NextFunction) => {
-    console.log("[Merchants] Fetching all merchants");
+  apiRouter.get("/merchants", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+    logger.info("[Merchants] Fetching all merchants");
     try {
       const allMerchants = await db
         .select({
@@ -421,14 +474,14 @@ export function registerRoutes(app: Express): Server {
 
       res.json(merchantsWithPrograms);
     } catch (err: any) {
-      console.error("Error fetching all merchants:", err);
+      logger.error("Error fetching all merchants:", err);
       next(err);
     }
   });
 
-  apiRouter.post("/merchants/:id/programs", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
-      console.log("[Programs] Creating new program:", req.body);
+      logger.info("[Programs] Creating new program:", req.body);
       const { name, term, interestRate } = req.body;
       const merchantId = parseInt(req.params.id);
 
@@ -441,12 +494,12 @@ export function registerRoutes(app: Express): Server {
 
       res.json(program);
     } catch (err: any) {
-      console.error("Error creating program:", err);
+      logger.error("Error creating program:", err);
       next(err);
     }
   });
 
-  apiRouter.get("/merchants/:id/programs", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/merchants/:id/programs", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const merchantId = parseInt(req.params.id);
       const merchantPrograms = await db
@@ -455,13 +508,13 @@ export function registerRoutes(app: Express): Server {
         .where(eq(programs.merchantId, merchantId));
       res.json(merchantPrograms);
     } catch (err: any) {
-      console.error("Error fetching merchant programs:", err);
+      logger.error("Error fetching merchant programs:", err);
       next(err);
     }
   });
 
   // Fix the contracts table query with proper types
-  apiRouter.get("/contracts", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { status, merchantId } = req.query;
 
@@ -492,16 +545,16 @@ export function registerRoutes(app: Express): Server {
 
       const allContracts = await query.orderBy(desc(contracts.createdAt));
 
-      console.log("[Routes] Successfully fetched contracts:", { count: allContracts.length });
+      logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length });
       res.json(allContracts);
     } catch (err) {
-      console.error("[Routes] Error fetching contracts:", err);
+      logger.error("[Routes] Error fetching contracts:", err);
       next(err);
     }
   });
 
   // Fix contract creation with proper types
-  apiRouter.post("/contracts", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const {
         merchantId,
@@ -581,13 +634,13 @@ export function registerRoutes(app: Express): Server {
 
       res.json(newContract);
     } catch (err) {
-      console.error("[Routes] Error creating contract:", err);
+      logger.error("[Routes] Error creating contract:", err);
       next(err);
     }
   });
 
   // Fix webhook event handling with proper types
-  apiRouter.post("/webhooks/process", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/webhooks/process", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { eventType, sessionId, payload } = req.body;
 
@@ -608,7 +661,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Rewards endpoints
-  apiRouter.get("/rewards/balance", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/balance", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -631,10 +684,10 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Fix the SMS service call with proper arguments
-  apiRouter.post("/merchants/:id/send-loan-application", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/merchants/:id/send-loan-application", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     const requestId = Date.now().toString(36);
     const debugLog = (message: string, data?: any) => {
-      console.log(`[LoanApplication][${requestId}] ${message}`, data || "");
+      logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
     };
 
     debugLog('Received application request', {
@@ -820,7 +873,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Fix the authentication types
-  apiRouter.post("/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/auth/verify-otp", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { phoneNumber, otp } = req.body;
       if (!phoneNumber || !otp) {
@@ -858,7 +911,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/auth/me", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/auth/me", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -869,7 +922,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/auth/logout", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/auth/logout", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -887,7 +940,7 @@ export function registerRoutes(app: Express): Server {
   });
 
 
-  apiRouter.post("/auth/register", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/auth/register", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { username, password, email, name, role, phoneNumber } = req.body;
       if (!username || !password || !email || !name || !role || !phoneNumber) {
@@ -905,7 +958,7 @@ export function registerRoutes(app: Express): Server {
 
   //Rewards endpoints (removed duplicate)
 
-  apiRouter.get("/rewards/transactions", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/transactions", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -919,7 +972,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Fix rewards calculation endpoint with proper types
-  apiRouter.get("/rewards/calculate", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/calculate", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { type, amount } = req.query;
 
@@ -965,7 +1018,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Fix the early_payment case syntax error and update the rewards calculation
-  apiRouter.get("/rewards/potential", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/rewards/potential", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const amount = parseFloat(req.query.amount as string);
       const type = req.query.type as string;
@@ -975,32 +1028,28 @@ export function registerRoutes(app: Express): Server {
       }
 
       let totalPoints = 0;
-      letdetails: Record<string, any> = {};
+      const details: Record<string, any> = {}; // Fix letdetails typo
 
       switch (type) {
         case 'down_payment':
           totalPoints = Math.floor(amount / 10); // Basic reward for down payment
-          details = { basePoints: totalPoints };
+          details.basePoints = totalPoints;
           break;
 
         case 'early_payment':
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
           const earlyPayoff = Math.floor(amount * (1 + (monthsEarly * 0.1)));
           totalPoints = earlyPayoff;
-          details = {
-            monthsEarly,
-            basePoints: Math.floor(amount / 20),
-            multiplier: 1 + (monthsEarly * 0.1)
-          };
+          details.monthsEarly = monthsEarly;
+          details.basePoints = Math.floor(amount / 20);
+          details.multiplier = 1 + (monthsEarly * 0.1);
           break;
 
         case 'additional_payment':
           const additionalPoints = Math.floor(amount / 25) * 2;
           totalPoints = additionalPoints;
-          details = {
-            basePoints: Math.floor(amount / 25),
-            multiplier: 2
-          };
+          details.basePoints = Math.floor(amount / 25);
+          details.multiplier = 2;
           break;
 
         default:
@@ -1008,7 +1057,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       res.json({
-        totalPoints,
+        points: totalPoints,
         details,
         type,
         amount
@@ -1018,123 +1067,115 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/rewards/record-transaction", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      const { type, amount, contractId } = req.body;
-      if (!type || !amount || !contractId) {
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
-
-      // Calculate rewards based on type
-      let rewardPoints = 0;
-      switch (type) {
-        case 'down_payment':
-          rewardPoints = Math.floor(amount / 10); // 1 point per $10
-          break;
-        case 'early_payment':
-          const monthsEarly = req.body.monthsEarly || 0;
-          rewardPoints = Math.floor(amount * (1 + (monthsEarly * 0.1))); // 10% bonus per month early
-          break;
-        case 'additional_payment':
-          rewardPoints = Math.floor(amount / 25) * 2; // 2 points per $25 additional payment
-          break;
-        default:
-          return res.status(400).json({ error: 'Invalid reward type' });
-      }
-
-      // Record the transaction and update balance
-      const result = await shifiRewardsService.recordTransaction(
-        req.user.id,
-        rewardPoints,
-        {
-          type,
-          amount,
-          contractId,
-          ...(type === 'early_payment' ? { monthsEarly: req.body.monthsEarly } : {})
-        }
-      );
-
-      res.json({
-        success: true,
-        pointsEarned: rewardPoints,
-        newBalance: result.newBalance,
-        transaction: result.transaction
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  apiRouter.get("/rewards/history", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const offset = (page - 1) * limit;
-
-      // Get transaction history with pagination
-      const transactions = await shifiRewardsService.getTransactionHistory(req.user.id, { limit, offset });
-      const totalCount = await shifiRewardsService.getTransactionCount(req.user.id);
-
-      res.json({
-        transactions,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(totalCount / limit),
-          totalItems: totalCount,
-          itemsPerPage: limit
-        }
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  apiRouter.get("/rewards/multipliers", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      // Get current multipliers based on user's activity and status
-      const multipliers = await shifiRewardsService.getCurrentMultipliers(req.user.id);
-
-      res.json({
-        multipliers,
-        nextTierProgress: multipliers.nextTierProgress
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  // Add to existing rewards/calculate endpoint
-  function calculateRewardPoints(type: string, amount: number, monthsEarly?: number): number {
-    let points = 0;
-    switch (type) {
-      case 'down_payment':
-        points = Math.floor(amount / 10);
-        break;
-      case 'early_payment':
-        points = Math.floor(amount * (1 + ((monthsEarly || 0) * 0.1)));
-        break;
-      case 'additional_payment':
-        points = Math.floor(amount / 25) * 2;
-        break;
-    }
-    return points;
+  // Update PlaidContractUpdate interface to match schema
+  interface PlaidContractUpdate {
+    status?: string;
+    plaidAccessToken?: string | null;
+    plaidAccountId?: string | null;
+    achVerificationStatus?: string | null;
+    lastPaymentId?: string | null;
+    lastPaymentStatus?: string | null;
   }
 
-  apiRouter.use(cacheMiddleware(300)); // 5 mins cache
+  // Update contract patch endpoint
+  apiRouter.patch("/contracts/:id", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+    try {
+      const contractId = parseInt(req.params.id);
+      const updates: Partial<typeof contracts.$inferInsert> = {};
 
-  apiRouter.post("/plaid/process-payment", async (req: Request, res: Response, next: NextFunction) => {
+      // Map the updates with proper typing
+      if (req.body.status) updates.status = req.body.status;
+      if ('plaid_access_token' in req.body) updates.plaidAccessToken = req.body.plaid_access_token;
+      if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
+      if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
+      if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
+      if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
+
+      const [updatedContract] = await db
+        .update(contracts)
+        .set(updates)
+        .where(eq(contracts.id, contractId))
+        .returning();
+
+      res.json(updatedContract);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Request tracking middleware (Needed for complete code)
+  const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
+    const requestId = Date.now().toString(36);
+    req.headers['x-request-id'] = requestId;
+
+    logger.info(`[API] ${req.method} ${req.path}`, {
+      requestId,
+      query: req.query,
+      body: req.body,
+      headers: { ...req.headers, authorization: undefined }
+    });
+
+    next();
+  };
+
+  // Cache middleware (Needed for complete code)
+  const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
+    const apiCache = new NodeCache({ stdTTL: duration });
+
+    return (req, res, next) => {
+      if (req.method !== 'GET') return next();
+
+      const key = `__express__${req.originalUrl}`;
+      const cachedResponse = apiCache.get(key);
+
+      if (cachedResponse) {
+        res.send(cachedResponse);
+        return;
+      }
+
+      const originalSend = res.send;
+      res.send = function(body: any): any {
+        apiCache.set(key, body, duration);
+        return originalSend.call(this, body);
+      };
+
+      next();
+    };
+  };
+
+  // Type declarations (Needed for complete code)
+  type RouteHandler = (req: RequestWithUser, res: Response, next: NextFunction) => Promise<void>;
+
+  interface RouteConfig {
+    path: string;
+    method: 'get' | 'post' | 'put' | 'delete';
+    handler: RouteHandler;
+    middleware?: any[];
+    description?: string;
+  }
+
+  interface RouteGroup {
+    prefix: string;
+    routes: RouteConfig[];
+  }
+
+  type RequestTrackingMiddleware = (
+    req: RequestWithUser,
+    res: Response,
+    next: NextFunction
+  ) => void;
+
+
+  interface PlaidContractUpdate {
+    status?: string;
+    plaidAccessToken?: string | null;
+    plaidAccountId?: string | null;
+    achVerificationStatus?: string | null;
+    lastPaymentId?: string | null;
+    lastPaymentStatus?: string | null;
+  }
+
+  apiRouter.post("/plaid/process-payment", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { public_token, account_id, amount, contractId, requireAchVerification } = req.body;
 
@@ -1187,12 +1228,12 @@ export function registerRoutes(app: Express): Server {
       });
 
     } catch (err) {
-      console.error('Error processing Plaid payment:', err);
+      logger.error('Error processing Plaid payment:', err);
       next(err);
     }
   });
 
-  apiRouter.get("/plaid/payment-status/:transferId", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/plaid/payment-status/:transferId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { transferId } = req.params;
 
@@ -1225,12 +1266,12 @@ export function registerRoutes(app: Express): Server {
       });
 
     } catch (err) {
-      console.error('Error checking payment status:', err);
+      logger.error('Error checking payment status:', err);
       next(err);
     }
   });
 
-  apiRouter.post("/plaid/verify-micro-deposits", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/verify-micro-deposits", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { contractId, amounts } = req.body;
 
@@ -1259,12 +1300,12 @@ export function registerRoutes(app: Express): Server {
       res.json({ status: 'success', message: 'ACH verification completed' });
 
     } catch (err) {
-      console.error('Error verifying micro-deposits:', err);
+      logger.error('Error verifying micro-deposits:', err);
       next(err);
     }
   });
 
-  apiRouter.post("/plaid/ledger/start-sweeps", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/ledger/start-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
         return res.status(400).json({
@@ -1284,7 +1325,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/plaid/ledger/stop-sweeps", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/ledger/stop-sweeps", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       ledgerManager.stopSweeps();
       res.json({
@@ -1297,7 +1338,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.post("/plaid/ledger/manual-sweep", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/ledger/manual-sweep", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const { type, amount } = req.body;
 
@@ -1330,7 +1371,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.get("/plaid/ledger/balance", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.get("/plaid/ledger/balance", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
         return res.status(400).json({
@@ -1351,7 +1392,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add new route for creating Plaid link tokens
-  apiRouter.post("/plaid/create-link-token", async (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/plaid/create-link-token", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.id;
       if (!userId) {
@@ -1391,7 +1432,7 @@ function calculatePotentialRewards(amount: number, monthsEarly: number, addition
   return { earlyPayoff, additional };
 }
 // Fix contract status update endpoint
-apiRouter.post("/contracts/:id/status", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+apiRouter.post("/contracts/:id/status", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1422,98 +1463,6 @@ apiRouter.post("/contracts/:id/status", verifyJWT, async (req: Request, res: Res
     if (status === 'funded') {
       await ledgerManager.manualSweep('deposit', updatedContract.amount);
     }
-
-    res.json(updatedContract);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Request tracking middleware (Needed for complete code)
-const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
-
-  console.log(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
-  });
-
-  next();
-};
-
-// Cache middleware (Needed for complete code)
-const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
-  const apiCache = new NodeCache({ stdTTL: duration });
-
-  return (req, res, next) => {
-    if (req.method !== 'GET') return next();
-
-    const key = `__express__${req.originalUrl}`;
-    const cachedResponse = apiCache.get(key);
-
-    if (cachedResponse) {
-      res.send(cachedResponse);
-      return;
-    }
-
-    const originalSend = res.send;
-    res.send = function (body: any): any {
-      apiCache.set(key, body, duration);
-      return originalSend.call(this, body);
-    };
-    next();
-  };
-};
-
-// Type declarations (Needed for complete code)
-type RouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>;
-
-interface RouteConfig {
-  path: string;
-  method: 'get' | 'post' | 'put' | 'delete';
-  handler: RouteHandler;
-  middleware?: any[];
-  description?: string;
-}
-
-interface RouteGroup {
-  prefix: string;
-  routes: RouteConfig[];
-}
-
-type RequestTrackingMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => void;
-
-
-interface PlaidContractUpdate {
-  status?: string;
-  plaidAccessToken?: string;
-  plaidAccountId?: string;
-  achVerificationStatus?: string;
-}
-
-apiRouter.patch("/contracts/:id", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const contractId = parseInt(req.params.id);
-    const updates: PlaidContractUpdate = {};
-
-    // Map the updates properly
-    if (req.body.status) updates.status = req.body.status;
-    if (req.body.plaid_access_token) updates.plaidAccessToken = req.body.plaid_access_token;
-    if (req.body.plaid_account_id) updates.plaidAccountId = req.body.plaid_account_id;
-    if (req.body.ach_verification_status) updates.achVerificationStatus = req.body.ach_verification_status;
-
-    const [updatedContract] = await db
-      .update(contracts)
-      .set(updates)
-      .where(eq(contracts.id, contractId))
-      .returning();
 
     res.json(updatedContract);
   } catch (err) {

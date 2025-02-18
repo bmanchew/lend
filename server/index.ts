@@ -31,7 +31,7 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   delete safeHeaders.authorization;
   delete safeHeaders.cookie;
 
-  console.log(`[API] ${req.method} ${path} started`, {
+  logger.info(`[API] ${req.method} ${path} started`, {
     requestId,
     query: req.query,
     body: req.body,
@@ -63,7 +63,7 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
         response: capturedResponse
       };
 
-      log(JSON.stringify(logData));
+      logger.info('[API] Request completed', logData);
     }
   });
 
@@ -84,14 +84,36 @@ const startServer = async () => {
     const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     let retries = 5;
 
+    // Initialize LedgerManager in background
+    const ledgerConfig = {
+      minBalance: 1000,
+      maxBalance: 100000,
+      sweepThreshold: 500,
+      sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+    };
+
+    const ledgerManager = LedgerManager.getInstance(ledgerConfig);
+    // Don't await ledger initialization, let it run in background
+    ledgerManager.initializeSweeps().catch(error => {
+      logger.error('Failed to initialize ledger sweeps:', error);
+    });
+
     const startListening = () => {
       return new Promise<void>((resolve, reject) => {
-        const server = httpServer.listen(PORT, "0.0.0.0", async () => {
-          // Log server start
-          log(`Server running at http://0.0.0.0:${PORT}`);
-          console.log('Environment:', process.env.NODE_ENV);
-          console.log('WebSocket status: enabled');
-          console.log('Server ready for connections');
+        // Add health check endpoint before starting server
+        app.get('/health', (_req, res) => {
+          res.json({ 
+            status: 'ok', 
+            uptime: process.uptime(),
+            port: PORT,
+            timestamp: new Date().toISOString()
+          });
+        });
+
+        const server = httpServer.listen(PORT, "0.0.0.0", () => {
+          logger.info(`Server running at http://0.0.0.0:${PORT}`);
+          logger.info('Environment:', process.env.NODE_ENV);
+          logger.info('WebSocket status: enabled');
 
           // Initialize Socket.IO
           const io = new Server(server, {
@@ -103,54 +125,49 @@ const startServer = async () => {
           (global as any).io = io;
 
           io.on('connection', (socket) => {
-            console.log('Client connected:', socket.id);
+            logger.info('Client connected:', socket.id);
 
             socket.on('join_merchant_room', (merchantId: number) => {
               socket.join(`merchant_${merchantId}`);
-              console.log(`Socket ${socket.id} joined merchant room ${merchantId}`);
+              logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
             });
 
             socket.on('disconnect', () => {
-              console.log('Client disconnected:', socket.id);
+              logger.info('Client disconnected:', socket.id);
             });
           });
 
           // Signal that the server is ready
+          logger.info('Server ready for connections');
           resolve();
-        }).on('error', (err: any) => {
+        })
+        .on('error', (err: any) => {
           if (err.code === 'EADDRINUSE' && retries > 0) {
             retries--;
-            console.log(`Port ${PORT} in use, retrying... (${retries} attempts left)`);
+            logger.warn(`Port ${PORT} in use, retrying... (${retries} attempts left)`);
             setTimeout(() => {
               server.close();
               startListening().then(resolve).catch(reject);
             }, 1000);
           } else {
-            console.error('Server failed to start:', err);
+            logger.error('Server failed to start:', err);
             reject(err);
           }
-        });
-
-        // Add health check endpoint
-        app.get('/health', (_req, res) => {
-          res.json({ status: 'ok', port: PORT });
         });
       });
     };
 
     await startListening();
-    console.log('Server initialization complete');
+    logger.info('Server initialization complete');
 
   } catch (error) {
-    console.error('Failed to start server:', error);
-    logger.error('Server startup error:', error);
+    logger.error('Failed to start server:', error);
     process.exit(1);
   }
 };
 
 // Start server with proper error handling
 startServer().catch((error) => {
-  console.error('Critical server error:', error);
   logger.error('Critical server error:', error);
   process.exit(1);
 });
