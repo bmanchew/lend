@@ -210,17 +210,36 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
     }
 
     logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
+    
+    // Format phone number consistently
+    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
+    
+    // Create user if doesn't exist
+    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
+    
+    if (!user) {
+      [user] = await db.insert(users)
+        .values({
+          phoneNumber: formattedPhone,
+          role: 'customer',
+          username: formattedPhone,
+          password: '',
+          email: '',
+          name: ''
+        } as typeof users.$inferInsert)
+        .returning();
+    }
+
     const otp = smsService.generateOTP();
-    const sent = await smsService.sendOTP(phoneNumber, otp);
+    const sent = await smsService.sendOTP(formattedPhone, otp);
 
     if (sent) {
-      // Store OTP in user record
       await db.update(users)
         .set({
           lastOtpCode: otp,
           otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
         })
-        .where(eq(users.phoneNumber, phoneNumber));
+        .where(eq(users.phoneNumber, formattedPhone));
 
       res.json({ message: "OTP sent successfully" });
     } else {
