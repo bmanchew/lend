@@ -5,12 +5,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useMutation } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import type { LoginResponse } from "@/types";
 
-type LoginFormData = {
-  username: string;
-  password: string;
-};
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function MerchantLogin() {
   const navigate = useNavigate();
@@ -18,52 +22,52 @@ export default function MerchantLogin() {
   const { toast } = useToast();
 
   const form = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
       password: "",
     },
   });
 
-  const onSubmit = async (data: FormData) => {
-    console.log('[MerchantLogin] Attempting login:', {
-      username: data.username,
-      loginType: "merchant",
-      timestamp: new Date().toISOString()
-    });
-
+  const onSubmit = async (data: LoginFormData) => {
     try {
       const response = await loginMutation.mutateAsync({
         username: data.username,
         password: data.password,
         loginType: "merchant"
-      });
-      console.log('[MerchantLogin] Login successful:', response);
-      // Store login response data
-      localStorage.setItem('user', JSON.stringify(response));
-      console.log('[MerchantLogin] Attempting navigation to dashboard');
+      }) as LoginResponse;
 
-      if (response?.role === 'merchant') {
-        navigate('/merchant/dashboard', { replace: true });
-      } else {
-        console.warn("[MerchantLogin] Unexpected role:", response?.role);
-        toast({
-          title: "Login successful, but unexpected role.",
-          description: `Role: ${response?.role}`,
-          variant: "warning"
-        });
+      if (!response.token) {
+        throw new Error('No token received');
       }
 
-    } catch (error) {
-      console.error("[MerchantLogin] Login failed:", {
-        error,
-        data,
-        errorType: error instanceof Error ? error.name : 'Unknown',
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
-      });
+      // Store auth token
+      localStorage.setItem('token', response.token);
+
+      if (response.role === 'merchant') {
+        toast({
+          title: "Success",
+          description: "Successfully logged in",
+        });
+        navigate('/merchant/dashboard');
+      } else {
+        toast({
+          title: "Access Denied",
+          description: "This login is for merchant accounts only.",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error("[MerchantLogin] Login failed:", error);
+
+      let errorMessage = "Login failed. Please try again.";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
       toast({
-        title: "Login failed",
-        description: error instanceof Error ? error.message : "An error occurred",
+        title: "Login Error",
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -84,9 +88,9 @@ export default function MerchantLogin() {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Username</FormLabel>
+                  <FormLabel>Username/Email</FormLabel>
                   <FormControl>
-                    <Input {...field} type="text" />
+                    <Input {...field} type="text" autoComplete="username" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -99,7 +103,7 @@ export default function MerchantLogin() {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input {...field} type="password" />
+                    <Input {...field} type="password" autoComplete="current-password" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

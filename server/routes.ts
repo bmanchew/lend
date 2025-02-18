@@ -15,6 +15,7 @@ import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
+import type { LoginData } from '@/types';
 
 // Type declarations
 export type UserRole = 'admin' | 'merchant' | 'customer';
@@ -968,6 +969,70 @@ export function registerRoutes(app: Express): Server {
       } as typeof users.$inferInsert).returning();
       res.json(user);
     } catch(err) {
+      next(err);
+    }
+  });
+
+  apiRouter.post("/auth/login", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+    try {
+      const { username, password, loginType } = req.body as LoginData;
+
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      // Get user from database
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, username))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // For merchant login, verify merchant status
+      if (loginType === 'merchant') {
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .where(eq(merchants.userId, user.id))
+          .limit(1);
+
+        if (!merchant || user.role !== 'merchant') {
+          return res.status(401).json({ error: "Invalid merchant account" });
+        }
+      }
+
+      // Verify password
+      const isValidPassword = await authService.verifyPassword(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Generate JWT token with proper typing
+      const tokenPayload: JWTPayload = {
+        id: user.id,
+        role: user.role as UserRole,
+        name: user.name || undefined,
+        email: user.email,
+        phoneNumber: user.phoneNumber || undefined
+      };
+
+      const token = await authService.generateJWT(tokenPayload);
+
+      // Return the login response with proper typing
+      res.json({ 
+        token,
+        id: user.id,
+        role: user.role as UserRole,
+        name: user.name || '',
+        email: user.email
+      });
+
+    } catch (err) {
+      logger.error("[Auth] Login error:", err);
       next(err);
     }
   });

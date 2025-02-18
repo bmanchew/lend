@@ -111,6 +111,10 @@ class AuthService {
       return false;
     }
   }
+
+  async verifyPassword(supplied: string, stored: string): Promise<boolean> {
+    return this.comparePasswords(supplied, stored);
+  }
 }
 
 // Create authService instance
