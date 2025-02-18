@@ -201,7 +201,38 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
-// Protected routes - require JWT verification
+// Public routes - no auth required
+router.post("/sendOTP", async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    logger.info('[SMS] Attempting to send OTP:', { phoneNumber });
+    const otp = smsService.generateOTP();
+    const sent = await smsService.sendOTP(phoneNumber, otp);
+
+    if (sent) {
+      // Store OTP in user record
+      await db.update(users)
+        .set({
+          lastOtpCode: otp,
+          otpExpiry: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+        })
+        .where(eq(users.phoneNumber, phoneNumber));
+
+      res.json({ message: "OTP sent successfully" });
+    } else {
+      res.status(500).json({ error: "Failed to send OTP" });
+    }
+  } catch (error) {
+    logger.error('[SMS] OTP send error:', error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Protected routes - require JWT verification  
 router.use(verifyJWT);
 
 router.get("/auth/me", async (req: RequestWithUser, res: Response) => {
