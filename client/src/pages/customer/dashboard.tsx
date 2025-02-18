@@ -13,7 +13,6 @@ import { DebitCardForm } from '@/components/payment/debit-card-form';
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
-  const [showDownPayment, setShowDownPayment] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
@@ -96,44 +95,27 @@ export default function CustomerDashboard() {
                       className="w-full mt-6" 
                       onClick={() => {
                         if (contracts?.[0]?.id) {
-                          setShowDownPayment(true);
+                          setShowBankLink(true);
                         }
                       }}
                     >
                       Accept Offer
                     </Button>
-                    <Dialog 
-                      open={showDownPayment} 
-                      onOpenChange={setShowDownPayment}
-                    >
-                      <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle>Complete Down Payment</DialogTitle>
-                        </DialogHeader>
-                        {showDownPayment && (
-                          <DebitCardForm 
-                            amount={Number(contracts?.[0]?.amount ?? 0) * 0.05} 
-                            onSuccess={() => {
-                              setShowDownPayment(false);
-                              setShowBankLink(true);
-                            }} 
-                          />
-                        )}
-                      </DialogContent>
-                    </Dialog>
+                    <BankLinkDialog
+                      contractId={contracts?.[0]?.id ?? 0}
+                      amount={Number(contracts?.[0]?.amount ?? 0) * 0.05}
+                      isOpen={showBankLink}
+                      onOpenChange={setShowBankLink}
+                      onSuccess={() => {
+                        toast({
+                          title: "Success",
+                          description: "Bank account linked and payment processed successfully"
+                        });
+                        window.location.reload();
+                      }}
+                    />
                   </CardContent>
                 </Card>
-                <BankLinkDialog
-                  contractId={contracts?.[0]?.id ?? 0}
-                  isOpen={showBankLink}
-                  onOpenChange={setShowBankLink}
-                  onSuccess={() => {
-                    toast({
-                      title: "Success",
-                      description: "Bank account linked successfully"
-                    });
-                  }}
-                />
               </div>
             </CardContent>
           </Card>

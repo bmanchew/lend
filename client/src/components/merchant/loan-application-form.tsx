@@ -5,10 +5,13 @@ import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { BankLinkDialog } from "../plaid/bank-link-dialog";
 
 export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: number, onSuccess?: () => void }) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showBankLink, setShowBankLink] = useState(false);
+  const [contractId, setContractId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -83,30 +86,10 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
         throw new Error(error.message || 'Failed to create contract');
       }
 
-      toast({
-        title: "Success",
-        description: "Application submitted successfully",
-        variant: "default"
-      });
+      const contract = await response.json();
+      setContractId(contract.id);
+      setShowBankLink(true);
 
-      // Clear form after successful submission
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        dateOfBirth: '',
-        streetAddress: '',
-        aptNumber: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        program: '',
-        fundingAmount: '',
-        salesRepEmail: ''
-      });
-
-      onSuccess?.();
     } catch (error) {
       console.error('Error creating contract:', error);
       toast({
@@ -114,10 +97,47 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
         description: error instanceof Error ? error.message : "Failed to submit application",
         variant: "destructive"
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleBankLinkSuccess = () => {
+    // Clear form after successful payment
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+      streetAddress: '',
+      aptNumber: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      program: '',
+      fundingAmount: '',
+      salesRepEmail: ''
+    });
+
+    setShowBankLink(false);
+    toast({
+      title: "Success",
+      description: "Application and payment completed successfully",
+    });
+    onSuccess?.();
+  };
+
+  if (showBankLink && contractId) {
+    return (
+      <BankLinkDialog
+        contractId={contractId}
+        amount={parseFloat(formData.fundingAmount) * 0.05} // 5% down payment
+        onSuccess={handleBankLinkSuccess}
+        isOpen={showBankLink}
+        onOpenChange={setShowBankLink}
+      />
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

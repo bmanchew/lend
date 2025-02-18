@@ -16,6 +16,7 @@ import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { logger } from "./lib/logger";
 import { slackService } from "./services/slack"; // Add import for slack service
+import { PlaidService } from './services/plaid';
 
 
 // Global type declarations
@@ -989,7 +990,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(merchants.id, parseInt(req.params.id)))
         .limit(1);
 
-if (!merchant) {
+      if (!merchant) {
         logger.error('[LoanApplication] Merchant not found', {
           merchantId: req.params.id,
           requestId
@@ -1194,6 +1195,124 @@ if (!merchant) {
 
   apiRouter.use(cacheMiddleware(300)); // 5 mins cache
 
+  apiRouter.post("/plaid/process-payment", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { public_token, account_id, amount, contractId } = req.body;
+
+      // Exchange public token for access token
+      const exchangeResponse = await PlaidService.exchangePublicToken(public_token);
+      const accessToken = exchangeResponse.access_token;
+
+      // Initiate payment using Plaid
+      const paymentResponse = await PlaidService.initiatePayment(
+        accessToken,
+        amount,
+        account_id
+      );
+
+      // Update contract with payment details
+      const [updatedContract] = await db
+        .update(contracts)
+        .set({
+          status: 'payment_processing',
+          downPayment: amount.toString(),
+          lastPaymentId: paymentResponse.transferId,
+          lastPaymentStatus: paymentResponse.status
+        })
+        .where(eq(contracts.id, contractId))
+        .returning();
+
+      console.log('[Plaid Payment] Payment initiated:', {
+        transferId: paymentResponse.transferId,
+        status: paymentResponse.status,
+        contractId,
+        amount
+      });
+
+      res.json({
+        status: 'processing',
+        transferId: paymentResponse.transferId
+      });
+    } catch (err) {
+      console.error('Error processing Plaid payment:', err);
+      next(err);
+    }
+  });
+
+  apiRouter.get("/plaid/payment-status/:transferId", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { transferId } = req.params;
+      const status = await PlaidService.getTransferStatus(transferId);
+
+      res.json({ status });
+    } catch (err) {
+      console.error('Error checking payment status:', err);
+      next(err);
+    }
+  });
+
+  // Handle Plaid webhooks for payment status updates
+  apiRouter.post("/plaid/webhooks", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { webhook_type, webhook_code, transfer_id, transfer_status } = req.body;
+
+      // Log webhook event
+      console.log('[Plaid Webhook] Received webhook:', {
+        type: webhook_type,
+        code: webhook_code,
+        transferId: transfer_id,
+        status: transfer_status,
+        timestamp: new Date().toISOString()
+      });
+
+      // Handle transfer status updates
+      if (webhook_type === 'TRANSFER' && transfer_id) {
+        const [contract] = await db
+          .select()
+          .from(contracts)
+          .where(eq(contracts.lastPaymentId, transfer_id))
+          .limit(1);
+
+        if (contract) {
+          let contractStatus = contract.status;
+
+          switch (transfer_status) {
+            case 'posted':
+              contractStatus = 'active';
+              break;
+            case 'failed':
+            case 'returned':
+              contractStatus = 'payment_failed';
+              break;
+            default:
+              // Keep existing status for other transfer states
+              break;
+          }
+
+          // Update contract status
+          await db
+            .update(contracts)
+            .set({
+              status: contractStatus,
+              lastPaymentStatus: transfer_status
+            })
+            .where(eq(contracts.id, contract.id));
+
+          // Emit socket event for real-time updates
+          global.io?.to(`contract_${contract.id}`).emit('payment_update', {
+            contractId: contract.id,
+            status: transfer_status
+          });
+        }
+      }
+
+      // Always acknowledge webhook
+      res.json({ received: true });
+    } catch (err) {
+      console.error('Error processing Plaid webhook:', err);
+      next(err);
+    }
+  });
 
   app.use('/api', apiRouter);
 

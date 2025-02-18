@@ -4,47 +4,68 @@ import { usePlaidLink } from 'react-plaid-link';
 import { Button } from '../ui/button';
 import axios from 'axios';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
 
 interface BankLinkDialogProps {
   contractId: number;
+  amount: number;
   onSuccess: () => void;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function BankLinkDialog({ contractId, onSuccess, isOpen, onOpenChange }: BankLinkDialogProps) {
+export function BankLinkDialog({ 
+  contractId, 
+  amount, 
+  onSuccess, 
+  isOpen, 
+  onOpenChange 
+}: BankLinkDialogProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const { open, ready } = usePlaidLink({
-    token: linkToken ?? '',
-    onSuccess: async (public_token) => {
-      try {
-        setIsLoading(true);
-        await axios.post('/api/plaid/link-account', {
-          public_token,
-          contractId,
-        });
+  const handlePlaidSuccess = async (publicToken: string, metadata: any) => {
+    try {
+      setIsProcessing(true);
+
+      // Exchange public token for access token and initiate payment
+      const response = await axios.post('/api/plaid/process-payment', {
+        public_token: publicToken,
+        account_id: metadata.account_id,
+        amount,
+        contractId,
+      });
+
+      if (response.data.status === 'processing') {
         toast({ 
-          title: "Success", 
-          description: "Bank account linked successfully",
+          title: "Payment Initiated", 
+          description: `Your payment of ${formatCurrency(amount)} is being processed`,
           variant: "default" 
         });
         onSuccess();
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to link bank account';
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+      } else {
+        throw new Error('Payment initiation failed');
       }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process payment';
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken ?? '',
+    onSuccess: (public_token, metadata) => {
+      handlePlaidSuccess(public_token, metadata);
     },
     onExit: () => {
-      // Reset loading state if user exits Plaid Link
       setIsLoading(false);
     }
   });
@@ -56,7 +77,7 @@ export function BankLinkDialog({ contractId, onSuccess, isOpen, onOpenChange }: 
         const { data } = await axios.post('/api/plaid/create-link-token');
         setLinkToken(data.link_token);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize bank linking';
+        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize bank connection';
         toast({
           title: "Error",
           description: errorMessage,
@@ -73,18 +94,21 @@ export function BankLinkDialog({ contractId, onSuccess, isOpen, onOpenChange }: 
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Link Your Bank Account</DialogTitle>
+          <DialogTitle>Make Payment via Bank Account</DialogTitle>
           <DialogDescription>
-            Connect your bank account to set up automatic payments and process the down payment.
+            Connect your bank account to make a payment of {formatCurrency(amount)}.
+            The amount will be directly debited from your selected account.
           </DialogDescription>
         </DialogHeader>
         <Button 
           onClick={() => open()} 
-          disabled={!ready || isLoading}
+          disabled={!ready || isLoading || isProcessing}
           className="w-full"
-          aria-busy={isLoading}
+          aria-busy={isLoading || isProcessing}
         >
-          {isLoading ? "Connecting..." : "Connect with Plaid"}
+          {isProcessing ? "Processing Payment..." : 
+           isLoading ? "Connecting..." : 
+           `Pay ${formatCurrency(amount)} with Plaid`}
         </Button>
       </DialogContent>
     </Dialog>
