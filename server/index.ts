@@ -80,7 +80,19 @@ const startServer = async () => {
     // Register API routes first
     const httpServer = registerRoutes(app);
 
-    // Configure port with proper retries and logging
+    // Check Plaid ledger only if access token is configured
+    if (process.env.PLAID_SWEEP_ACCESS_TOKEN) {
+      try {
+        await PlaidService.getLedgerBalance();
+        logger.info('Plaid ledger balance check successful');
+      } catch (err) {
+        logger.warn('Plaid ledger balance check failed, continuing startup:', err);
+      }
+    } else {
+      logger.info('Skipping Plaid ledger check - no access token configured');
+    }
+
+    // Configure port with proper retries and logging 
     const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     let retries = 5;
 
