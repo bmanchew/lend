@@ -9,8 +9,8 @@ import { logger } from "./lib/logger";
 import { LedgerManager } from "./services/ledger-manager";
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Too many requests from this IP, please try again later'
 });
 
@@ -80,13 +80,6 @@ const startServer = async () => {
     // Register API routes first
     const httpServer = registerRoutes(app);
 
-    // Log Plaid configuration status
-    if (process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-      logger.info('Plaid sweep access token configured');
-    } else {
-      logger.info('No Plaid sweep access token configured - some features may be limited');
-    }
-
     // Configure port with proper retries and logging 
     const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     let retries = 5;
@@ -100,29 +93,32 @@ const startServer = async () => {
     };
 
     const ledgerManager = LedgerManager.getInstance(ledgerConfig);
-    // Don't await ledger initialization, let it run in background
     ledgerManager.initializeSweeps().catch(error => {
       logger.error('Failed to initialize ledger sweeps:', error);
     });
 
+    // Add health check endpoint before starting server
+    app.get('/health', (_req, res) => {
+      res.json({ 
+        status: 'ok', 
+        uptime: process.uptime(),
+        port: PORT,
+        timestamp: new Date().toISOString()
+      });
+    });
+
     const startListening = () => {
       return new Promise<void>((resolve, reject) => {
-        // Add health check endpoint before starting server
-        app.get('/health', (_req, res) => {
-          res.json({ 
-            status: 'ok', 
-            uptime: process.uptime(),
-            port: PORT,
-            timestamp: new Date().toISOString()
-          });
-        });
-
         const server = httpServer.listen(PORT, "0.0.0.0", () => {
-          logger.info(`Server running at http://0.0.0.0:${PORT}`);
-          logger.info('Environment:', process.env.NODE_ENV);
-          logger.info('WebSocket status: enabled');
+          // Signal that the server is ready by writing to the console first
+          console.log('Server listening on port', PORT);
 
-          // Initialize Socket.IO
+          logger.info(`Server is running on port ${PORT}`);
+          logger.info(`Server URL: http://0.0.0.0:${PORT}`);
+          logger.info('Environment:', process.env.NODE_ENV);
+          logger.info('Server ready for connections');
+
+          // Initialize Socket.IO after port binding is confirmed
           const io = new Server(server, {
             cors: { origin: "*" },
             path: '/socket.io/'
@@ -144,8 +140,6 @@ const startServer = async () => {
             });
           });
 
-          // Signal that the server is ready
-          logger.info('Server ready for connections');
           resolve();
         })
         .on('error', (err: any) => {

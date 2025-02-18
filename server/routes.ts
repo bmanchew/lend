@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances, type UserRole } from "@db/schema";
+import { contracts, merchants, users, verificationSessions, webhookEvents, programs, rewardsBalances } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
@@ -19,7 +19,9 @@ import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 
-// Type declarations first
+// Type declarations
+export type UserRole = 'admin' | 'merchant' | 'customer';
+
 interface JWTPayload {
   id: number;
   role: UserRole;
@@ -38,6 +40,21 @@ type RequestTrackingMiddleware = (
   res: Response,
   next: NextFunction
 ) => void;
+
+// Request tracking middleware definition
+const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
+  const requestId = Date.now().toString(36);
+  req.headers['x-request-id'] = requestId;
+
+  logger.info(`[API] ${req.method} ${req.path}`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: { ...req.headers, authorization: undefined }
+  });
+
+  next();
+};
 
 // Create apiRouter at the top level
 const apiRouter = express.Router();
@@ -72,22 +89,6 @@ const verifyJWT = (req: RequestWithUser, res: Response, next: NextFunction) => {
     return res.status(401).json({ error: 'Invalid token' });
   }
 };
-
-// Request tracking middleware
-const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
-
-  logger.info(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
-  });
-
-  next();
-};
-
 
 // Cache middleware
 const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
@@ -164,7 +165,6 @@ const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError,
 
   next();
 };
-
 
 export function registerRoutes(app: Express): Server {
   // Initialize ledger manager with config

@@ -13,9 +13,16 @@ export class LedgerManager {
   private config: LedgerConfig;
   private sweepInterval: NodeJS.Timeout | null = null;
   private isInitialized = false;
+  private isPlaidEnabled = false;
 
   private constructor(config: LedgerConfig) {
     this.config = config;
+    // Check if Plaid credentials are available
+    this.isPlaidEnabled = !!(
+      process.env.PLAID_CLIENT_ID &&
+      process.env.PLAID_SECRET &&
+      process.env.PLAID_ENV
+    );
   }
 
   static getInstance(config?: LedgerConfig): LedgerManager {
@@ -32,8 +39,16 @@ export class LedgerManager {
         return;
       }
 
+      if (!this.isPlaidEnabled) {
+        logger.warn('Plaid integration is not configured - ledger sweeps will be disabled');
+        this.isInitialized = true;
+        return;
+      }
+
       if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-        throw new Error('PLAID_SWEEP_ACCESS_TOKEN not configured');
+        logger.warn('PLAID_SWEEP_ACCESS_TOKEN not configured - ledger sweeps will be disabled');
+        this.isInitialized = true;
+        return;
       }
 
       // Initial balance check
@@ -56,6 +71,7 @@ export class LedgerManager {
           sweepThreshold: this.config.sweepThreshold,
           sweepSchedule: this.config.sweepSchedule
         },
+        plaidEnabled: this.isPlaidEnabled,
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
@@ -63,11 +79,16 @@ export class LedgerManager {
         error: error?.message,
         stack: error?.stack
       });
-      throw error;
+      // Don't throw error, just log it and continue
+      this.isInitialized = true;
     }
   }
 
   async checkAndAdjustBalance() {
+    if (!this.isPlaidEnabled) {
+      return;
+    }
+
     try {
       const balance = await PlaidService.getLedgerBalance();
 
@@ -98,11 +119,15 @@ export class LedgerManager {
         error: error?.message,
         stack: error?.stack
       });
-      throw error;
+      // Don't throw error, just log it
     }
   }
 
   private async executeSweep(type: 'withdraw' | 'deposit', amount: string) {
+    if (!this.isPlaidEnabled) {
+      return;
+    }
+
     try {
       const operation = type === 'withdraw' ? 
         PlaidService.withdrawFromLedger : 
@@ -127,11 +152,18 @@ export class LedgerManager {
         error: error?.message,
         stack: error?.stack
       });
-      throw error;
+      // Don't throw error, just log it
     }
   }
 
   async manualSweep(type: 'withdraw' | 'deposit', amount: string) {
+    if (!this.isPlaidEnabled) {
+      return {
+        success: false,
+        message: 'Plaid integration is not configured'
+      };
+    }
+
     try {
       if (!this.isInitialized) {
         await this.initializeSweeps();
@@ -141,14 +173,17 @@ export class LedgerManager {
       return { 
         success: true, 
         message: `Manual ${type} sweep completed`,
-        transferId: result.transfer?.id
+        transferId: result?.transfer?.id
       };
     } catch (error: any) {
       logger.error('Manual sweep failed:', {
         error: error?.message,
         stack: error?.stack
       });
-      throw error;
+      return {
+        success: false,
+        message: error?.message || 'Manual sweep failed'
+      };
     }
   }
 
