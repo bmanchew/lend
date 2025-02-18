@@ -30,12 +30,9 @@ interface JWTPayload {
   phoneNumber?: string;
 }
 
-type RequestWithUser = Request & {
+interface RequestWithUser extends Request {
   user?: JWTPayload;
-};
-
-// Create apiRouter at the top level
-const apiRouter = express.Router();
+}
 
 // Custom error class for API errors
 class APIError extends Error {
@@ -50,26 +47,8 @@ class APIError extends Error {
   }
 }
 
-// JWT verification middleware with proper type
-const verifyJWT: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
-    req.user = decoded;
-    next();
-  } catch (err) {
-    logger.error('JWT verification failed:', err);
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
-
-// Request tracking middleware with proper type
-const requestTrackingMiddleware: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
+// Request tracking middleware
+const requestTrackingMiddleware: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
 
@@ -83,7 +62,7 @@ const requestTrackingMiddleware: RequestHandler = (req: RequestWithUser, res: Re
   next();
 };
 
-// Cache middleware with proper type
+// Cache middleware
 const cacheMiddleware = (duration: number): RequestHandler => {
   const apiCache = new NodeCache({ stdTTL: duration });
 
@@ -108,8 +87,31 @@ const cacheMiddleware = (duration: number): RequestHandler => {
   };
 };
 
-// Error handling middleware with proper type
-const errorHandlingMiddleware: RequestHandler = (err: Error | APIError, req: RequestWithUser, res: Response, next: NextFunction) => {
+// JWT verification middleware
+const verifyJWT: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
+    (req as RequestWithUser).user = decoded;
+    next();
+  } catch (err) {
+    logger.error('JWT verification failed:', err);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Error handling middleware
+const errorHandlingMiddleware: RequestHandler = (
+  err: Error | APIError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const errorId = Date.now().toString(36);
   const isAPIError = err instanceof APIError;
 
@@ -126,19 +128,6 @@ const errorHandlingMiddleware: RequestHandler = (err: Error | APIError, req: Req
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   };
 
-  // Update webhook event with error
-  if (req.headers['x-webhook-id']) {
-    db.update(webhookEvents)
-      .set({
-        status: 'error',
-        error: err.message,
-        processedAt: new Date()
-      })
-      .where(eq(webhookEvents.sessionId, req.headers['x-webhook-id'] as string))
-      .execute()
-      .catch(console.error);
-  }
-
   logger.error('API Error:', errorDetails);
 
   if (!res.headersSent) {
@@ -152,29 +141,30 @@ const errorHandlingMiddleware: RequestHandler = (err: Error | APIError, req: Req
   next();
 };
 
+// Initialize ledger manager
+const ledgerManager = new LedgerManager({
+  minBalance: 1000,
+  maxBalance: 100000,
+  sweepThreshold: 500,
+  sweepSchedule: '0 */15 * * * *' // Every 15 minutes
+});
+
+// Initialize ledger sweeps
+ledgerManager.initializeSweeps().catch(error => {
+  logger.error('Failed to initialize ledger sweeps:', error);
+});
+
 export function registerRoutes(app: Express): Server {
-  // Initialize ledger manager with config
-  const ledgerConfig = {
-    minBalance: 1000,
-    maxBalance: 100000,
-    sweepThreshold: 500,
-    sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-  };
+  // Create API router
+  const apiRouter = express.Router();
 
-  const ledgerManager = LedgerManager.getInstance(ledgerConfig);
-
-  // Initialize ledger sweeps
-  ledgerManager.initializeSweeps().catch(error => {
-    logger.error('Failed to initialize ledger sweeps:', error);
-  });
-
-  // Register middleware with proper types
+  // Register middleware
   apiRouter.use(requestTrackingMiddleware);
   apiRouter.use(verifyJWT);
   apiRouter.use(errorHandlingMiddleware);
+  apiRouter.use(cacheMiddleware(300)); // 5 mins cache
 
-
-  // Protected routes with proper types
+  // Define routes
   apiRouter.get("/auth/me", verifyJWT, (req: RequestWithUser, res: Response) => {
     res.json(req.user);
   });
@@ -976,13 +966,13 @@ export function registerRoutes(app: Express): Server {
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
           const earlyPayoff = Math.floor(Number(amount) * (1 + (monthsEarly * 0.1)));
           totalPoints = earlyPayoff;
-          details = { monthsEarly, basePoints: Mathfloor(Number(amount) / 20) };
+          details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
           break;
 
         case 'additional_payment':
           const additionalPoints = Math.floor(Number(amount) / 25);
           totalPoints = additionalPoints;
-          details = { basePoints: additionalPoints };
+          details = { basePoints: additionalPoints};
           break;
 
         default:
@@ -1087,44 +1077,10 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Request tracking middleware (Needed for complete code)
-  const requestTrackingMiddleware: RequestHandler = (req, res, next) => {
-    const requestId = Date.now().toString(36);
-    req.headers['x-request-id'] = requestId;
-
-    logger.info(`[API] ${req.method} ${req.path}`, {
-      requestId,
-      query: req.query,
-      body: req.body,
-      headers: { ...req.headers, authorization: undefined }
-    });
-
-    next();
-  };
+  //const requestTrackingMiddleware: RequestHandler = (req, res, next) => { ... }; //Already defined above
 
   // Cache middleware (Needed for complete code)
-  const cacheMiddleware = (duration: number): RequestHandler => {
-    const apiCache = new NodeCache({ stdTTL: duration });
-
-    return (req, res, next) => {
-      if (req.method !== 'GET') return next();
-
-      const key = `__express__${req.originalUrl}`;
-      const cachedResponse = apiCache.get(key);
-
-      if (cachedResponse) {
-        res.send(cachedResponse);
-        return;
-      }
-
-      const originalSend = res.send;
-      res.send = function(body: any): any {
-        apiCache.set(key, body, duration);
-        return originalSend.call(this, body);
-      };
-
-      next();
-    };
-  };
+  //const cacheMiddleware = (duration: number): RequestHandler => { ... }; //Already defined above
 
   // Type declarations (Needed for complete code)
   type RouteHandler = (req: RequestWithUser, res: Response, next: NextFunction) => Promise<void>;
@@ -1395,23 +1351,38 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  apiRouter.use(cacheMiddleware(300)); // 5 mins cache
+  // Apply cache middleware
+  //apiRouter.use(cacheMiddleware(300)); // 5 mins cache - already applied above
+
+  // Mount API router
+  //app.use('/api', apiRouter); //This line is removed since we are not creating the server here.
+
+  //const httpServer = createServer(app); //This line is removed since we are not creating the server here.
+  // Register error handling middleware (moved to after route registration)
+  //app.use(errorHandlingMiddleware as RequestHandler); //This line is removed since we are not creating the server here.
+  //return httpServer; //This line is removed since we are not creating the server here.
+  //apiRouter.use(errorHandlingMiddleware); //This line is added to handle errors properly - already applied above
+
+  // Apply cache middleware - already applied above
+
+  // Mount API router - already applied above
+
+  // Create HTTP server
+  //const httpServer = createServer(app); // already done above
+
+  // Mount API router
   app.use('/api', apiRouter);
 
+  // Create HTTP server
   const httpServer = createServer(app);
-  // Register error handling middleware (moved to after route registration)
-  app.use(errorHandlingMiddleware as RequestHandler);
+
   return httpServer;
 }
 
+// Helper function for rewards calculation
 function calculatePotentialRewards(amount: number, monthsEarly: number, additionalPayment: number = 0): { earlyPayoff: number; additional: number } {
-  // Replace with your actual reward calculation logic
-  let earlyPayoff = 0;
-  if (monthsEarly > 0) {
-    earlyPayoff = monthsEarly * 10; // Example: 10 points per month paid early
-  }
-  const additional = Math.floor(additionalPayment / 20); // Example: 1 point for every $20 additional payment
-
+  const earlyPayoff = monthsEarly > 0 ? Math.floor(amount * (1 + (monthsEarly * 0.1))) : 0;
+  const additional = additionalPayment > 0 ? Math.floor(additionalPayment / 25) : 0;
   return { earlyPayoff, additional };
 }
 // Fix contract status update endpoint
