@@ -194,8 +194,18 @@ export async function setupAuth(app: Express): Promise<void> {
             passwordHash: userRecord?.password ? userRecord.password.substring(0, 10) + "..." : null
           });
 
-          if (!userRecord || userRecord.role !== loginType) {
-            console.log("[Auth] Invalid credentials - user not found or wrong role");
+          if (!userRecord) {
+            console.log("[Auth] User not found");
+            return done(null, false, { message: "Invalid credentials" });
+          }
+
+          if (userRecord.role !== loginType) {
+            console.log("[Auth] Invalid role:", { expected: loginType, found: userRecord.role });
+            return done(null, false, { message: "Invalid account type" });
+          }
+
+          if (!userRecord.password) {
+            console.log("[Auth] No password set for user");
             return done(null, false, { message: "Invalid credentials" });
           }
 

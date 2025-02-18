@@ -313,6 +313,47 @@ router.post("/sendOTP", async (req: Request, res: Response) => {
   }
 });
 
+// Public routes
+router.post("/sendOTP", async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    const formattedPhone = phoneNumber.startsWith('+1') ? phoneNumber : `+1${phoneNumber.replace(/\D/g, '')}`;
+    let [user] = await db.select().from(users).where(eq(users.phoneNumber, formattedPhone)).limit(1);
+
+    if (!user) {
+      [user] = await db.insert(users)
+        .values({
+          phoneNumber: formattedPhone,
+          role: 'customer',
+          username: formattedPhone,
+          password: '',
+          email: '',
+          name: ''
+        } as typeof users.$inferInsert)
+        .returning();
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await smsService.sendSMS(formattedPhone, `Your OTP is: ${otp}`);
+
+    await db.update(users)
+      .set({
+        lastOtpCode: otp,
+        otpExpiry: new Date(Date.now() + 10 * 60 * 1000)
+      })
+      .where(eq(users.phoneNumber, formattedPhone));
+
+    res.json({ message: "OTP sent successfully" });
+  } catch (error) {
+    logger.error('[SMS] Failed to send OTP:', error);
+    res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
 // Protected routes below
 router.use(verifyJWT);
 
