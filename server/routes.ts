@@ -5,7 +5,7 @@ import { contracts, merchants, users, verificationSessions, webhookEvents, progr
 import { eq, and, desc } from "drizzle-orm";
 import { setupAuth } from "./auth.js";
 import { authService } from "./auth";
-import express from 'express';
+import express, { RequestHandler } from 'express';
 import NodeCache from 'node-cache';
 import { Server as SocketIOServer } from 'socket.io';
 import { DiditSessionConfig } from './services/didit';
@@ -34,28 +34,6 @@ type RequestWithUser = Request & {
   user?: JWTPayload;
 };
 
-// Middleware type declarations
-type RequestTrackingMiddleware = (
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction
-) => void;
-
-// Request tracking middleware definition
-const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
-
-  logger.info(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
-  });
-
-  next();
-};
-
 // Create apiRouter at the top level
 const apiRouter = express.Router();
 
@@ -72,8 +50,8 @@ class APIError extends Error {
   }
 }
 
-// JWT verification middleware
-const verifyJWT = (req: RequestWithUser, res: Response, next: NextFunction) => {
+// JWT verification middleware with proper type
+const verifyJWT: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
@@ -90,8 +68,23 @@ const verifyJWT = (req: RequestWithUser, res: Response, next: NextFunction) => {
   }
 };
 
-// Cache middleware
-const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
+// Request tracking middleware with proper type
+const requestTrackingMiddleware: RequestHandler = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const requestId = Date.now().toString(36);
+  req.headers['x-request-id'] = requestId;
+
+  logger.info(`[API] ${req.method} ${req.path}`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: { ...req.headers, authorization: undefined }
+  });
+
+  next();
+};
+
+// Cache middleware with proper type
+const cacheMiddleware = (duration: number): RequestHandler => {
   const apiCache = new NodeCache({ stdTTL: duration });
 
   return (req, res, next) => {
@@ -115,15 +108,8 @@ const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
   };
 };
 
-// Error handling middleware
-type ErrorHandlingMiddleware = (
-  err: Error | APIError,
-  req: RequestWithUser,
-  res: Response,
-  next: NextFunction
-) => void;
-
-const errorHandlingMiddleware: ErrorHandlingMiddleware = (err: Error | APIError, req: RequestWithUser, res: Response, next: NextFunction) => {
+// Error handling middleware with proper type
+const errorHandlingMiddleware: RequestHandler = (err: Error | APIError, req: RequestWithUser, res: Response, next: NextFunction) => {
   const errorId = Date.now().toString(36);
   const isAPIError = err instanceof APIError;
 
@@ -182,17 +168,16 @@ export function registerRoutes(app: Express): Server {
     logger.error('Failed to initialize ledger sweeps:', error);
   });
 
-  // Register middleware
-  apiRouter.use(requestTrackingMiddleware);
-  apiRouter.use(verifyJWT);
-  apiRouter.use(errorHandlingMiddleware);
+  // Register middleware with proper types
+  apiRouter.use(requestTrackingMiddleware as RequestHandler);
+  apiRouter.use(verifyJWT as RequestHandler);
+  apiRouter.use(errorHandlingMiddleware as RequestHandler);
 
 
-  // Protected routes
-  apiRouter.get("/auth/me", async (req: RequestWithUser, res: Response) => {
+  // Protected routes with proper types
+  apiRouter.get("/auth/me", verifyJWT, (req: RequestWithUser, res: Response) => {
     res.json(req.user);
   });
-
 
   apiRouter.get("/customers/:id/contracts", async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
@@ -956,8 +941,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  //Rewards endpoints (removed duplicate)
-
   apiRouter.get("/rewards/transactions", verifyJWT, async (req: RequestWithUser, res: Response, next: NextFunction) => {
     try {
       if (!req.user?.id) {
@@ -1104,7 +1087,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Request tracking middleware (Needed for complete code)
-  const requestTrackingMiddleware: RequestTrackingMiddleware = (req, res, next) => {
+  const requestTrackingMiddleware: RequestHandler = (req, res, next) => {
     const requestId = Date.now().toString(36);
     req.headers['x-request-id'] = requestId;
 
@@ -1119,7 +1102,7 @@ export function registerRoutes(app: Express): Server {
   };
 
   // Cache middleware (Needed for complete code)
-  const cacheMiddleware = (duration: number): RequestTrackingMiddleware => {
+  const cacheMiddleware = (duration: number): RequestHandler => {
     const apiCache = new NodeCache({ stdTTL: duration });
 
     return (req, res, next) => {
@@ -1417,7 +1400,7 @@ export function registerRoutes(app: Express): Server {
 
   const httpServer = createServer(app);
   // Register error handling middleware (moved to after route registration)
-  app.use(errorHandlingMiddleware);
+  app.use(errorHandlingMiddleware as RequestHandler);
   return httpServer;
 }
 
