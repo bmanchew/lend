@@ -27,6 +27,18 @@ const getClient = () => {
 };
 
 export const smsService = {
+  async sendPaymentReminder(phone: string, amount: number, dueDate: string): Promise<boolean> {
+    try {
+      const message = `Payment Reminder: Your payment of $${amount} is due on ${dueDate}. Please ensure timely payment to avoid late fees.`;
+      return await this.sendSMS(phone, message);
+    } catch (error) {
+      logger.error('[SMS] Failed to send payment reminder', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        phone
+      });
+      return false;
+    }
+  },
   formatPhoneNumber(phone: string): string {
     if (!phone) {
       throw new Error('Phone number is required');
