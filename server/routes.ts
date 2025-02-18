@@ -961,6 +961,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Fix the early_payment case syntax error and update the rewards calculation
   apiRouter.get("/rewards/potential", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const amount = parseFloat(req.query.amount as string);
@@ -971,25 +972,32 @@ export function registerRoutes(app: Express): Server {
       }
 
       let totalPoints = 0;
-      let details = {};
+      let details: Record<string, any> = {};
 
       switch (type) {
         case 'down_payment':
           totalPoints = Math.floor(amount / 10); // Basic reward for down payment
-          details= { basePoints: totalPoints };
+          details = { basePoints: totalPoints };
           break;
 
         case 'early_payment':
           const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
-          const { earlyPayoff } = calculatePotentialRewards(amount, monthsEarly);
+          const earlyPayoff = Math.floor(amount * (1 + (monthsEarly * 0.1)));
           totalPoints = earlyPayoff;
-          details = { monthsEarly, basePoints: Math.floor(amount / 20) };
+          details = { 
+            monthsEarly, 
+            basePoints: Math.floor(amount / 20),
+            multiplier: 1 + (monthsEarly * 0.1)
+          };
           break;
 
         case 'additional_payment':
-          const { additional } = calculatePotentialRewards(0, 0, amount);
-          totalPoints = additional;
-          details = { basePoints: Math.floor(amount / 25) };
+          const additionalPoints = Math.floor(amount / 25) * 2;
+          totalPoints = additionalPoints;
+          details = { 
+            basePoints: Math.floor(amount / 25),
+            multiplier: 2
+          };
           break;
 
         default:
@@ -1006,6 +1014,120 @@ export function registerRoutes(app: Express): Server {
       next(err);
     }
   });
+
+  apiRouter.post("/rewards/record-transaction", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const { type, amount, contractId } = req.body;
+      if (!type || !amount || !contractId) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Calculate rewards based on type
+      let rewardPoints = 0;
+      switch (type) {
+        case 'down_payment':
+          rewardPoints = Math.floor(amount / 10); // 1 point per $10
+          break;
+        case 'early_payment':
+          const monthsEarly = req.body.monthsEarly || 0;
+          rewardPoints = Math.floor(amount * (1 + (monthsEarly * 0.1))); // 10% bonus per month early
+          break;
+        case 'additional_payment':
+          rewardPoints = Math.floor(amount / 25) * 2; // 2 points per $25 additional payment
+          break;
+        default:
+          return res.status(400).json({ error: 'Invalid reward type' });
+      }
+
+      // Record the transaction and update balance
+      const result = await shifiRewardsService.recordTransaction(
+        req.user.id,
+        rewardPoints,
+        {
+          type,
+          amount,
+          contractId,
+          ...(type === 'early_payment' ? { monthsEarly: req.body.monthsEarly } : {})
+        }
+      );
+
+      res.json({
+        success: true,
+        pointsEarned: rewardPoints,
+        newBalance: result.newBalance,
+        transaction: result.transaction
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  apiRouter.get("/rewards/history", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = (page - 1) * limit;
+
+      // Get transaction history with pagination
+      const transactions = await shifiRewardsService.getTransactionHistory(req.user.id, { limit, offset });
+      const totalCount = await shifiRewardsService.getTransactionCount(req.user.id);
+
+      res.json({
+        transactions,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          totalItems: totalCount,
+          itemsPerPage: limit
+        }
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  apiRouter.get("/rewards/multipliers", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Get current multipliers based on user's activity and status
+      const multipliers = await shifiRewardsService.getCurrentMultipliers(req.user.id);
+
+      res.json({
+        multipliers,
+        nextTierProgress: multipliers.nextTierProgress
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Add to existing rewards/calculate endpoint
+  function calculateRewardPoints(type: string, amount: number, monthsEarly?: number): number {
+    let points = 0;
+    switch (type) {
+      case 'down_payment':
+        points = Math.floor(amount / 10);
+        break;
+      case 'early_payment':
+        points = Math.floor(amount * (1 + ((monthsEarly || 0) * 0.1)));
+        break;
+      case 'additional_payment':
+        points = Math.floor(amount / 25) * 2;
+        break;
+    }
+    return points;
+  }
 
   apiRouter.use(cacheMiddleware(300)); // 5 mins cache
 

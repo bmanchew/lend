@@ -1,6 +1,6 @@
 import { db } from '@db';
 import { rewardsBalances, rewardsTransactions, rewardsRedemptions } from '@db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
 import { logger } from '../lib/logger';
 
 export interface RewardTransaction {
@@ -10,6 +10,21 @@ export interface RewardTransaction {
   type: string;
   description: string;
   metadata?: Record<string, any>;
+}
+
+interface RewardMultiplier {
+  type: string;
+  value: number;
+  reason: string;
+}
+
+interface MultiplierResponse {
+  multipliers: RewardMultiplier[];
+  nextTierProgress: {
+    current: number;
+    required: number;
+    percentage: number;
+  };
 }
 
 export const shifiRewardsService = {
@@ -84,7 +99,7 @@ export const shifiRewardsService = {
   ): Promise<boolean> {
     try {
       const balance = await this.getBalance(userId);
-      
+
       if (balance < coinsRequired) {
         return false;
       }
@@ -129,15 +144,122 @@ export const shifiRewardsService = {
     }
   },
 
-  async getTransactionHistory(userId: number): Promise<any[]> {
+  async getTransactionHistory(userId: number, pagination?: { limit: number; offset: number }): Promise<any[]> {
     try {
-      return await db
+      const query = db
         .select()
         .from(rewardsTransactions)
         .where(eq(rewardsTransactions.userId, userId))
-        .orderBy(rewardsTransactions.createdAt);
+        .orderBy(desc(rewardsTransactions.createdAt));
+
+      if (pagination) {
+        query.limit(pagination.limit).offset(pagination.offset);
+      }
+
+      return await query;
     } catch (error) {
       logger.error('Error getting transaction history:', error);
+      throw error;
+    }
+  },
+
+  async getTransactionCount(userId: number): Promise<number> {
+    try {
+      const [result] = await db
+        .select({ count: count() })
+        .from(rewardsTransactions)
+        .where(eq(rewardsTransactions.userId, userId));
+
+      return result?.count || 0;
+    } catch (error) {
+      logger.error('Error getting transaction count:', error);
+      throw error;
+    }
+  },
+
+  async getCurrentMultipliers(userId: number): Promise<MultiplierResponse> {
+    try {
+      const [balanceData] = await db
+        .select()
+        .from(rewardsBalances)
+        .where(eq(rewardsBalances.userId, userId))
+        .limit(1);
+
+      const lifetimePoints = balanceData?.lifetimeEarned || 0;
+      const multipliers: RewardMultiplier[] = [];
+
+      // Base multiplier
+      multipliers.push({
+        type: 'base',
+        value: 1,
+        reason: 'Base multiplier'
+      });
+
+      // Lifetime points multiplier
+      if (lifetimePoints >= 10000) {
+        multipliers.push({
+          type: 'lifetime',
+          value: 1.5,
+          reason: 'Gold tier member'
+        });
+      } else if (lifetimePoints >= 5000) {
+        multipliers.push({
+          type: 'lifetime',
+          value: 1.25,
+          reason: 'Silver tier member'
+        });
+      }
+
+      // Calculate next tier progress
+      let nextTierThreshold = lifetimePoints >= 5000 ? 10000 : 5000;
+      const nextTierProgress = {
+        current: lifetimePoints,
+        required: nextTierThreshold,
+        percentage: Math.min(100, (lifetimePoints / nextTierThreshold) * 100)
+      };
+
+      return {
+        multipliers,
+        nextTierProgress
+      };
+    } catch (error) {
+      logger.error('Error getting multipliers:', error);
+      throw error;
+    }
+  },
+
+  async recordTransaction(
+    userId: number,
+    points: number,
+    metadata: Record<string, any>
+  ): Promise<{ newBalance: number; transaction: any }> {
+    try {
+      const multiplierResponse = await this.getCurrentMultipliers(userId);
+      const totalMultiplier = multiplierResponse.multipliers.reduce((acc, m) => acc * m.value, 1);
+      const adjustedPoints = Math.floor(points * totalMultiplier);
+
+      const transaction = {
+        userId,
+        amount: adjustedPoints,
+        type: metadata.type,
+        description: `Earned ${adjustedPoints} points (${points} base × ${totalMultiplier} multiplier)`,
+        metadata: {
+          ...metadata,
+          basePoints: points,
+          multiplier: totalMultiplier,
+          multiplierDetails: multiplierResponse.multipliers
+        }
+      };
+
+      await this.addTransaction(transaction);
+      const newBalance = await this.getBalance(userId);
+
+      return {
+        newBalance,
+        transaction
+      };
+    } catch (error) {
+      logger.error('Error recording transaction:', error);
       throw error;
     }
   }
