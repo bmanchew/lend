@@ -110,7 +110,7 @@ const validateId = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Public Routes (No Auth Required)
-router.post("/auth/login", asyncHandler(async (req: Request, res: Response) => {
+router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
   logger.info('[Auth] Login attempt with:', { username: req.body.username, loginType: req.body.loginType });
   const { username, password, loginType } = req.body;
 
@@ -216,7 +216,7 @@ router.use(cacheMiddleware(300));
 // Protected Routes (JWT Required)
 router.use(verifyJWT); // Apply JWT verification to all routes below this line
 
-router.get("/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
+router.get("/api/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }

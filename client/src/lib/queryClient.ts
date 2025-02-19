@@ -2,15 +2,26 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let errorMessage;
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.message || errorData.error || res.statusText;
+    } catch {
+      errorMessage = res.statusText;
+    }
+    throw new Error(`${res.status}: ${errorMessage}`);
   }
 }
 
 // Helper to get auth headers
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { 
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  } : {
+    'Content-Type': 'application/json'
+  };
 }
 
 export async function apiRequest(
@@ -29,14 +40,18 @@ export async function apiRequest(
     timestamp: new Date().toISOString()
   });
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     ...init,
     headers,
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  if (response.status === 401) {
+    console.log('[API] Unauthorized request, clearing token');
+    localStorage.removeItem('token');
+  }
+
+  return response;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -45,20 +60,27 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const headers: HeadersInit = getAuthHeaders();
+    try {
+      const response = await fetch(queryKey[0] as string, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
 
-    const res = await fetch(queryKey[0] as string, {
-      headers,
-      credentials: "include",
-    });
+      if (response.status === 401) {
+        console.log('[API] Unauthorized query, clearing token');
+        localStorage.removeItem('token');
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
+        throw new Error("Unauthorized");
+      }
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      localStorage.removeItem('token');
-      return null;
+      await throwIfResNotOk(response);
+      return await response.json();
+    } catch (error) {
+      console.error('[API] Query error:', error);
+      throw error;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

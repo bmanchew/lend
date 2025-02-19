@@ -40,16 +40,40 @@ export default function AdminLogin() {
       console.log('[AdminLogin] Attempting login:', {
         username: data.username,
         loginType: "admin",
+        formData: loginData,
         timestamp: new Date().toISOString()
       });
 
       const response = await loginMutation.mutateAsync(loginData);
 
+      if (!response || !response.token) {
+        console.error('[AdminLogin] Invalid response:', {
+          response,
+          timestamp: new Date().toISOString()
+        });
+        throw new Error('Invalid response from server');
+      }
+
+      console.log('[AdminLogin] Login response:', {
+        success: true,
+        hasToken: !!response.token,
+        role: response.role,
+        timestamp: new Date().toISOString()
+      });
+
       if (response.role === 'admin') {
         console.log('[AdminLogin] Login successful, redirecting to dashboard');
+        toast({
+          title: "Success",
+          description: "Successfully logged in as admin"
+        });
         navigate('/admin/dashboard', { replace: true });
       } else {
-        console.error('[AdminLogin] Invalid role:', response.role);
+        console.error('[AdminLogin] Invalid role:', {
+          expectedRole: 'admin',
+          receivedRole: response.role,
+          timestamp: new Date().toISOString()
+        });
         toast({
           title: "Access Denied",
           description: "This login is for admin accounts only.",
@@ -57,10 +81,25 @@ export default function AdminLogin() {
         });
       }
     } catch (error: any) {
-      console.error("[AdminLogin] Login failed:", error);
+      console.error("[AdminLogin] Login failed:", {
+        error: error.message,
+        errorObject: error,
+        errorResponse: error.response?.data,
+        timestamp: new Date().toISOString()
+      });
+
+      let errorMessage = "Failed to login. Please check your credentials.";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
       toast({
         title: "Login Error",
-        description: error.message || "Failed to login. Please check your credentials.",
+        description: errorMessage,
         variant: "destructive"
       });
     }

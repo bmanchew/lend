@@ -40,40 +40,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     isLoading,
   } = useQuery<LoginResponse | null>({
-    queryKey: ["/api/auth/me"],
-    queryFn: getQueryFn({ on401: "returnNull" })
+    queryKey: ["/api/user"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const loginMutation = useMutation<LoginResponse, Error, LoginData>({
     mutationFn: async (data: LoginData) => {
-      const response = await apiRequest("/api/auth/login", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
+      console.log('[Auth] Attempting login:', {
+        username: data.username,
+        loginType: data.loginType,
+        timestamp: new Date().toISOString()
       });
-      return response.json();
+
+      try {
+        const response = await apiRequest("/api/auth/login", {
+          method: 'POST',
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('[Auth] Login response error:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorData,
+            timestamp: new Date().toISOString()
+          });
+          throw new Error(errorData.message || errorData.error || 'Login failed');
+        }
+
+        const responseData = await response.json();
+        console.log('[Auth] Login response success:', {
+          status: response.status,
+          hasToken: !!responseData.token,
+          role: responseData.role,
+          timestamp: new Date().toISOString()
+        });
+
+        return responseData;
+      } catch (error: any) {
+        console.error('[Auth] Login request failed:', {
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+        throw error;
+      }
     },
     onSuccess: (data) => {
       if (data.token) {
         localStorage.setItem('token', data.token);
       }
-      queryClient.setQueryData(["/api/auth/me"], data);
-
-      // Redirect based on role
-      if (data.role === 'admin') {
-        setLocation('/admin/dashboard');
-      } else if (data.role === 'merchant') {
-        setLocation('/merchant/dashboard');
-      } else {
-        setLocation(`/${data.role}`);
-      }
-
-      toast({
-        title: "Success",
-        description: "Successfully logged in"
-      });
+      queryClient.setQueryData(["/api/user"], data);
     },
     onError: (error: Error) => {
       console.error('[Auth] Login failed:', error);
@@ -88,12 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/logout");
-      if (!res.ok) {
+      const response = await apiRequest("/api/logout", {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
         throw new Error('Logout failed');
       }
       localStorage.removeItem('token');
-      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.setQueryData(["/api/user"], null);
     },
     onSuccess: () => {
       setLocation("/auth/merchant");
@@ -113,15 +133,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/auth/register", data);
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Registration failed');
+      const response = await apiRequest("/api/register", {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Registration failed');
       }
-      return res.json();
+      return response.json();
     },
     onSuccess: (data: LoginResponse) => {
-      queryClient.setQueryData(["/api/auth/me"], data);
+      queryClient.setQueryData(["/api/user"], data);
       setLocation(`/${data.role}`);
     },
     onError: (error: Error) => {
