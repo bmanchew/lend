@@ -37,59 +37,60 @@ class APIError extends Error {
   }
 }
 
-// Request tracking middleware
-const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = Date.now().toString(36);
-  req.headers['x-request-id'] = requestId;
+// Define public routes that don't require JWT verification
+const PUBLIC_ROUTES = [
+  '/api/login',
+  '/auth/register',
+  '/api/health',
+  '/',
+  '/apply',
+  '/auth/customer',
+  '/auth/merchant',
+  '/auth/admin'
+];
 
-  logger.info(`[API] ${req.method} ${req.path}`, {
-    requestId,
-    query: req.query,
-    body: req.body,
-    headers: { ...req.headers, authorization: undefined }
+// JWT verification middleware - skip for public routes
+router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const path = req.path;
+
+  // Skip JWT verification for public routes
+  if (PUBLIC_ROUTES.some(route => path.startsWith(route))) {
+    return next();
+  }
+
+  logger.info('[Auth] Verifying JWT for path:', {
+    path,
+    timestamp: new Date().toISOString()
   });
 
-  next();
-};
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
-// Cache middleware
-const cacheMiddleware = (duration: number) => {
-  const apiCache = new NodeCache({ stdTTL: duration });
-
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (req.method !== 'GET') return next();
-
-    const key = `__express__${req.originalUrl}`;
-    const cachedResponse = apiCache.get(key);
-
-    if (cachedResponse) {
-      res.send(cachedResponse);
-      return;
-    }
-
-    const originalSend = res.send;
-    res.send = function(body: any): any {
-      apiCache.set(key, body, duration);
-      return originalSend.call(this, body);
-    };
-
-    next();
-  };
-};
-
-// Add input validation middleware
-const validateId = (req: Request, res: Response, next: NextFunction) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) {
-    return res.status(400).json({ error: 'Invalid ID parameter' });
+  if (!token) {
+    logger.error('[Auth] No token provided for path:', {
+      path,
+      timestamp: new Date().toISOString()
+    });
+    return res.status(401).json({ error: 'Authentication required' });
   }
-  req.params.id = id.toString();
-  next();
-};
 
-// Register core middleware
-router.use(requestTrackingMiddleware);
-router.use(cacheMiddleware(300));
+  const user = authService.verifyJWT(token);
+  if (!user) {
+    logger.error('[Auth] JWT verification failed:', {
+      path,
+      timestamp: new Date().toISOString()
+    });
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  req.user = user;
+  logger.info('[Auth] JWT verified successfully:', {
+    userId: user.id,
+    path,
+    timestamp: new Date().toISOString()
+  });
+  next();
+});
 
 // Public auth routes (NO JWT REQUIRED) - Moved to top of router
 router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
@@ -226,47 +227,59 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
 }));
 
 
-// JWT verification middleware - apply to all routes below this line
-router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const path = req.path;
-  // Skip JWT verification for public routes
-  if (path === '/api/login' || path === '/auth/register') {
-    return next();
-  }
+// Request tracking middleware
+const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const requestId = Date.now().toString(36);
+  req.headers['x-request-id'] = requestId;
 
-  logger.info('[Auth] Verifying JWT for path:', {
-    path,
-    timestamp: new Date().toISOString()
+  logger.info(`[API] ${req.method} ${req.path}`, {
+    requestId,
+    query: req.query,
+    body: req.body,
+    headers: { ...req.headers, authorization: undefined }
   });
 
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-
-  if (!token) {
-    logger.error('[Auth] No token provided for path:', {
-      path,
-      timestamp: new Date().toISOString()
-    });
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const user = authService.verifyJWT(token);
-  if (!user) {
-    logger.error('[Auth] JWT verification failed:', {
-      path,
-      timestamp: new Date().toISOString()
-    });
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-
-  req.user = user;
-  logger.info('[Auth] JWT verified successfully:', {
-    userId: user.id,
-    path,
-    timestamp: new Date().toISOString()
-  });
   next();
-});
+};
+
+// Cache middleware
+const cacheMiddleware = (duration: number) => {
+  const apiCache = new NodeCache({ stdTTL: duration });
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET') return next();
+
+    const key = `__express__${req.originalUrl}`;
+    const cachedResponse = apiCache.get(key);
+
+    if (cachedResponse) {
+      res.send(cachedResponse);
+      return;
+    }
+
+    const originalSend = res.send;
+    res.send = function(body: any): any {
+      apiCache.set(key, body, duration);
+      return originalSend.call(this, body);
+    };
+
+    next();
+  };
+};
+
+// Add input validation middleware
+const validateId = (req: Request, res: Response, next: NextFunction) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID parameter' });
+  }
+  req.params.id = id.toString();
+  next();
+};
+
+// Register core middleware
+router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
 
 // Protected Routes (JWT Required)
 router.get("/api/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {

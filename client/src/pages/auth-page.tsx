@@ -3,7 +3,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { insertUserSchema } from "@db/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMobile } from "@/hooks/use-mobile";
@@ -16,8 +15,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Redirect } from "wouter";
-import type { InsertUser } from "@db/schema";
+import { Link } from "wouter";
+import { z } from "zod";
 import {
   Select,
   SelectContent,
@@ -26,27 +25,46 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// Define auth types
+interface LoginData {
+  username: string;
+  password: string;
+  loginType: "customer" | "merchant" | "admin";
+}
+
+const registerSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email address"),
+  name: z.string().min(1, "Name is required"),
+  role: z.enum(["customer", "merchant", "admin"]),
+  phoneNumber: z.string().optional()
+});
+
+type RegisterData = z.infer<typeof registerSchema>;
+
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const isMobile = useMobile();
   const [isOtpSent, setIsOtpSent] = useState(false);
 
-  const loginForm = useForm({
+  const loginForm = useForm<LoginData>({
     defaultValues: {
-      phoneNumber: "",
-      code: "",
+      username: "",
+      password: "",
       loginType: "customer"
     },
   });
 
-  const registerForm = useForm<InsertUser>({
-    resolver: zodResolver(insertUserSchema),
+  const registerForm = useForm<RegisterData>({
+    resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
       password: "",
       email: "",
       name: "",
-      role: "customer" as const,
+      role: "customer",
+      phoneNumber: ""
     },
   });
 
@@ -54,7 +72,6 @@ export default function AuthPage() {
     // Enhanced logging for device detection
     console.log('[Auth] User authenticated, detailed device info:', {
       role: user.role,
-      phoneNumber: user.phoneNumber,
       deviceInfo: {
         isMobile,
         platform: navigator.platform,
@@ -70,11 +87,9 @@ export default function AuthPage() {
     // For customers, redirect to apply page with verification flag
     if (user.role === 'customer') {
       const platform = isMobile ? 'mobile' : 'web';
-      const applyUrl = `/apply?verification=true&from=login&platform=${platform}`;
-      console.log('[Auth] Redirecting to apply:', applyUrl);
-      return <Redirect to={applyUrl} />;
+      return <Link href={`/apply?verification=true&from=login&platform=${platform}`} />;
     }
-    return <Redirect to={`/${user.role}`} />;
+    return <Link href={`/${user.role}`} />;
   }
 
   return (
@@ -154,54 +169,30 @@ export default function AuthPage() {
 
                   <FormField
                     control={loginForm.control}
-                    name="phoneNumber"
+                    name="username"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Phone Number</FormLabel>
+                        <FormLabel>Username</FormLabel>
                         <FormControl>
-                          <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                          <Input {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  {isOtpSent ? (
-                    <FormField
-                      control={loginForm.control}
-                      name="code"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Verification Code</FormLabel>
-                          <FormControl>
-                            <InputOTP maxLength={6} onComplete={field.onChange}>
-                              <InputOTPGroup>
-                                <InputOTPSlot index={0} />
-                                <InputOTPSlot index={1} />
-                                <InputOTPSlot index={2} />
-                                <InputOTPSlot index={3} />
-                                <InputOTPSlot index={4} />
-                                <InputOTPSlot index={5} />
-                              </InputOTPGroup>
-                            </InputOTP>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ) : (
-                    <Button 
-                      type="button"
-                      onClick={() => {
-                        const phoneNumber = loginForm.getValues("phoneNumber");
-                        if (phoneNumber) {
-                          setIsOtpSent(true);
-                        }
-                      }}
-                      className="w-full"
-                    >
-                      Send Code
-                    </Button>
-                  )}
+                  <FormField
+                    control={loginForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <Button 
                     type="submit" 
                     className="w-full"

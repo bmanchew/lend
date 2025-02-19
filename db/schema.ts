@@ -51,23 +51,26 @@ export const programs = pgTable('programs', {
 });
 
 export const contracts = pgTable('contracts', {
-  id: integer('id').primaryKey(),
-  merchantId: integer('merchant_id').notNull(),
-  customerId: integer('customer_id').notNull(),
-  contractNumber: text('contract_number'),
+  id: serial('id').primaryKey(),
+  merchantId: integer('merchant_id').notNull().references(() => merchants.id),
+  customerId: integer('customer_id').notNull().references(() => users.id),
+  contractNumber: text('contract_number').notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   term: integer('term').notNull(),
   interestRate: decimal('interest_rate', { precision: 5, scale: 2 }).notNull(),
   downPayment: decimal('down_payment', { precision: 10, scale: 2 }),
   monthlyPayment: decimal('monthly_payment', { precision: 10, scale: 2 }),
   totalInterest: decimal('total_interest', { precision: 10, scale: 2 }),
-  status: text('status').notNull(),
+  status: varchar('status', { length: 50, enum: ['pending', 'active', 'completed', 'cancelled', 'defaulted'] })
+    .notNull()
+    .default('pending'),
   notes: text('notes'),
-  underwritingStatus: text('underwriting_status'),
+  underwritingStatus: varchar('underwriting_status', { length: 50, enum: ['pending', 'approved', 'rejected', 'review'] })
+    .default('pending'),
   borrowerEmail: text('borrower_email'),
   borrowerPhone: text('borrower_phone'),
   lastPaymentId: text('last_payment_id'),
-  lastPaymentStatus: text('last_payment_status'),
+  lastPaymentStatus: varchar('last_payment_status', { length: 50, enum: ['success', 'failed', 'pending'] }),
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').default(true)
 });
@@ -106,7 +109,6 @@ export const webhookEvents = pgTable('webhook_events', {
   createdAt: timestamp('created_at').defaultNow()
 });
 
-// New schema for ShiFi rewards
 export const rewardsBalances = pgTable('rewards_balances', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id).notNull(),
@@ -139,7 +141,6 @@ export const rewardsRedemptions = pgTable('rewards_redemptions', {
   updatedAt: timestamp('updated_at').defaultNow()
 });
 
-// Add relations
 export const rewardsBalancesRelations = relations(rewardsBalances, ({ one }) => ({
   user: one(users, {
     fields: [rewardsBalances.userId],
@@ -169,7 +170,6 @@ export const rewardsRedemptionsRelations = relations(rewardsRedemptions, ({ one 
   })
 }));
 
-// Export types
 export type SelectUser = typeof users.$inferSelect;
 export type SelectMerchant = typeof merchants.$inferSelect;
 export type SelectContract = typeof contracts.$inferSelect;

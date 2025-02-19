@@ -1,7 +1,7 @@
 import * as React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Switch, Route, useLocation } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth.tsx";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -17,44 +17,60 @@ import KycVerificationsPage from "@/pages/admin/kyc-verifications";
 import ApplyPage from "@/pages/apply";
 
 function AppRouter() {
-  return (
-    <Routes>
-      {/* Default redirect to merchant login */}
-      <Route path="/" element={<Navigate to="/auth/merchant" replace />} />
+  const [location, setLocation] = useLocation();
 
+  React.useEffect(() => {
+    // Redirect root to merchant login
+    if (location === "/") {
+      setLocation("/auth/merchant");
+    }
+  }, [location, setLocation]);
+
+  return (
+    <Switch>
       {/* Auth routes */}
-      <Route path="/auth/customer" element={<CustomerLogin />} />
-      <Route path="/auth/merchant" element={<MerchantLogin />} />
-      <Route path="/auth/admin" element={<AdminLogin />} />
+      <Route path="/auth/customer" component={CustomerLogin} />
+      <Route path="/auth/merchant" component={MerchantLogin} />
+      <Route path="/auth/admin" component={AdminLogin} />
 
       {/* Protected routes */}
       <Route 
-        path="/customer/*" 
-        element={<ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />}
+        path="/customer/*"
+        component={() => <ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />}
       />
       <Route 
-        path="/merchant/*" 
-        element={<ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />}
+        path="/merchant/*"
+        component={() => <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />}
       />
       <Route 
-        path="/admin/*" 
-        element={<ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />}
+        path="/admin/*"
+        component={() => <ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />}
       />
       <Route 
-        path="/admin/kyc-verifications" 
-        element={<ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />}
+        path="/admin/kyc-verifications"
+        component={() => <ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />}
       />
 
       {/* Apply route */}
-      <Route path="/apply/:token" element={<ApplyPage />} />
+      <Route path="/apply/:token" component={ApplyPage} />
 
       {/* Legacy route redirects */}
-      <Route path="/login/merchant" element={<Navigate to="/auth/merchant" replace />} />
-      <Route path="/login/admin" element={<Navigate to="/auth/admin" replace />} />
+      <Route path="/login/merchant">
+        {() => {
+          setLocation("/auth/merchant");
+          return null;
+        }}
+      </Route>
+      <Route path="/login/admin">
+        {() => {
+          setLocation("/auth/admin");
+          return null;
+        }}
+      </Route>
 
       {/* Catch-all route */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
@@ -62,10 +78,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter>
-          <AppRouter />
-          <Toaster />
-        </BrowserRouter>
+        <AppRouter />
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );
