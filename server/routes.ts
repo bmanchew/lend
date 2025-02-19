@@ -228,6 +228,72 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
 router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
+// Public auth routes
+router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[Auth] Login attempt:', { 
+    username: req.body.username, 
+    loginType: req.body.loginType,
+    timestamp: new Date().toISOString()
+  });
+  const { username, password, loginType } = req.body;
+
+  if (!username || !password) {
+    logger.error('[Auth] Missing credentials:', { username: !!username, password: !!password });
+    return res.status(400).json({ error: "Username and password are required" });
+  }
+
+  // Get user from database
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.username, username.trim()))
+    .limit(1);
+
+  if (!user) {
+    logger.info('[Auth] User not found:', username);
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  // Verify password
+  const isValid = await authService.comparePasswords(password, user.password);
+  if (!isValid) {
+    logger.info('[Auth] Invalid password for user:', username);
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  // Check role match if loginType is provided
+  if (loginType && user.role !== loginType) {
+    logger.info('[Auth] Invalid role for user:', { 
+      username, 
+      expected: loginType, 
+      actual: user.role 
+    });
+    return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+  }
+
+  // Create user object without password
+  const userWithoutPassword = {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    name: user.name
+  };
+
+  // Generate JWT token
+  const token = await authService.generateJWT(userWithoutPassword);
+  logger.info('[Auth] Login successful:', { 
+    userId: user.id, 
+    role: user.role,
+    timestamp: new Date().toISOString()
+  });
+
+  return res.json({
+    token,
+    ...userWithoutPassword
+  });
+}));
+
 // Protected Routes (JWT Required)
 router.use(verifyJWT); // Apply JWT verification to all routes below this line
 
