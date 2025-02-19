@@ -4,22 +4,19 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import type { SelectUser } from "@db/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useMobile } from "@/hooks/use-mobile";
-import type { LoginData } from "@/types";
+import type { LoginData, LoginResponse } from "@/types";
 
 type AuthContextType = {
-  user: SelectUser | null;
+  user: LoginResponse | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  loginMutation: UseMutationResult<LoginResponse, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<SelectUser, Error, any>;
-  sendOtpMutation: UseMutationResult<any, Error, {phoneNumber: string}>;
-  verifyOtpMutation: UseMutationResult<any, Error, {phoneNumber: string; code: string}>;
+  registerMutation: UseMutationResult<LoginResponse, Error, any>;
 };
 
 export const AuthContext = React.createContext<AuthContextType | null>(null);
@@ -33,64 +30,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     data: user,
     error,
     isLoading,
-  } = useQuery<SelectUser | null>({
-    queryKey: ["/api/auth/me"],
+  } = useQuery<LoginResponse | null>({
+    queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginData) => {
-      console.log("[Auth] Attempting login:", {
-        username: credentials.username,
-        loginType: credentials.loginType,
+  const loginMutation = useMutation<LoginResponse, Error, LoginData>({
+    mutationFn: async (data: LoginData) => {
+      console.log('[Auth] Attempting login:', {
+        username: data.username.trim(),
+        loginType: data.loginType,
         timestamp: new Date().toISOString()
       });
 
-      const res = await apiRequest("POST", "/api/auth/login", {
-        ...credentials,
-        deviceInfo: {
-          isMobile,
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
+      try {
+        const response = await apiRequest("/api/login", {
+          method: 'POST',
+          body: JSON.stringify({
+            ...data,
+            username: data.username.trim()
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[Auth] Login response error:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorData,
+            timestamp: new Date().toISOString()
+          });
+          throw new Error(errorData.error || errorData.message || 'Login failed');
         }
-      });
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Login failed');
+        const responseData = await response.json();
+        console.log('[Auth] Login successful:', {
+          userId: responseData.id,
+          role: responseData.role,
+          timestamp: new Date().toISOString()
+        });
+
+        return responseData;
+      } catch (error: any) {
+        console.error('[Auth] Login request failed:', {
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+        throw error;
       }
-
-      return await res.json();
     },
     onSuccess: (data) => {
-      console.log('[Auth] Login successful:', {
-        userId: data.id,
-        role: data.role,
-        timestamp: new Date().toISOString()
-      });
-
-      // Store auth token
       if (data.token) {
         localStorage.setItem('token', data.token);
       }
-
-      // Update user data in query client
-      queryClient.setQueryData(["/api/auth/me"], data);
-
+      queryClient.setQueryData(["/api/user"], data);
       toast({
         title: "Success",
-        description: "Successfully logged in"
+        description: `Successfully logged in as ${data.role}`
       });
-
-      // Redirect based on role
-      if (data.role === 'merchant') {
-        setLocation('/merchant/dashboard');
-      } else {
-        setLocation(`/${data.role}`);
-      }
     },
     onError: (error: Error) => {
       console.error('[Auth] Login failed:', error);
+      localStorage.removeItem('token');
       toast({
         title: "Login Error",
         description: error.message,
@@ -101,15 +102,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/logout");
-      if (!res.ok) {
-        throw new Error('Logout failed');
-      }
+      await apiRequest("/api/logout", {
+        method: 'POST'
+      });
       localStorage.removeItem('token');
-      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.setQueryData(["/api/user"], null);
     },
     onSuccess: () => {
-      setLocation("/auth");
+      setLocation("/auth/merchant");
       toast({
         title: "Logged out",
         description: "Successfully logged out"
@@ -124,15 +124,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  // Keep other mutations for backward compatibility
   const registerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/auth/register", data);
-      return await res.json();
+      const response = await apiRequest("/api/register", {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Registration failed');
+      }
+      return response.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation(`/${user.role}`);
+    onSuccess: (data: LoginResponse) => {
+      queryClient.setQueryData(["/api/user"], data);
+      setLocation(`/${data.role}`);
     },
     onError: (error: Error) => {
       toast({
@@ -140,43 +147,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: error.message,
         variant: "destructive",
       });
-    },
-  });
-
-  const sendOtpMutation = useMutation({
-    mutationFn: async ({ phoneNumber }: { phoneNumber: string }) => {
-      const res = await apiRequest("POST", "/api/auth/send-otp", { 
-        phoneNumber,
-        deviceInfo: {
-          isMobile,
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
-        }
-      });
-      if (!res.ok) throw new Error("Failed to send OTP");
-      return res.json();
-    },
-  });
-
-  const verifyOtpMutation = useMutation({
-    mutationFn: async ({ phoneNumber, code }: { phoneNumber: string; code: string }) => {
-      const res = await apiRequest("POST", "/api/auth/verify-otp", { 
-        phoneNumber, 
-        code,
-        deviceInfo: {
-          isMobile,
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
-        }
-      });
-      if (!res.ok) throw new Error("Invalid OTP");
-      const data = await res.json();
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-      }
-      queryClient.setQueryData(["/api/auth/me"], data.user);
-      setLocation(`/${data.user.role}`);
-      return data;
     },
   });
 
@@ -189,8 +159,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        sendOtpMutation,
-        verifyOtpMutation,
       }}
     >
       {children}

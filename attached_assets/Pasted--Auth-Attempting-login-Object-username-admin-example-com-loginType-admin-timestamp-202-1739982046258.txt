@@ -1,0 +1,33 @@
+[Auth] Attempting login: 
+Object {username: "admin@example.com", loginType: "admin", timestamp: "2025-02-19T16:19:59.556Z"}
+[API] Making request: 
+Object {method: "POST", url: "/api/auth/login", hasToken: false, timestamp: "2025-02-19T16:19:59.556Z"}
+[API] Unauthorized request, clearing token
+[Auth] Login response error: 
+Object {status: 401, statusText: "Unauthorized", errorData: {…}, timestamp: "2025-02-19T16:19:59.896Z"}
+
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
+[Auth] Login request failed: 
+Object {error: "Authentication required", timestamp: "2025-02-19T16:19:59.897Z"}
+error: "Authentication required"
+timestamp: "2025-02-19T16:19:59.897Z"
+[[Prototype]]: Object
+
+[Auth] Login failed: 
+Error {}
+
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.replit.dev:3002/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
+[AdminLogin] Login failed: 
+Object {error: "Authentication required", errorObject: Error, errorResponse: undefined, timestamp: "2025-02-19T16:19:59.897Z"}
+error: "Authentication required"
+errorObject: Error
+errorResponse: undefined
+timestamp: "2025-02-19T16:19:59.897Z"
+[[Prototype]]: Object
+

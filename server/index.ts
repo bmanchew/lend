@@ -39,14 +39,16 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
     requestId,
     query: req.query,
     body: req.body,
-    headers: safeHeaders
+    headers: safeHeaders,
+    timestamp: new Date().toISOString()
   });
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     logger.info(`[API] ${req.method} ${req.path} completed in ${duration}ms`, {
       status: res.statusCode,
-      requestId
+      requestId,
+      timestamp: new Date().toISOString()
     });
   });
 
@@ -77,51 +79,36 @@ const waitForPort = async (port: number, retries = 20, interval = 250): Promise<
   for (let i = 0; i < retries; i++) {
     const available = await isPortAvailable(port);
     if (available) {
+      logger.info(`Port ${port} is available`);
       return;
     }
+    logger.info(`Waiting for port ${port} (attempt ${i + 1}/${retries})`);
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new Error(`Port ${port} is not available after ${retries} retries`);
 };
 
 const startServer = async () => {
-  let httpServer: Server;
-  
-  // Graceful shutdown handler
-  const shutdown = async () => {
-    logger.info('Received shutdown signal');
-    try {
-      if (httpServer) {
-        await new Promise((resolve) => httpServer.close(resolve));
-        logger.info('HTTP server closed');
-      }
-      process.exit(0);
-    } catch (err) {
-      logger.error('Error during shutdown:', err);
-      process.exit(1);
-    }
-  };
-
-  // Handle shutdown signals
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
-
   try {
-    // Initialize auth
-    await setupAuth(app);
-
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Mount API routes first (before Vite middleware)
-    app.use('/api', apiRouter);
+    // Setup auth first (this adds the session middleware)
+    await setupAuth(app);
 
-    // Then setup Vite
+    // Mount API routes after auth setup
+    app.use(apiRouter);
+
+    // Setup Vite last
     await setupVite(app, httpServer);
 
     // Error handling middleware
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-      logger.error('Error:', err);
+      logger.error('Error:', {
+        error: err.message,
+        stack: err.stack,
+        timestamp: new Date().toISOString()
+      });
       res.status(err.status || 500).json({
         error: err.message || 'Internal server error',
         ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
@@ -137,13 +124,18 @@ const startServer = async () => {
     await waitForPort(port);
 
     // Start server
-    const server = httpServer.listen(port, "0.0.0.0", () => {
-      logger.info(`Server is running on port ${port}`);
-      logger.info(`Server URL: http://0.0.0.0:${port}`);
+    httpServer.listen(port, "0.0.0.0", () => {
+      logger.info(`Server started successfully`, {
+        url: `http://0.0.0.0:${port}`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Make port available to other processes
+      process.env.PORT = port.toString();
     });
 
     // Initialize Socket.IO
-    const io = new Server(server, {
+    const io = new Server(httpServer, {
       cors: { origin: "*" },
       path: '/socket.io/',
       transports: ['websocket', 'polling']
@@ -152,30 +144,62 @@ const startServer = async () => {
     (global as any).io = io;
 
     io.on('connection', (socket) => {
-      logger.info('Client connected:', socket.id);
+      logger.info('Client connected:', {
+        socketId: socket.id,
+        timestamp: new Date().toISOString()
+      });
 
       socket.on('join_merchant_room', (merchantId: number) => {
         socket.join(`merchant_${merchantId}`);
-        logger.info(`Socket ${socket.id} joined merchant room ${merchantId}`);
+        logger.info('Socket joined merchant room:', {
+          socketId: socket.id,
+          merchantId,
+          timestamp: new Date().toISOString()
+        });
       });
 
       socket.on('disconnect', () => {
-        logger.info('Client disconnected:', socket.id);
+        logger.info('Client disconnected:', {
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
+        });
       });
     });
-
-    logger.info('Server initialization complete');
 
   } catch (error: any) {
     logger.error('Failed to start server:', {
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
+      timestamp: new Date().toISOString()
     });
     process.exit(1);
   }
 };
 
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString()
+  });
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection:', {
+    reason,
+    timestamp: new Date().toISOString()
+  });
+  process.exit(1);
+});
+
 startServer().catch((error) => {
-  logger.error('Critical server error:', error);
+  logger.error('Critical server error:', {
+    error: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString()
+  });
   process.exit(1);
 });

@@ -1,39 +1,109 @@
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth.tsx";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { LoginData } from "@/types";
+
+const adminLoginSchema = z.object({
+  username: z.string()
+    .min(1, "Username is required")
+    .transform(val => val.trim()),
+  password: z.string().min(1, "Password is required"),
+});
+
+type AdminLoginForm = z.infer<typeof adminLoginSchema>;
 
 export default function AdminLogin() {
+  const navigate = useNavigate();
   const { loginMutation } = useAuth();
+  const { toast } = useToast();
 
-  const form = useForm({
+  const form = useForm<AdminLoginForm>({
+    resolver: zodResolver(adminLoginSchema),
     defaultValues: {
       username: "",
       password: "",
-      loginType: "admin" as const
     },
   });
 
-  async function onSubmit(data: any) {
+  async function onSubmit(data: AdminLoginForm) {
     try {
-      const response = await loginMutation.mutateAsync({
-        ...data,
-        loginType: 'admin',
-        deviceInfo: {
-          isMobile: false,
-          platform: window.navigator.platform,
-          userAgent: window.navigator.userAgent
-        }
+      const loginData: LoginData = {
+        username: data.username.trim(),
+        password: data.password,
+        loginType: "admin"
+      };
+
+      console.log('[AdminLogin] Attempting login:', {
+        username: loginData.username,
+        loginType: loginData.loginType,
+        formData: loginData,
+        timestamp: new Date().toISOString()
       });
-      
-      if (response?.role === 'admin') {
-        window.location.href = '/admin';
-      } else {
-        console.error('Unexpected role after login:', response?.role);
+
+      const response = await loginMutation.mutateAsync(loginData);
+
+      if (!response || !response.token) {
+        console.error('[AdminLogin] Invalid response:', {
+          response,
+          timestamp: new Date().toISOString()
+        });
+        throw new Error('Invalid response from server');
       }
-    } catch (error) {
-      console.error('Login error:', error);
+
+      console.log('[AdminLogin] Login response:', {
+        success: true,
+        hasToken: !!response.token,
+        role: response.role,
+        timestamp: new Date().toISOString()
+      });
+
+      if (response.role === 'admin') {
+        console.log('[AdminLogin] Login successful, redirecting to dashboard');
+        toast({
+          title: "Success",
+          description: "Successfully logged in as admin"
+        });
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        console.error('[AdminLogin] Invalid role:', {
+          expectedRole: 'admin',
+          receivedRole: response.role,
+          timestamp: new Date().toISOString()
+        });
+        toast({
+          title: "Access Denied",
+          description: "This login is for admin accounts only.",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error("[AdminLogin] Login failed:", {
+        error: error.message,
+        errorObject: error,
+        errorResponse: error.response?.data,
+        timestamp: new Date().toISOString()
+      });
+
+      let errorMessage = "Failed to login. Please check your credentials.";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: "Login Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
     }
   }
 
@@ -54,7 +124,13 @@ export default function AdminLogin() {
                 <FormItem>
                   <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input {...field} type="text" required />
+                    <Input 
+                      {...field} 
+                      type="text" 
+                      placeholder="admin@example.com"
+                      autoComplete="username"
+                      onChange={(e) => field.onChange(e.target.value.trim())}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -67,13 +143,22 @@ export default function AdminLogin() {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input {...field} type="password" required />
+                    <Input 
+                      {...field} 
+                      type="password" 
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loginMutation.isPending}
+            >
               {loginMutation.isPending ? 'Logging in...' : 'Login'}
             </Button>
           </form>

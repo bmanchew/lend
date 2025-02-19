@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { LoginResponse, LoginData } from "@/types";
+import { useEffect } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -17,9 +18,18 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function MerchantLogin() {
-  const [_, setLocation] = useLocation();
+  const navigate = useNavigate();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
+
+  // Check for existing token and redirect if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
+      navigate('/merchant/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -44,22 +54,30 @@ export default function MerchantLogin() {
       };
 
       const response = await loginMutation.mutateAsync(loginData) as LoginResponse;
+      console.log("[MerchantLogin] Received response:", {
+        success: true,
+        hasToken: !!response.token,
+        role: response.role,
+        timestamp: new Date().toISOString()
+      });
 
       if (!response || !response.token) {
-        console.error("[MerchantLogin] Invalid response:", response);
         throw new Error('Invalid response from server');
       }
 
       // Store auth token
       localStorage.setItem('token', response.token);
 
+      // For merchant users, redirect to the dashboard
       if (response.role === 'merchant') {
+        console.log('[MerchantLogin] Login successful, redirecting to dashboard');
         toast({
           title: "Success",
-          description: "Successfully logged in",
+          description: "Successfully logged in"
         });
-        setLocation('/merchant/dashboard');
+        navigate('/merchant/dashboard', { replace: true });
       } else {
+        console.error('[MerchantLogin] Invalid role:', response.role);
         toast({
           title: "Access Denied",
           description: "This login is for merchant accounts only.",
@@ -69,7 +87,6 @@ export default function MerchantLogin() {
     } catch (error: any) {
       console.error("[MerchantLogin] Login failed:", {
         error: error,
-        data: { username: data.username, password: "[REDACTED]" },
         errorType: error.constructor.name,
         errorMessage: error.response?.data?.message || error.message,
         timestamp: new Date().toISOString()
