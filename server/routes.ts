@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Express, Request, Response, NextFunction } from "express";
 import { db } from "@db";
-import { users, contracts, merchants, programs } from "@db/schema";
+import { users, contracts, merchants, programs, webhookEvents, ContractStatus, WebhookEventStatus, PaymentStatus } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import express from 'express';
 import NodeCache from 'node-cache';
@@ -17,14 +17,12 @@ import { authService } from "./auth";
 import type { User } from "./auth";
 import { asyncHandler } from './lib/async-handler';
 
-// Type declarations
+// Updated type declarations for better type safety
 interface RequestWithUser extends Omit<Request, 'user'> {
   user?: User;
 }
 
-const router = Router();
-
-// Custom error class for API errors
+// Enhanced error class for consistent error handling
 class APIError extends Error {
   constructor(
     public status: number,
@@ -36,6 +34,43 @@ class APIError extends Error {
     this.name = 'APIError';
   }
 }
+
+// Middleware to ensure consistent error handling
+const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error('[Error Handler]', {
+    error: err,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+
+  if (err instanceof APIError) {
+    return res.status(err.status).json({
+      error: err.message,
+      code: err.code,
+      details: err.details
+    });
+  }
+
+  // Handle validation errors
+  if (err.name === 'ZodError') {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: err
+    });
+  }
+
+  return res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+};
+
+const router = Router();
+
+// Custom error class for API errors
+//This is already defined above.
 
 // Define public routes that don't require JWT verification
 const PUBLIC_ROUTES = [
@@ -94,8 +129,8 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
 
 // Public auth routes (NO JWT REQUIRED) - Moved to top of router
 router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Login attempt with:', { 
-    username: req.body.username?.trim(), 
+  logger.info('[Auth] Login attempt with:', {
+    username: req.body.username?.trim(),
     loginType: req.body.loginType,
     hasPassword: !!req.body.password,
     timestamp: new Date().toISOString()
@@ -104,8 +139,8 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
   const { username, password, loginType } = req.body;
 
   if (!username || !password) {
-    logger.error('[Auth] Missing credentials:', { 
-      username: !!username, 
+    logger.error('[Auth] Missing credentials:', {
+      username: !!username,
       password: !!password,
       timestamp: new Date().toISOString()
     });
@@ -121,7 +156,7 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
       .limit(1);
 
     if (!user || !user.password) {
-      logger.info('[Auth] User not found or invalid password:', { 
+      logger.info('[Auth] User not found or invalid password:', {
         username: username.trim(),
         timestamp: new Date().toISOString()
       });
@@ -131,7 +166,7 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
     // Verify password
     const isValid = await authService.comparePasswords(password, user.password);
     if (!isValid) {
-      logger.info('[Auth] Invalid password for user:', { 
+      logger.info('[Auth] Invalid password for user:', {
         username: username.trim(),
         timestamp: new Date().toISOString()
       });
@@ -140,9 +175,9 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
 
     // Check role match if loginType is provided
     if (loginType && user.role !== loginType) {
-      logger.info('[Auth] Invalid role for user:', { 
-        username, 
-        expected: loginType, 
+      logger.info('[Auth] Invalid role for user:', {
+        username,
+        expected: loginType,
         actual: user.role,
         timestamp: new Date().toISOString()
       });
@@ -160,8 +195,8 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = await authService.generateJWT(userResponse);
-    logger.info('[Auth] Login successful:', { 
-      userId: user.id, 
+    logger.info('[Auth] Login successful:', {
+      userId: user.id,
       role: user.role,
       timestamp: new Date().toISOString()
     });
@@ -258,7 +293,7 @@ const cacheMiddleware = (duration: number) => {
     }
 
     const originalSend = res.send;
-    res.send = function(body: any): any {
+    res.send = function (body: any): any {
       apiCache.set(key, body, duration);
       return originalSend.call(this, body);
     };
@@ -289,42 +324,39 @@ router.get("/api/auth/me", asyncHandler(async (req: RequestWithUser, res: Respon
   return res.json(req.user);
 }));
 
-router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
+// Updated contract status route with proper type handling
+router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
 
-    const [contract] = await db
-      .select()
-      .from(contracts)
-      .where(eq(contracts.id, parseInt(id)))
-      .limit(1);
-
-    if (!contract) {
-      return res.status(404).json({ error: 'Contract not found' });
-    }
-
-    const updates: Partial<typeof contracts.$inferInsert> = {
-      status,
-      lastPaymentId: req.body.lastPaymentId || null,
-      lastPaymentStatus: req.body.lastPaymentStatus || null
-    };
-
-    const [updatedContract] = await db
-      .update(contracts)
-      .set(updates)
-      .where(eq(contracts.id, parseInt(id)))
-      .returning();
-
-    // Update ledger if needed
-    if (status === 'funded') {
-      await ledgerManager.manualSweep('deposit', updatedContract.amount);
-    }
-
-    return res.json(updatedContract);
-  } catch (err) {
-    next(err);
+  // Validate status
+  if (!Object.values(ContractStatus).includes(status)) {
+    return res.status(400).json({ error: 'Invalid contract status' });
   }
+
+  const [contract] = await db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.id, parseInt(id)))
+    .limit(1);
+
+  if (!contract) {
+    return res.status(404).json({ error: 'Contract not found' });
+  }
+
+  const updates = {
+    status,
+    lastPaymentId: req.body.lastPaymentId || null,
+    lastPaymentStatus: req.body.lastPaymentStatus as PaymentStatus || null
+  };
+
+  const [updatedContract] = await db
+    .update(contracts)
+    .set(updates)
+    .where(eq(contracts.id, parseInt(id)))
+    .returning();
+
+  return res.json(updatedContract);
 }));
 
 router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -350,7 +382,7 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", {userId, timestamp: new Date().toISOString()});
+    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId, timestamp: new Date().toISOString() });
 
     const merchantResults = await db
       .select()
@@ -654,24 +686,43 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
   }
 }));
 
-router.post("/webhooks/process", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    const { eventType, sessionId, payload } = req.body;
+// Add webhook event handling with proper types
+router.post("/webhooks/process", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const { eventType, sessionId, payload } = req.body;
 
-    await db.insert(webhookEvents).values({
-      eventType,
-      sessionId,
-      status: 'pending',
-      payload: JSON.stringify(payload),
-      error: null,
-      retryCount: 0,
-      processedAt: null
-    } as typeof webhookEvents.$inferInsert);
+  await db.insert(webhookEvents).values({
+    eventType,
+    sessionId,
+    status: WebhookEventStatus.PENDING,
+    payload: JSON.stringify(payload),
+    error: null,
+    retryCount: 0,
+    processedAt: null
+  });
 
-    return res.json({ status: 'success' });
-  } catch (err) {
-    next(err);
+  return res.json({ status: 'success' });
+}));
+
+// Update webhook event status
+router.patch("/webhooks/:id/status", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const { id } = req.params;
+  const { status, error } = req.body;
+
+  if (!Object.values(WebhookEventStatus).includes(status)) {
+    return res.status(400).json({ error: 'Invalid webhook status' });
   }
+
+  const [updatedEvent] = await db
+    .update(webhookEvents)
+    .set({
+      status,
+      error: error || null,
+      processedAt: status === WebhookEventStatus.COMPLETED ? new Date() : null
+    })
+    .where(eq(webhookEvents.id, parseInt(id)))
+    .returning();
+
+  return res.json(updatedEvent);
 }));
 
 router.get("/rewards/balance", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -933,7 +984,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
     }
 
     return res.json({
-      totalPoints,
+totalPoints,
       details,
       type,
       amount: Number(amount)
@@ -1312,5 +1363,8 @@ export interface DiditWebhookPayload {
 }
 
 export type UserRole = 'admin' | 'merchant' | 'customer';
+
+// Add error handler as the last middleware
+router.use(errorHandler);
 
 export default router;

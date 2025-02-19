@@ -1,6 +1,8 @@
-import { useAuth } from "@/hooks/use-auth.tsx";
+import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { useLocation } from "wouter";
+import { useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 type ProtectedRouteProps = {
   component: () => React.JSX.Element;
@@ -8,7 +10,21 @@ type ProtectedRouteProps = {
 };
 
 export function ProtectedRoute({ component: Component, allowedRoles }: ProtectedRouteProps) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, error } = useAuth();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Show error toast if authentication fails
+    if (error) {
+      toast({
+        title: "Authentication Error",
+        description: "Please login again to continue.",
+        variant: "destructive"
+      });
+      setLocation("/auth/merchant");
+    }
+  }, [error, toast, setLocation]);
 
   if (isLoading) {
     return (
@@ -19,13 +35,32 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
   }
 
   if (!user) {
-    return <Navigate to="/auth/merchant" replace />;
+    setLocation("/auth/merchant");
+    return null;
   }
 
-  // Role-based routing
+  // Role-based routing with improved error handling
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to={`/${user.role}`} replace />;
+    toast({
+      title: "Access Denied",
+      description: `You don't have permission to access this area.`,
+      variant: "destructive"
+    });
+    setLocation(`/${user.role}`);
+    return null;
   }
 
-  return <Component />;
+  // Error boundary wrapper
+  try {
+    return <Component />;
+  } catch (err) {
+    console.error('Protected route render error:', err);
+    toast({
+      title: "Error",
+      description: "Something went wrong. Please try again.",
+      variant: "destructive"
+    });
+    setLocation(`/${user.role}`);
+    return null;
+  }
 }

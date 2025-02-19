@@ -13,6 +13,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, Phone, Mail } from "lucide-react";
 import { useState } from "react";
 
+interface MerchantWithContact extends SelectMerchant {
+  email?: string | null;
+  phone?: string | null;
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -35,7 +40,7 @@ export default function AdminDashboard() {
     throwOnError: false
   });
 
-  const { data: merchants = [], error: merchantsError, isLoading: merchantsLoading } = useQuery<SelectMerchant[]>({
+  const { data: merchants = [], error: merchantsError, isLoading: merchantsLoading } = useQuery<MerchantWithContact[]>({
     queryKey: ["/api/merchants"],
     retry: 1,
     throwOnError: false
@@ -59,7 +64,7 @@ export default function AdminDashboard() {
       header: "Amount",
       cell: ({ row }) => {
         const amount = row.getValue("amount");
-        return typeof amount === 'string' || typeof amount === 'number' 
+        return typeof amount === 'string' || typeof amount === 'number'
           ? `$${(parseFloat(amount.toString()) || 0).toFixed(2)}`
           : '$0.00';
       },
@@ -84,7 +89,7 @@ export default function AdminDashboard() {
   ];
 
   const filteredContracts = contracts.filter(contract => {
-    const matchesSearch = 
+    const matchesSearch =
       (contract?.contractNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (merchants.find(m => m.id === contract.merchantId)?.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === "all" || contract?.status === selectedStatus;

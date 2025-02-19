@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, decimal, boolean, serial, varchar, j
 import { relations } from 'drizzle-orm';
 import { z } from 'zod';
 
+// User schema and validation
 export const insertUserSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(6),
@@ -50,6 +51,34 @@ export const programs = pgTable('programs', {
   createdAt: timestamp('created_at').defaultNow()
 });
 
+// Contract status enums
+export const ContractStatus = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  DEFAULTED: 'defaulted'
+} as const;
+
+export type ContractStatus = typeof ContractStatus[keyof typeof ContractStatus];
+
+export const UnderwritingStatus = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  REVIEW: 'review'
+} as const;
+
+export type UnderwritingStatus = typeof UnderwritingStatus[keyof typeof UnderwritingStatus];
+
+export const PaymentStatus = {
+  PENDING: 'pending',
+  SUCCESS: 'success',
+  FAILED: 'failed'
+} as const;
+
+export type PaymentStatus = typeof PaymentStatus[keyof typeof PaymentStatus];
+
 export const contracts = pgTable('contracts', {
   id: serial('id').primaryKey(),
   merchantId: integer('merchant_id').notNull().references(() => merchants.id),
@@ -61,20 +90,46 @@ export const contracts = pgTable('contracts', {
   downPayment: decimal('down_payment', { precision: 10, scale: 2 }),
   monthlyPayment: decimal('monthly_payment', { precision: 10, scale: 2 }),
   totalInterest: decimal('total_interest', { precision: 10, scale: 2 }),
-  status: varchar('status', { length: 50, enum: ['pending', 'active', 'completed', 'cancelled', 'defaulted'] })
+  status: varchar('status', { length: 50, enum: Object.values(ContractStatus) })
     .notNull()
-    .default('pending'),
+    .default(ContractStatus.PENDING),
   notes: text('notes'),
-  underwritingStatus: varchar('underwriting_status', { length: 50, enum: ['pending', 'approved', 'rejected', 'review'] })
-    .default('pending'),
+  underwritingStatus: varchar('underwriting_status', { length: 50, enum: Object.values(UnderwritingStatus) })
+    .default(UnderwritingStatus.PENDING),
   borrowerEmail: text('borrower_email'),
   borrowerPhone: text('borrower_phone'),
   lastPaymentId: text('last_payment_id'),
-  lastPaymentStatus: varchar('last_payment_status', { length: 50, enum: ['success', 'failed', 'pending'] }),
+  lastPaymentStatus: varchar('last_payment_status', { length: 50, enum: Object.values(PaymentStatus) }),
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').default(true)
 });
 
+// Webhook Events schema
+export const WebhookEventStatus = {
+  PENDING: 'pending',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  RETRYING: 'retrying'
+} as const;
+
+export type WebhookEventStatus = typeof WebhookEventStatus[keyof typeof WebhookEventStatus];
+
+export const webhookEvents = pgTable('webhook_events', {
+  id: serial('id').primaryKey(),
+  eventType: varchar('event_type', { length: 255 }).notNull(),
+  sessionId: varchar('session_id', { length: 255 }).notNull().default('app'),
+  status: varchar('status', { length: 50, enum: Object.values(WebhookEventStatus) })
+    .default(WebhookEventStatus.PENDING),
+  payload: json('payload'),
+  error: text('error'),
+  retryCount: integer('retry_count').default(0),
+  nextRetryAt: timestamp('next_retry_at'),
+  processedAt: timestamp('processed_at'),
+  createdAt: timestamp('created_at').defaultNow()
+});
+
+// Relations
 export const contractRelations = relations(contracts, ({ one }) => ({
   merchant: one(merchants, {
     fields: [contracts.merchantId],
@@ -86,29 +141,7 @@ export const contractRelations = relations(contracts, ({ one }) => ({
   }),
 }));
 
-export const verificationSessions = pgTable('verification_sessions', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id').references(() => users.id),
-  sessionId: varchar('session_id', { length: 255 }).notNull(),
-  status: varchar('status', { length: 50 }),
-  features: text('features'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow()
-});
-
-export const webhookEvents = pgTable('webhook_events', {
-  id: serial('id').primaryKey(),
-  eventType: varchar('event_type', { length: 255 }).notNull(),
-  sessionId: varchar('session_id', { length: 255 }).notNull().default('app'),
-  status: varchar('status', { length: 50 }).default('pending'),
-  payload: json('payload'),
-  error: text('error'),
-  retryCount: integer('retry_count').default(0),
-  nextRetryAt: timestamp('next_retry_at'),
-  processedAt: timestamp('processed_at'),
-  createdAt: timestamp('created_at').defaultNow()
-});
-
+// Rewards tables and relations remain unchanged
 export const rewardsBalances = pgTable('rewards_balances', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id).notNull(),
@@ -141,6 +174,7 @@ export const rewardsRedemptions = pgTable('rewards_redemptions', {
   updatedAt: timestamp('updated_at').defaultNow()
 });
 
+// Relations exports
 export const rewardsBalancesRelations = relations(rewardsBalances, ({ one }) => ({
   user: one(users, {
     fields: [rewardsBalances.userId],
@@ -170,12 +204,23 @@ export const rewardsRedemptionsRelations = relations(rewardsRedemptions, ({ one 
   })
 }));
 
+// Type exports
 export type SelectUser = typeof users.$inferSelect;
 export type SelectMerchant = typeof merchants.$inferSelect;
 export type SelectContract = typeof contracts.$inferSelect;
 export type SelectProgram = typeof programs.$inferSelect;
-export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
 export type SelectWebhookEvent = typeof webhookEvents.$inferSelect;
 export type SelectRewardsBalance = typeof rewardsBalances.$inferSelect;
 export type SelectRewardsTransaction = typeof rewardsTransactions.$inferSelect;
 export type SelectRewardsRedemption = typeof rewardsRedemptions.$inferSelect;
+export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
+
+export const verificationSessions = pgTable('verification_sessions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id),
+  sessionId: varchar('session_id', { length: 255 }).notNull(),
+  status: varchar('status', { length: 50 }),
+  features: text('features'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
+});

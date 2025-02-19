@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,17 +13,18 @@ import { useQuery } from "@tanstack/react-query";
 import type { SelectContract, SelectMerchant } from "@db/schema";
 import { LoanApplicationDialog } from "@/components/merchant/loan-application-dialog";
 import { useSocket } from "@/hooks/use-socket";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+
+type ContractStats = {
+  active: number;
+  pending: number;
+  completed: number;
+  total: number;
+};
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
-  const [contractStats, setContractStats] = useState({
-    active: 0,
-    pending: 0,
-    completed: 0,
-    total: 0
-  });
 
   const { data: merchant, isLoading, error } = useQuery<SelectMerchant>({
     queryKey: ['merchant', user?.id],
@@ -51,27 +51,13 @@ export default function MerchantDashboard() {
     }
   }, [error]);
 
-  const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
+  const { data: contracts = [], refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/merchants/${merchant?.id}/contracts`],
-    enabled: !!merchant,
-    onSuccess: (data) => {
-      console.log("[MerchantDashboard] Contracts loaded:", {
-        merchantId: merchant?.id,
-        contractCount: data?.length,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onError: (error) => {
-      console.error("[MerchantDashboard] Error loading contracts:", {
-        merchantId: merchant?.id,
-        error,
-        timestamp: new Date().toISOString()
-      });
-    }
+    enabled: !!merchant?.id
   });
 
   // Connect to socket for real-time updates
-  const socket = useSocket(merchant?.id);
+  const socket = useSocket(merchant?.id ?? 0);
 
   // Listen for real-time contract updates
   useEffect(() => {
@@ -95,27 +81,42 @@ export default function MerchantDashboard() {
     }
   }, [socket, merchant?.id, refetchContracts]);
 
-  useEffect(() => {
-    if (contracts) {
-      setContractStats({
-        active: contracts.filter(c => c.status === "active").length,
-        pending: contracts.filter(c => c.status === "draft").length,
-        completed: contracts.filter(c => c.status === "completed").length,
-        total: contracts.length
-      });
+  // Memoize contract stats calculation
+  const contractStats = useMemo<ContractStats>(() => {
+    if (!contracts?.length) {
+      return {
+        active: 0,
+        pending: 0,
+        completed: 0,
+        total: 0
+      };
     }
+
+    return {
+      active: contracts.filter(c => c.status === "active").length,
+      pending: contracts.filter(c => c.status === "draft").length,
+      completed: contracts.filter(c => c.status === "completed").length,
+      total: contracts.length
+    };
   }, [contracts]);
 
-  const chartData = contracts?.reduce((acc, contract) => {
-    const month = new Date(contract.createdAt).toLocaleString('default', { month: 'short' });
-    const existing = acc.find(d => d.name === month);
-    if (existing) {
-      existing.value += Number(contract.amount);
-    } else {
-      acc.push({ name: month, value: Number(contract.amount) });
-    }
-    return acc;
-  }, [] as { name: string; value: number }[]) || [];
+  // Memoize chart data calculation
+  const chartData = useMemo(() => {
+    if (!contracts?.length) return [];
+
+    const monthlyData = contracts.reduce((acc: { [key: string]: number }, contract) => {
+      try {
+        const month = new Date(contract.createdAt ?? '').toLocaleString('default', { month: 'short' });
+        acc[month] = (acc[month] || 0) + (Number(contract.amount) || 0);
+        return acc;
+      } catch (e) {
+        console.error('Error processing contract for chart:', e);
+        return acc;
+      }
+    }, {});
+
+    return Object.entries(monthlyData).map(([name, value]) => ({ name, value }));
+  }, [contracts]);
 
   return (
     <PortalLayout>
@@ -153,7 +154,10 @@ export default function MerchantDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts?.filter(c => c.status === 'active').reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0).toFixed(2) ?? "0.00"}
+                ${contracts
+                  ?.filter(c => c.status === 'active')
+                  .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+                  .toFixed(2) ?? "0.00"}
               </p>
             </CardContent>
           </Card>
@@ -216,9 +220,9 @@ export default function MerchantDashboard() {
                     </div>
                     <Badge
                       variant={
-                        contract.status === "active" ? "success" :
+                        contract.status === "active" ? "default" :
                         contract.status === "draft" ? "secondary" :
-                        contract.status === "completed" ? "default" : "destructive"
+                        contract.status === "completed" ? "outline" : "destructive"
                       }
                     >
                       {contract.status}

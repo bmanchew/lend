@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { LoginResponse, LoginData } from "@/types";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -18,18 +18,25 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function MerchantLogin() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
+  const mounted = useRef(false);
 
   // Check for existing token and redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
-      navigate('/merchant/dashboard', { replace: true });
+    if (!mounted.current) {
+      mounted.current = true;
+      const token = localStorage.getItem('token');
+      if (token) {
+        console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
+        setLocation('/merchant/dashboard');
+      }
     }
-  }, [navigate]);
+    return () => {
+      mounted.current = false;
+    };
+  }, []); // Empty dependency array since we only want this to run once on mount
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -75,7 +82,7 @@ export default function MerchantLogin() {
           title: "Success",
           description: "Successfully logged in"
         });
-        navigate('/merchant/dashboard', { replace: true });
+        setLocation('/merchant/dashboard');
       } else {
         console.error('[MerchantLogin] Invalid role:', response.role);
         toast({
