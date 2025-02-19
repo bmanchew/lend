@@ -18,6 +18,17 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
+  // Use proper error handling and type safety for date formatting
+  const formatDate = (value: string | Date | null): string => {
+    if (!value) return "N/A";
+    try {
+      return format(new Date(value), "MMM d, yyyy");
+    } catch (e) {
+      console.error("Invalid date format:", e);
+      return "Invalid Date";
+    }
+  };
+
   const { data: contracts = [], error: contractsError, isLoading: contractsLoading } = useQuery<SelectContract[]>({
     queryKey: ["/api/contracts"],
     retry: 1,
@@ -68,15 +79,7 @@ export default function AdminDashboard() {
     {
       accessorKey: "createdAt",
       header: "Created",
-      cell: ({ row }) => {
-        const value = row.getValue("createdAt");
-        if (!value) return "N/A";
-        try {
-          return format(new Date(value), "MMM d, yyyy");
-        } catch (e) {
-          return "Invalid Date";
-        }
-      },
+      cell: ({ row }) => formatDate(row.getValue("createdAt")),
     },
   ];
 

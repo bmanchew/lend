@@ -18,7 +18,8 @@ interface AuthConfig {
   sessionDuration: number;
 }
 
-export interface User {
+// Base User interface that both Express.User and our custom User will extend
+interface BaseUser {
   id: number;
   username: string;
   email: string;
@@ -26,14 +27,16 @@ export interface User {
   name?: string;
 }
 
+// Our custom User interface
+export interface User extends BaseUser {
+  password?: string;
+}
+
+// Extend Express.User
 declare global {
   namespace Express {
-    interface User {
-      id: number;
-      username: string;
-      email: string;
-      role: UserRole;
-      name?: string;
+    interface User extends BaseUser {
+      password?: string;
     }
   }
 }
@@ -123,19 +126,20 @@ export function setupAuth(app: Express): void {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         sameSite: 'none'
       },
-      proxy: true // Enable proxy support
+      proxy: true
     })
   );
 
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // JWT Authentication middleware
+  // JWT Authentication middleware with enhanced logging
   app.use(async (req, res, next) => {
     const token = authService.extractToken(req);
     if (token) {
       const user = authService.verifyJWT(token);
       if (user) {
+        logger.info('[Auth] JWT authenticated user:', { userId: user.id, role: user.role });
         req.user = user;
       }
     }
@@ -168,14 +172,26 @@ export function setupAuth(app: Express): void {
           return done(null, false, { message: "Invalid credentials" });
         }
 
+        // Enhanced role validation for admin users
+        if (loginType === 'admin' && userRecord.role !== 'admin') {
+          logger.error('[Auth] Unauthorized admin access attempt:', {
+            username,
+            actualRole: userRecord.role
+          });
+          return done(null, false, { message: "Unauthorized access" });
+        }
+
         if (userRecord.role !== loginType) {
-          logger.error('[Auth] Invalid account type');
-          return done(null, false, { message: "Invalid account type" });
+          logger.error('[Auth] Invalid account type:', {
+            expected: loginType,
+            actual: userRecord.role
+          });
+          return done(null, false, { message: `This login is for ${loginType} accounts only` });
         }
 
         const isValid = await authService.comparePasswords(password, userRecord.password);
         if (!isValid) {
-          logger.error('[Auth] Invalid password');
+          logger.error('[Auth] Invalid password for user:', username);
           return done(null, false, { message: "Invalid credentials" });
         }
 
@@ -184,10 +200,15 @@ export function setupAuth(app: Express): void {
           username: userRecord.username,
           email: userRecord.email,
           role: userRecord.role as UserRole,
-          name: userRecord.name || undefined
+          name: userRecord.name || undefined,
+          password: userRecord.password // Added password here
         };
 
-        logger.info('[Auth] Login successful:', { userId: user.id, role: user.role });
+        logger.info('[Auth] Login successful:', {
+          userId: user.id,
+          role: user.role,
+          loginType
+        });
         return done(null, user);
       } catch (err) {
         logger.error('[Auth] Login error:', err);
@@ -217,7 +238,8 @@ export function setupAuth(app: Express): void {
         username: userRecord.username,
         email: userRecord.email,
         role: userRecord.role as UserRole,
-        name: userRecord.name || undefined
+        name: userRecord.name || undefined,
+        password: userRecord.password // Added password here
       };
 
       done(null, user);

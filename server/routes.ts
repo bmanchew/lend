@@ -11,23 +11,14 @@ import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan
 import { logger } from "./lib/logger";
 import { slackService } from "./services/slack";
 import { PlaidService } from './services/plaid';
-import { LedgerManager } from './services/ledger-manager';
 import { shifiRewardsService } from './services/shifi-rewards';
 import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
 import type { User } from "./auth";
 import { asyncHandler } from './lib/async-handler';
 
-// Initialize LedgerManager singleton
-const ledgerManager = LedgerManager.getInstance({
-  minBalance: 1000,
-  maxBalance: 100000,
-  sweepThreshold: 500,
-  sweepSchedule: '0 */15 * * * *' // Every 15 minutes
-});
-
 // Type declarations
-interface RequestWithUser extends Request {
+interface RequestWithUser extends Omit<Request, 'user'> {
   user?: User;
 }
 
@@ -105,6 +96,16 @@ const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction
 
   req.user = user;
   logger.info('[Auth] JWT verified successfully for user:', user.id);
+  next();
+};
+
+// Add input validation middleware
+const validateId = (req: Request, res: Response, next: NextFunction) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid ID parameter' });
+  }
+  req.params.id = id.toString();
   next();
 };
 
@@ -280,55 +281,47 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 }));
 
 
-
-router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.userId);
     logger.info("[Merchant Lookup] Attempting to find merchant for userId:", userId);
 
-    if (isNaN(userId)) {
-      logger.info("[Merchant Lookup] Invalid userId provided:", req.params.userId);
-      return res.status(400).json({ error: 'Invalid user ID' });
-    }
-
-    logger.info("[Merchant Lookup] Executing query for userId:", userId);
     const merchantResults = await db
       .select()
       .from(merchants)
       .where(eq(merchants.userId, userId))
       .limit(1);
 
-    logger.info("[Merchant Lookup] Query results:", merchantResults);
-    logger.info("[Merchant Lookup] Query results:", merchantResults);
-
     const [merchant] = merchantResults;
-
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant not found' });
     }
 
-    logger.info("Found merchant:", merchant);
     return res.json(merchant);
   } catch (err: any) {
     logger.error("Error fetching merchant by user:", err);
     next(err);
   }
-}));
+});
 
-router.get("/merchants/:id/contracts", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/contracts", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
+    const merchantId = parseInt(req.params.id);
+    logger.info("[Routes] Fetching contracts for merchant:", { merchantId });
+
     const merchantContracts = await db.query.contracts.findMany({
-      where: eq(contracts.merchantId, parseInt(req.params.id)),
+      where: eq(contracts.merchantId, merchantId),
       with: {
         customer: true,
       },
     });
+
     return res.json(merchantContracts);
   } catch (err: any) {
     logger.error("Error fetching merchant contracts:", err);
     next(err);
   }
-}));
+});
 
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   logger.info("[Merchant Creation] Received request:", {
@@ -974,7 +967,6 @@ router.post("/plaid/process-payment", asyncHandler(async (req: RequestWithUser, 
     // Exchange public token for access token
     const tokenResponse = await PlaidService.exchangePublicToken(public_token);
     const accessToken = tokenResponse.access_token;
-
     // If ACH verification is required, initiate micro-deposits
     if (requireAchVerification) {
       await PlaidService.initiateAchVerification(accessToken, account_id);
@@ -1228,7 +1220,7 @@ declare global {
       name?: string;
       phoneNumber?: string;
       username: string;
-      password: string;
+      password?: string; // Added optional password field
     }
 
     interface Request {
