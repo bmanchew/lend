@@ -21,7 +21,7 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
 
   if (!user) {
     console.log('[ProtectedRoute] No user, redirecting to auth');
-    return <Navigate to="/auth/customer-login" replace />;
+    return <Navigate to="/auth/merchant" replace />;
   }
 
   // Role-based routing

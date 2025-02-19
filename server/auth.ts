@@ -26,15 +26,14 @@ export interface User {
   name?: string;
 }
 
-interface UserWithPassword extends User {
-  password: string;
-}
-
 declare global {
   namespace Express {
-    interface User extends Omit<UserWithPassword, 'password'> {}
-    interface Request {
-      user?: User;
+    interface User {
+      id: number;
+      username: string;
+      email: string;
+      role: UserRole;
+      name?: string;
     }
   }
 }
@@ -86,7 +85,7 @@ class AuthService {
     }
   }
 
-  extractToken(req: Express.Request): string | null {
+  extractToken(req: Request): string | null {
     if (req.headers.authorization?.startsWith('Bearer ')) {
       return req.headers.authorization.substring(7);
     }
@@ -98,6 +97,9 @@ export const authService = new AuthService();
 
 export function setupAuth(app: Express): void {
   logger.info('[Auth] Starting auth setup...');
+
+  // Enable trust proxy for all forwarded headers
+  app.set('trust proxy', 1);
 
   if (!dbInstance.pool) {
     throw new Error('Database pool not initialized');
@@ -117,9 +119,11 @@ export function setupAuth(app: Express): void {
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: app.get("env") === "production",
+        secure: true,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        sameSite: 'none'
       },
+      proxy: true // Enable proxy support
     })
   );
 
@@ -146,6 +150,7 @@ export function setupAuth(app: Express): void {
     }, async (req, username, password, done) => {
       try {
         const loginType = req.body.loginType as UserRole || 'customer';
+        logger.info('[Auth] Login attempt:', { username, loginType });
 
         if (!username || !password) {
           logger.error('[Auth] Missing credentials');
@@ -225,6 +230,7 @@ export function setupAuth(app: Express): void {
   app.post("/api/auth/login", passport.authenticate("local"), async (req, res) => {
     try {
       const token = await authService.generateJWT(req.user!);
+      logger.info('[Auth] Generated JWT token for user:', { userId: req.user!.id });
       res.json({ ...req.user, token });
     } catch (error) {
       logger.error('[Auth] Token generation error:', error);
@@ -235,8 +241,10 @@ export function setupAuth(app: Express): void {
   // Protected route to get current user
   app.get("/api/auth/me", (req, res) => {
     if (!req.user) {
+      logger.info('[Auth] Unauthorized access to /api/auth/me');
       return res.status(401).json({ error: "Authentication required" });
     }
+    logger.info('[Auth] User data retrieved:', { userId: req.user.id });
     res.json(req.user);
   });
 

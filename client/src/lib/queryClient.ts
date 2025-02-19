@@ -23,6 +23,13 @@ export async function apiRequest(
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
 
+  console.log('[API] Making request:', { 
+    method, 
+    url, 
+    hasToken: !!localStorage.getItem('token'),
+    timestamp: new Date().toISOString()
+  });
+
   const res = await fetch(url, {
     method,
     headers,
@@ -42,6 +49,12 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const headers = getAuthHeaders();
 
+    console.log('[API] Making query:', { 
+      queryKey, 
+      hasToken: !!localStorage.getItem('token'),
+      timestamp: new Date().toISOString()
+    });
+
     const res = await fetch(queryKey[0] as string, {
       headers,
       credentials: "include",
@@ -60,7 +73,7 @@ export const getQueryFn: <T>(options: {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
+      queryFn: getQueryFn({ on401: "returnNull" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,

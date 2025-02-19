@@ -19,21 +19,20 @@ import ApplyPage from "@/pages/apply";
 function AppRouter() {
   console.log('[Router] Rendering AppRouter');
 
-  // Structured route configurations
+  // Structured route configurations with consistent /auth prefix
   const authRoutes = [
-    { path: "/login/customer", element: <CustomerLogin />, title: "Customer Login" },
-    { path: "/auth/customer-login", element: <CustomerLogin />, title: "Customer Login" },
-    { path: "/login/merchant", element: <MerchantLogin />, title: "Merchant Login" },
-    { path: "/login/admin", element: <AdminLogin />, title: "Admin Login" },
+    { path: "/auth/customer", element: <CustomerLogin />, title: "Customer Login" },
+    { path: "/auth/merchant", element: <MerchantLogin />, title: "Merchant Login" },
+    { path: "/auth/admin", element: <AdminLogin />, title: "Admin Login" },
   ];
 
   const protectedRoutes = [
     { 
-      path: "/customer", 
+      path: "/customer/*", 
       element: <ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />
     },
     { 
-      path: "/merchant", 
+      path: "/merchant/*", 
       element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
     },
     { 
@@ -41,7 +40,7 @@ function AppRouter() {
       element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
     },
     { 
-      path: "/admin", 
+      path: "/admin/*", 
       element: <ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />
     },
     { 
@@ -52,14 +51,27 @@ function AppRouter() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login/customer" />} />
+      {/* Default redirect to merchant login */}
+      <Route path="/" element={<Navigate to="/auth/merchant" replace />} />
+
+      {/* Auth routes */}
       {authRoutes.map(route => (
-        <Route key={route.path} {...route} />
+        <Route key={route.path} path={route.path} element={route.element} />
       ))}
+
+      {/* Protected routes */}
       {protectedRoutes.map(route => (
         <Route key={route.path} path={route.path} element={route.element} />
       ))}
+
+      {/* Apply route */}
       <Route path="/apply/:token" element={<ApplyPage />} />
+
+      {/* Legacy route redirects */}
+      <Route path="/login/merchant" element={<Navigate to="/auth/merchant" replace />} />
+      <Route path="/login/admin" element={<Navigate to="/auth/admin" replace />} />
+
+      {/* Catch-all route */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

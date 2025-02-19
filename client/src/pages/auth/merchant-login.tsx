@@ -22,10 +22,11 @@ export default function MerchantLogin() {
   const { loginMutation } = useAuth();
   const { toast } = useToast();
 
-  // Redirect if already logged in
+  // Check for existing token and redirect if already logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
+      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
       navigate('/merchant/dashboard', { replace: true });
     }
   }, [navigate]);
@@ -53,24 +54,30 @@ export default function MerchantLogin() {
       };
 
       const response = await loginMutation.mutateAsync(loginData) as LoginResponse;
+      console.log("[MerchantLogin] Received response:", {
+        success: true,
+        hasToken: !!response.token,
+        role: response.role,
+        timestamp: new Date().toISOString()
+      });
 
       if (!response || !response.token) {
-        console.error("[MerchantLogin] Invalid response:", response);
         throw new Error('Invalid response from server');
       }
 
       // Store auth token
       localStorage.setItem('token', response.token);
 
+      // For merchant users, redirect to the dashboard
       if (response.role === 'merchant') {
+        console.log('[MerchantLogin] Login successful, redirecting to dashboard');
         toast({
           title: "Success",
-          description: "Successfully logged in",
+          description: "Successfully logged in"
         });
-
-        // Use react-router navigation
         navigate('/merchant/dashboard', { replace: true });
       } else {
+        console.error('[MerchantLogin] Invalid role:', response.role);
         toast({
           title: "Access Denied",
           description: "This login is for merchant accounts only.",
@@ -80,7 +87,6 @@ export default function MerchantLogin() {
     } catch (error: any) {
       console.error("[MerchantLogin] Login failed:", {
         error: error,
-        data: { username: data.username, password: "[REDACTED]" },
         errorType: error.constructor.name,
         errorMessage: error.response?.data?.message || error.message,
         timestamp: new Date().toISOString()

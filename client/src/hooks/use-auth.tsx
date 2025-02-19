@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [_, setLocation] = useLocation();
   const isMobile = useMobile();
 
+  // Fetch current user data with proper error handling
   const {
     data: user,
     error,
@@ -36,6 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   } = useQuery<SelectUser | null>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+    onError: (error) => {
+      console.error("[Auth] Error fetching user:", error);
+      // Clear token on error as it might be invalid
+      localStorage.removeItem('token');
+    }
   });
 
   const loginMutation = useMutation({
@@ -60,15 +67,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(error.error || 'Login failed');
       }
 
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      console.log('[Auth] Login successful:', {
+      const data = await res.json();
+      console.log('[Auth] Login response:', {
+        success: true,
         userId: data.id,
         role: data.role,
+        hasToken: !!data.token,
         timestamp: new Date().toISOString()
       });
 
+      return data;
+    },
+    onSuccess: (data) => {
       // Store auth token
       if (data.token) {
         localStorage.setItem('token', data.token);
@@ -77,20 +87,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Update user data in query client
       queryClient.setQueryData(["/api/auth/me"], data);
 
-      toast({
-        title: "Success",
-        description: "Successfully logged in"
-      });
-
       // Redirect based on role
       if (data.role === 'merchant') {
+        console.log('[Auth] Redirecting to merchant dashboard');
         setLocation('/merchant/dashboard');
       } else {
         setLocation(`/${data.role}`);
       }
+
+      toast({
+        title: "Success",
+        description: "Successfully logged in"
+      });
     },
     onError: (error: Error) => {
       console.error('[Auth] Login failed:', error);
+      localStorage.removeItem('token'); // Clear invalid token
       toast({
         title: "Login Error",
         description: error.message,
@@ -109,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       queryClient.setQueryData(["/api/auth/me"], null);
     },
     onSuccess: () => {
-      setLocation("/auth");
+      setLocation("/auth/merchant");
       toast({
         title: "Logged out",
         description: "Successfully logged out"
@@ -128,6 +140,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Registration failed');
+      }
       return await res.json();
     },
     onSuccess: (user: SelectUser) => {
@@ -153,7 +169,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userAgent: navigator.userAgent
         }
       });
-      if (!res.ok) throw new Error("Failed to send OTP");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to send OTP");
+      }
       return res.json();
     },
   });
@@ -169,7 +188,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userAgent: navigator.userAgent
         }
       });
-      if (!res.ok) throw new Error("Invalid OTP");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Invalid OTP");
+      }
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
