@@ -3,15 +3,19 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { db } from "@db";
 import { users, contracts, merchants, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { asyncHandler } from './lib/async-handler';
-import { logger } from "./lib/logger";
-import { authService } from "./auth";
-import { PlaidService } from './services/plaid';
-import { slackService } from "./services/slack";
+import express from 'express';
+import NodeCache from 'node-cache';
+import { Server as SocketIOServer } from 'socket.io';
 import { smsService } from "./services/sms";
-import { shifiRewardsService } from './services/shifi-rewards';
-import type { User } from "./auth";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
+import { logger } from "./lib/logger";
+import { slackService } from "./services/slack";
+import { PlaidService } from './services/plaid';
+import { shifiRewardsService } from './services/shifi-rewards';
+import jwt from 'jsonwebtoken';
+import { authService } from "./auth";
+import type { User } from "./auth";
+import { asyncHandler } from './lib/async-handler';
 
 // Type declarations
 interface RequestWithUser extends Omit<Request, 'user'> {
@@ -20,7 +24,20 @@ interface RequestWithUser extends Omit<Request, 'user'> {
 
 const router = Router();
 
-// Middleware
+// Custom error class for API errors
+class APIError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'APIError';
+  }
+}
+
+// Request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
@@ -35,6 +52,32 @@ const requestTrackingMiddleware = (req: Request, res: Response, next: NextFuncti
   next();
 };
 
+// Cache middleware
+const cacheMiddleware = (duration: number) => {
+  const apiCache = new NodeCache({ stdTTL: duration });
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET') return next();
+
+    const key = `__express__${req.originalUrl}`;
+    const cachedResponse = apiCache.get(key);
+
+    if (cachedResponse) {
+      res.send(cachedResponse);
+      return;
+    }
+
+    const originalSend = res.send;
+    res.send = function(body: any): any {
+      apiCache.set(key, body, duration);
+      return originalSend.call(this, body);
+    };
+
+    next();
+  };
+};
+
+// Add input validation middleware
 const validateId = (req: Request, res: Response, next: NextFunction) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
@@ -44,42 +87,95 @@ const validateId = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-// Apply middleware
+// Register core middleware
 router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
 
-// Auth Routes
+// Public auth routes (NO JWT REQUIRED) - Moved to top of router
 router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[Auth] Login attempt with:', { 
+    username: req.body.username?.trim(), 
+    loginType: req.body.loginType,
+    hasPassword: !!req.body.password,
+    timestamp: new Date().toISOString()
+  });
+
   const { username, password, loginType } = req.body;
 
   if (!username || !password) {
+    logger.error('[Auth] Missing credentials:', { 
+      username: !!username, 
+      password: !!password,
+      timestamp: new Date().toISOString()
+    });
     return res.status(400).json({ error: "Username and password are required" });
   }
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username.trim()))
-    .limit(1);
+  try {
+    // Get user from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username.trim()))
+      .limit(1);
 
-  if (!user || !user.password) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    if (!user || !user.password) {
+      logger.info('[Auth] User not found or invalid password:', { 
+        username: username.trim(),
+        timestamp: new Date().toISOString()
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Verify password
+    const isValid = await authService.comparePasswords(password, user.password);
+    if (!isValid) {
+      logger.info('[Auth] Invalid password for user:', { 
+        username: username.trim(),
+        timestamp: new Date().toISOString()
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Check role match if loginType is provided
+    if (loginType && user.role !== loginType) {
+      logger.info('[Auth] Invalid role for user:', { 
+        username, 
+        expected: loginType, 
+        actual: user.role,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+    }
+
+    // Create user response without password
+    const userResponse = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role as UserRole,
+      name: user.name || undefined
+    };
+
+    // Generate JWT token
+    const token = await authService.generateJWT(userResponse);
+    logger.info('[Auth] Login successful:', { 
+      userId: user.id, 
+      role: user.role,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.json({
+      token,
+      ...userResponse
+    });
+  } catch (error) {
+    logger.error('[Auth] Unexpected error during login:', {
+      error,
+      timestamp: new Date().toISOString()
+    });
+    return res.status(500).json({ error: "An unexpected error occurred" });
   }
-
-  const isValid = await authService.comparePasswords(password, user.password);
-  if (!isValid) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  const token = await authService.generateJWT(user);
-
-  return res.json({
-    token,
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    name: user.name
-  });
 }));
 
 router.post("/auth/register", asyncHandler(async (req: Request, res: Response) => {
@@ -356,32 +452,40 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
   return res.status(201).json({ merchant, user: merchantUser });
 }));
 
-router.get("/merchants", asyncHandler(async (_req: RequestWithUser, res: Response) => {
-  const allMerchants = await db
-    .select({
-      merchant: merchants,
-      user: users,
-      program: programs
-    })
-    .from(merchants)
-    .leftJoin(users, eq(merchants.userId, users.id))
-    .leftJoin(programs, eq(merchants.id, programs.merchantId));
+router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  logger.info("[Merchants] Fetching all merchants", { timestamp: new Date().toISOString() });
+  try {
+    const allMerchants = await db
+      .select({
+        merchant: merchants,
+        user: users,
+        program: programs
+      })
+      .from(merchants)
+      .leftJoin(users, eq(merchants.userId, users.id))
+      .leftJoin(programs, eq(merchants.id, programs.merchantId));
 
-  const merchantsMap = new Map();
-  allMerchants.forEach(row => {
-    if (!merchantsMap.has(row.merchant.id)) {
-      merchantsMap.set(row.merchant.id, {
-        ...row.merchant,
-        user: row.user,
-        programs: []
-      });
-    }
-    if (row.program) {
-      merchantsMap.get(row.merchant.id).programs.push(row.program);
-    }
-  });
+    const merchantsMap = new Map();
+    allMerchants.forEach(row => {
+      if (!merchantsMap.has(row.merchant.id)) {
+        merchantsMap.set(row.merchant.id, {
+          ...row.merchant,
+          user: row.user,
+          programs: []
+        });
+      }
+      if (row.program) {
+        merchantsMap.get(row.merchant.id).programs.push(row.program);
+      }
+    });
 
-  return res.json(Array.from(merchantsMap.values()));
+    const merchantsWithPrograms = Array.from(merchantsMap.values());
+
+    return res.json(merchantsWithPrograms);
+  } catch (err: any) {
+    logger.error("Error fetching all merchants:", err);
+    next(err);
+  }
 }));
 
 router.post("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -413,29 +517,43 @@ router.get("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser, 
   }
 }));
 
-router.get("/contracts", asyncHandler(async (req: RequestWithUser, res: Response) => {
-  const { status, merchantId } = req.query;
+router.get("/contracts", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    const { status, merchantId } = req.query;
 
-  const baseQuery = db
-    .select({
-      contract: contracts,
-      merchant: merchants,
-      user: users
-    })
-    .from(contracts)
-    .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
-    .leftJoin(users, eq(contracts.customerId, users.id));
+    // Start with base query
+    const baseQuery = db
+      .select({
+        contract: contracts,
+        merchant: merchants,
+        user: users
+      })
+      .from(contracts)
+      .leftJoin(merchants, eq(contracts.merchantId, merchants.id))
+      .leftJoin(users, eq(contracts.customerId, users.id));
 
-  const conditions = [];
-  if (status) conditions.push(eq(contracts.status, status as string));
-  if (merchantId) conditions.push(eq(contracts.merchantId, parseInt(merchantId as string)));
+    // Build conditions array for filtering
+    const conditions = [];
+    if (status) {
+      conditions.push(eq(contracts.status, status as string));
+    }
+    if (merchantId) {
+      conditions.push(eq(contracts.merchantId, parseInt(merchantId as string)));
+    }
 
-  const query = conditions.length > 0
-    ? baseQuery.where(and(...conditions))
-    : baseQuery;
+    // Apply conditions if any exist
+    const query = conditions.length > 0
+      ? baseQuery.where(and(...conditions))
+      : baseQuery;
 
-  const allContracts = await query.orderBy(desc(contracts.createdAt));
-  return res.json(allContracts);
+    const allContracts = await query.orderBy(desc(contracts.createdAt));
+
+    logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length, timestamp: new Date().toISOString() });
+    return res.json(allContracts);
+  } catch (err) {
+    logger.error("[Routes] Error fetching contracts:", err);
+    next(err);
+  }
 }));
 
 router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -543,22 +661,26 @@ router.post("/webhooks/process", asyncHandler(async (req: RequestWithUser, res: 
   }
 }));
 
-router.get("/rewards/balance", asyncHandler(async (req: RequestWithUser, res: Response) => {
-  if (!req.user?.id) {
-    return res.status(401).json({ error: 'Authentication required' });
+router.get("/rewards/balance", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const balance = await shifiRewardsService.getBalance(req.user.id);
+    const [balanceData] = await db
+      .select()
+      .from(rewardsBalances)
+      .where(eq(rewardsBalances.userId, req.user.id))
+      .limit(1);
+
+    return res.json({
+      balance: balance,
+      lifetimeEarned: balanceData?.lifetimeEarned || 0
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const balance = await shifiRewardsService.getBalance(req.user.id);
-  const [balanceData] = await db
-    .select()
-    .from(rewardsBalances)
-    .where(eq(rewardsBalances.userId, req.user.id))
-    .limit(1);
-
-  return res.json({
-    balance: balance,
-    lifetimeEarned: balanceData?.lifetimeEarned || 0
-  });
 }));
 
 router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -1096,13 +1218,24 @@ router.get("/plaid/ledger/balance", asyncHandler(async (req: RequestWithUser, re
   }
 }));
 
-router.post("/plaid/create-link-token", asyncHandler(async (req: RequestWithUser, res: Response) => {
-  if (!req.user?.id) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+router.post("/plaid/create-link-token", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
-  const linkToken = await PlaidService.createLinkToken(req.user.id.toString());
-  return res.json({ status: 'success', linkToken: linkToken.link_token });
+    logger.info('Creating Plaid link token for user:', { userId, timestamp: new Date().toISOString() });
+    const linkToken = await PlaidService.createLinkToken(userId.toString());
+
+    return res.json({
+      status: 'success',
+      linkToken: linkToken.link_token
+    });
+  } catch (err) {
+    logger.error('Error creating Plaid link token:', err);
+    next(err);
+  }
 }));
 
 // Helper function declarations

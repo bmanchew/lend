@@ -1,6 +1,6 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import { Express, Request } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
@@ -12,6 +12,12 @@ import { logger } from "./lib/logger";
 
 export type UserRole = "admin" | "customer" | "merchant";
 
+interface AuthConfig {
+  saltRounds: number;
+  sessionDuration: number;
+}
+
+// Base User interface that both Express.User and our custom User will extend
 interface BaseUser {
   id: number;
   username: string;
@@ -20,10 +26,12 @@ interface BaseUser {
   name?: string;
 }
 
+// Our custom User interface
 export interface User extends BaseUser {
   password?: string;
 }
 
+// Extend Express.User
 declare global {
   namespace Express {
     interface User extends BaseUser {}
@@ -31,12 +39,18 @@ declare global {
 }
 
 class AuthService {
-  private readonly saltRounds = 10;
-  private readonly jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+  private readonly config: AuthConfig = {
+    saltRounds: 10,
+    sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
+  };
 
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
     try {
-      return supplied && stored ? bcrypt.compare(supplied, stored) : false;
+      if (!supplied || !stored) {
+        logger.error("[Auth] Missing password");
+        return false;
+      }
+      return bcrypt.compare(supplied, stored);
     } catch (error) {
       logger.error("[Auth] Password comparison error:", error);
       return false;
@@ -44,7 +58,7 @@ class AuthService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, this.saltRounds);
+    return bcrypt.hash(password, this.config.saltRounds);
   }
 
   async generateJWT(user: Express.User): Promise<string> {
@@ -54,12 +68,16 @@ class AuthService {
       email: user.email,
       name: user.name
     };
-    return jwt.sign(payload, this.jwtSecret, { expiresIn: '30d' });
+
+    const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+    return jwt.sign(payload, jwtSecret, { expiresIn: '30d' });
   }
 
   verifyJWT(token: string): Express.User | null {
     try {
-      return jwt.verify(token, this.jwtSecret) as Express.User;
+      const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+      const decoded = jwt.verify(token, jwtSecret) as Express.User;
+      return decoded;
     } catch (error) {
       logger.error("[Auth] JWT verification failed:", error);
       return null;
@@ -72,13 +90,18 @@ export const authService = new AuthService();
 export function setupAuth(app: Express): void {
   logger.info('[Auth] Starting auth setup...');
 
-  const store = new (connectPg(session))({
-    pool: dbInstance.pool!,
+  app.set('trust proxy', 1);
+
+  if (!dbInstance.pool) {
+    throw new Error('Database pool not initialized');
+  }
+
+  const PostgresStore = connectPg(session);
+  const store = new PostgresStore({
+    pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
   });
-
-  app.set('trust proxy', 1);
 
   app.use(session({
     store,
@@ -96,41 +119,70 @@ export function setupAuth(app: Express): void {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  configurePassport();
-
-  logger.info('[Auth] Auth setup completed successfully');
-}
-
-function configurePassport() {
   passport.use(new LocalStrategy({
     usernameField: 'username',
     passwordField: 'password',
     passReqToCallback: true
   }, async (req, username, password, done) => {
     try {
+      const loginType = req.body.loginType as UserRole;
+      logger.info('[Auth] Login attempt:', { username, loginType });
+
+      if (!username || !password) {
+        logger.error('[Auth] Missing credentials');
+        return done(null, false, { message: "Missing credentials" });
+      }
+
       const [user] = await db
         .select()
         .from(users)
         .where(eq(users.username, username))
         .limit(1);
 
-      if (!user?.password || !(await authService.comparePasswords(password, user.password))) {
+      if (!user || !user.password) {
+        logger.error('[Auth] User not found or invalid password');
         return done(null, false, { message: "Invalid credentials" });
       }
 
-      return done(null, {
+      // Enhanced role validation for admin users
+      if (loginType === 'admin' && user.role !== 'admin') {
+        logger.error('[Auth] Unauthorized admin access attempt:', {
+          username,
+          actualRole: user.role
+        });
+        return done(null, false, { message: "This login is for admin accounts only" });
+      }
+
+      const isValid = await authService.comparePasswords(password, user.password);
+      if (!isValid) {
+        logger.error('[Auth] Invalid password for user:', username);
+        return done(null, false, { message: "Invalid credentials" });
+      }
+
+      const userResponse: Express.User = {
         id: user.id,
         username: user.username,
         email: user.email,
         role: user.role as UserRole,
-        name: user.name
+        name: user.name || undefined
+      };
+
+      logger.info('[Auth] Login successful:', {
+        userId: user.id,
+        role: user.role,
+        loginType
       });
+
+      return done(null, userResponse);
     } catch (err) {
+      logger.error('[Auth] Login error:', err);
       return done(err);
     }
   }));
 
-  passport.serializeUser((user: Express.User, done) => done(null, user.id));
+  passport.serializeUser((user: Express.User, done) => {
+    done(null, user.id);
+  });
 
   passport.deserializeUser(async (id: number, done) => {
     try {
@@ -140,68 +192,77 @@ function configurePassport() {
         .where(eq(users.id, id))
         .limit(1);
 
-      done(null, user ? {
+      if (!user) {
+        return done(null, false);
+      }
+
+      const userResponse: Express.User = {
         id: user.id,
         username: user.username,
         email: user.email,
         role: user.role as UserRole,
-        name: user.name
-      } : false);
+        name: user.name || undefined
+      };
+
+      done(null, userResponse);
     } catch (err) {
       done(err);
     }
   });
-}
 
-app.post("/api/login", async (req, res, next) => {
-  passport.authenticate('local', async (err: any, user: Express.User | false, info: any) => {
-    if (err) {
-      logger.error('[Auth] Login error:', err);
-      return next(err);
-    }
+  app.post("/api/login", async (req, res, next) => {
+    passport.authenticate('local', async (err: any, user: Express.User | false, info: any) => {
+      if (err) {
+        logger.error('[Auth] Login error:', err);
+        return next(err);
+      }
 
-    if (!user) {
-      logger.error('[Auth] Authentication failed:', info);
-      return res.status(401).json({ error: info.message || 'Authentication failed' });
-    }
+      if (!user) {
+        logger.error('[Auth] Authentication failed:', info);
+        return res.status(401).json({ error: info.message || 'Authentication failed' });
+      }
 
-    try {
-      const token = await authService.generateJWT(user);
-      logger.info('[Auth] Generated JWT token for user:', { userId: user.id });
+      try {
+        const token = await authService.generateJWT(user);
+        logger.info('[Auth] Generated JWT token for user:', { userId: user.id });
 
-      req.logIn(user, (err) => {
-        if (err) {
-          logger.error('[Auth] Session login error:', err);
-          return next(err);
-        }
+        // Log the user in
+        req.logIn(user, (err) => {
+          if (err) {
+            logger.error('[Auth] Session login error:', err);
+            return next(err);
+          }
 
-        return res.json({
-          ...user,
-          token
+          return res.json({
+            ...user,
+            token
+          });
         });
-      });
-    } catch (error) {
-      logger.error('[Auth] Token generation error:', error);
-      return res.status(500).json({ error: 'Failed to generate authentication token' });
-    }
-  })(req, res, next);
-});
-
-app.get("/api/user", (req, res) => {
-  if (!req.user) {
-    logger.info('[Auth] Unauthorized access to /api/user');
-    return res.status(401).json({ error: "Authentication required" });
-  }
-  logger.info('[Auth] User data retrieved:', { userId: req.user.id });
-  res.json(req.user);
-});
-
-app.post("/api/logout", (req, res) => {
-  req.logout((err) => {
-    if (err) {
-      logger.error('[Auth] Logout error:', err);
-      return res.status(500).json({ error: 'Failed to logout' });
-    }
-    res.sendStatus(200);
+      } catch (error) {
+        logger.error('[Auth] Token generation error:', error);
+        return res.status(500).json({ error: 'Failed to generate authentication token' });
+      }
+    })(req, res, next);
   });
-});
+
+  app.get("/api/user", (req, res) => {
+    if (!req.user) {
+      logger.info('[Auth] Unauthorized access to /api/user');
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    logger.info('[Auth] User data retrieved:', { userId: req.user.id });
+    res.json(req.user);
+  });
+
+  app.post("/api/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        logger.error('[Auth] Logout error:', err);
+        return res.status(500).json({ error: 'Failed to logout' });
+      }
+      res.sendStatus(200);
+    });
+  });
+
+  logger.info('[Auth] Auth setup completed successfully');
+}
