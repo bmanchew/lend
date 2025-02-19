@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { LoginResponse, LoginData } from "@/types";
+import { useEffect } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -17,9 +18,17 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function MerchantLogin() {
-  const [_, setLocation] = useLocation();
+  const navigate = useNavigate();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/merchant/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -58,7 +67,9 @@ export default function MerchantLogin() {
           title: "Success",
           description: "Successfully logged in",
         });
-        setLocation('/merchant/dashboard');
+
+        // Use react-router navigation
+        navigate('/merchant/dashboard', { replace: true });
       } else {
         toast({
           title: "Access Denied",

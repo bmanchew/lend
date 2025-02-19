@@ -1,6 +1,6 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import { Express, Request } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
@@ -18,7 +18,6 @@ interface AuthConfig {
   sessionDuration: number;
 }
 
-// Base User interface
 export interface User {
   id: number;
   username: string;
@@ -27,7 +26,6 @@ export interface User {
   name?: string;
 }
 
-// Extended User interface for internal use
 interface UserWithPassword extends User {
   password: string;
 }
@@ -35,6 +33,9 @@ interface UserWithPassword extends User {
 declare global {
   namespace Express {
     interface User extends Omit<UserWithPassword, 'password'> {}
+    interface Request {
+      user?: User;
+    }
   }
 }
 
@@ -84,11 +85,18 @@ class AuthService {
       return null;
     }
   }
+
+  extractToken(req: Express.Request): string | null {
+    if (req.headers.authorization?.startsWith('Bearer ')) {
+      return req.headers.authorization.substring(7);
+    }
+    return null;
+  }
 }
 
 export const authService = new AuthService();
 
-export async function setupAuth(app: Express): Promise<void> {
+export function setupAuth(app: Express): void {
   logger.info('[Auth] Starting auth setup...');
 
   if (!dbInstance.pool) {
@@ -117,6 +125,18 @@ export async function setupAuth(app: Express): Promise<void> {
 
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // JWT Authentication middleware
+  app.use(async (req, res, next) => {
+    const token = authService.extractToken(req);
+    if (token) {
+      const user = authService.verifyJWT(token);
+      if (user) {
+        req.user = user;
+      }
+    }
+    next();
+  });
 
   passport.use(
     new LocalStrategy({
@@ -199,6 +219,25 @@ export async function setupAuth(app: Express): Promise<void> {
     } catch (err) {
       done(err);
     }
+  });
+
+  // Add JWT token to login response
+  app.post("/api/auth/login", passport.authenticate("local"), async (req, res) => {
+    try {
+      const token = await authService.generateJWT(req.user!);
+      res.json({ ...req.user, token });
+    } catch (error) {
+      logger.error('[Auth] Token generation error:', error);
+      res.status(500).json({ error: 'Failed to generate authentication token' });
+    }
+  });
+
+  // Protected route to get current user
+  app.get("/api/auth/me", (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    res.json(req.user);
   });
 
   logger.info('[Auth] Auth setup completed successfully');

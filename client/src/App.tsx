@@ -1,7 +1,7 @@
 import * as React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"; // Changed import
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -14,37 +14,7 @@ import CustomerDashboard from "@/pages/customer/dashboard";
 import MerchantDashboard from "@/pages/merchant/dashboard";
 import AdminDashboard from "@/pages/admin/dashboard";
 import KycVerificationsPage from "@/pages/admin/kyc-verifications";
-import ApplyPage from "@/pages/apply"; // Placeholder component
-
-
-// Route configurations
-interface RouteConfig {
-  path: string;
-  element: JSX.Element;
-  roles?: string[];
-}
-
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
-  constructor(props: {children: React.ReactNode}) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <div className="p-4 text-red-500">Something went wrong. Please try again.</div>;
-    }
-    return this.props.children;
-  }
-}
+import ApplyPage from "@/pages/apply";
 
 function AppRouter() {
   console.log('[Router] Rendering AppRouter');
@@ -60,30 +30,24 @@ function AppRouter() {
   const protectedRoutes = [
     { 
       path: "/customer", 
-      element: <ProtectedRoute component={CustomerDashboard} />
+      element: <ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />
     },
     { 
       path: "/merchant", 
-      element: <ProtectedRoute component={MerchantDashboard} />
+      element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
+    },
+    { 
+      path: "/merchant/dashboard", 
+      element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
     },
     { 
       path: "/admin", 
-      element: <ProtectedRoute component={AdminDashboard} />
+      element: <ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />
     },
     { 
       path: "/admin/kyc-verifications", 
-      element: <ProtectedRoute component={KycVerificationsPage} />
-    },
-    { 
-      path: "/merchant/dashboard",
-      element: (
-        <ProtectedRoute 
-          path="/merchant/dashboard"
-          allowedRoles={["merchant"]} 
-          component={MerchantDashboard}
-        />
-      )
-    },
+      element: <ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />
+    }
   ];
 
   return (
@@ -93,7 +57,7 @@ function AppRouter() {
         <Route key={route.path} {...route} />
       ))}
       {protectedRoutes.map(route => (
-        <Route key={route.path} {...route} />
+        <Route key={route.path} path={route.path} element={route.element} />
       ))}
       <Route path="/apply/:token" element={<ApplyPage />} />
       <Route path="*" element={<NotFound />} />
@@ -102,7 +66,7 @@ function AppRouter() {
 }
 
 function App() {
-  console.log('[App] Rendering App'); // Added logging
+  console.log('[App] Rendering App');
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
