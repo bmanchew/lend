@@ -111,10 +111,17 @@ const validateId = (req: Request, res: Response, next: NextFunction) => {
 
 // Public Routes (No Auth Required)
 router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Login attempt with:', { username: req.body.username, loginType: req.body.loginType });
+  logger.info('[Auth] Login attempt with:', { 
+    username: req.body.username, 
+    loginType: req.body.loginType,
+    hasPassword: !!req.body.password,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
   const { username, password, loginType } = req.body;
 
   if (!username || !password) {
+    logger.error('[Auth] Missing credentials:', { username: !!username, password: !!password });
     return res.status(400).json({ error: "Username and password are required" });
   }
 
@@ -122,7 +129,7 @@ router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) 
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.username, username))
+    .where(eq(users.username, username.trim()))
     .limit(1);
 
   if (!user) {
@@ -139,22 +146,30 @@ router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) 
 
   // Check role match if loginType is provided
   if (loginType && user.role !== loginType) {
-    logger.info('[Auth] Invalid role for user:', { username, expected: loginType, actual: user.role });
+    logger.info('[Auth] Invalid role for user:', { 
+      username, 
+      expected: loginType, 
+      actual: user.role 
+    });
     return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
   }
 
   // Create user object without password
-  const userWithoutPassword: Express.User = {
+  const userWithoutPassword = {
     id: user.id,
     username: user.username,
     email: user.email,
-    role: user.role as UserRole,
-    name: user.name || undefined
+    role: user.role,
+    name: user.name
   };
 
   // Generate JWT token
   const token = await authService.generateJWT(userWithoutPassword);
-  logger.info('[Auth] Login successful:', { userId: user.id, role: user.role });
+  logger.info('[Auth] Login successful:', { 
+    userId: user.id, 
+    role: user.role,
+    timestamp: new Date().toISOString()
+  });
 
   return res.json({
     token,

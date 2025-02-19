@@ -10,7 +10,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { LoginData } from "@/types";
 
 const adminLoginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  username: z.string()
+    .min(1, "Username is required")
+    .transform(val => val.trim()),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -32,14 +34,14 @@ export default function AdminLogin() {
   async function onSubmit(data: AdminLoginForm) {
     try {
       const loginData: LoginData = {
-        username: data.username,
+        username: data.username.trim(),
         password: data.password,
         loginType: "admin"
       };
 
       console.log('[AdminLogin] Attempting login:', {
-        username: data.username,
-        loginType: "admin",
+        username: loginData.username,
+        loginType: loginData.loginType,
         formData: loginData,
         timestamp: new Date().toISOString()
       });
@@ -127,6 +129,7 @@ export default function AdminLogin() {
                       type="text" 
                       placeholder="admin@example.com"
                       autoComplete="username"
+                      onChange={(e) => field.onChange(e.target.value.trim())}
                     />
                   </FormControl>
                   <FormMessage />

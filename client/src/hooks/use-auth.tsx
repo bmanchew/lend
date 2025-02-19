@@ -70,9 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const responseData = await response.json();
-        console.log('[Auth] Login response success:', {
-          status: response.status,
-          hasToken: !!responseData.token,
+        console.log('[Auth] Login successful:', {
+          userId: responseData.id,
           role: responseData.role,
           timestamp: new Date().toISOString()
         });
@@ -91,6 +90,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('token', data.token);
       }
       queryClient.setQueryData(["/api/user"], data);
+
+      // Redirect based on role
+      if (data.role === 'admin') {
+        setLocation('/admin/dashboard');
+      } else if (data.role === 'merchant') {
+        setLocation('/merchant/dashboard');
+      } else {
+        setLocation(`/${data.role}`);
+      }
+
+      toast({
+        title: "Success",
+        description: `Successfully logged in as ${data.role}`
+      });
     },
     onError: (error: Error) => {
       console.error('[Auth] Login failed:', error);
