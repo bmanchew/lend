@@ -28,6 +28,9 @@ export async function apiRequest(
   url: string,
   init?: RequestInit
 ): Promise<Response> {
+  // Ensure URL starts with /api
+  const apiUrl = url.startsWith('/api') ? url : `/api${url}`;
+
   const headers = new Headers({
     ...getAuthHeaders(),
     ...(init?.headers || {})
@@ -35,12 +38,12 @@ export async function apiRequest(
 
   console.log('[API] Making request:', { 
     method: init?.method || 'GET', 
-    url, 
+    url: apiUrl, 
     hasToken: !!localStorage.getItem('token'),
     timestamp: new Date().toISOString()
   });
 
-  const response = await fetch(url, {
+  const response = await fetch(apiUrl, {
     ...init,
     headers,
     credentials: "include",

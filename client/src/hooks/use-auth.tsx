@@ -43,41 +43,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         timestamp: new Date().toISOString()
       });
 
-      try {
-        const response = await apiRequest("/api/login", {
-          method: 'POST',
-          body: JSON.stringify({
-            ...data,
-            username: data.username.trim()
-          })
-        });
+      const response = await apiRequest("/api/auth/login", {
+        method: 'POST',
+        body: JSON.stringify({
+          ...data,
+          username: data.username.trim()
+        })
+      });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('[Auth] Login response error:', {
-            status: response.status,
-            statusText: response.statusText,
-            errorData,
-            timestamp: new Date().toISOString()
-          });
-          throw new Error(errorData.error || errorData.message || 'Login failed');
-        }
+      const responseData = await response.json();
 
-        const responseData = await response.json();
-        console.log('[Auth] Login successful:', {
-          userId: responseData.id,
-          role: responseData.role,
+      if (!responseData || !responseData.token) {
+        console.error('[Auth] Invalid response format:', {
+          response: responseData,
           timestamp: new Date().toISOString()
         });
-
-        return responseData;
-      } catch (error: any) {
-        console.error('[Auth] Login request failed:', {
-          error: error.message,
-          timestamp: new Date().toISOString()
-        });
-        throw error;
+        throw new Error('Invalid response from server');
       }
+
+      console.log('[Auth] Login successful:', {
+        userId: responseData.id,
+        role: responseData.role,
+        timestamp: new Date().toISOString()
+      });
+
+      return responseData;
     },
     onSuccess: (data) => {
       if (data.token) {

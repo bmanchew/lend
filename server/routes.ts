@@ -92,7 +92,7 @@ router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
 // Public auth routes (NO JWT REQUIRED) - Moved to top of router
-router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
+router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
   logger.info('[Auth] Login attempt with:', { 
     username: req.body.username?.trim(), 
     loginType: req.body.loginType,
@@ -178,7 +178,7 @@ router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
-router.post("/auth/register", asyncHandler(async (req: Request, res: Response) => {
+router.post("/api/auth/register", asyncHandler(async (req: Request, res: Response) => {
   logger.info('[Auth] Registration attempt:', { username: req.body.username, role: req.body.role, timestamp: new Date().toISOString() });
   const { username, password, email, name, role } = req.body;
 
@@ -226,11 +226,12 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
 }));
 
 
+
 // JWT verification middleware - apply to all routes below this line
 router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const path = req.path;
-  // Skip JWT verification for public routes
-  if (path === '/api/login' || path === '/auth/register') {
+  // Skip JWT verification for public routes and static assets
+  if (path.startsWith('/api/auth/') || path === '/' || path.startsWith('/_next/') || path.startsWith('/static/')) {
     return next();
   }
 
@@ -979,7 +980,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
   }
 }));
 
-router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.patch("/contracts/:id", asyncHandler(async (req:RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
     const updates: Partial<typeof contracts.$inferInsert> = {};

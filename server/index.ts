@@ -62,10 +62,12 @@ const isPortAvailable = (port: number): Promise<boolean> => {
   return new Promise((resolve) => {
     const server = createNetServer()
       .once('error', () => {
+        logger.info(`Port ${port} is not available`);
         resolve(false);
       })
       .once('listening', () => {
         server.once('close', () => {
+          logger.info(`Port ${port} is available`);
           resolve(true);
         });
         server.close();
@@ -75,11 +77,11 @@ const isPortAvailable = (port: number): Promise<boolean> => {
 };
 
 // Function to wait for port to be available
-const waitForPort = async (port: number, retries = 20, interval = 250): Promise<void> => {
+const waitForPort = async (port: number, retries = 30, interval = 500): Promise<void> => {
   for (let i = 0; i < retries; i++) {
     const available = await isPortAvailable(port);
     if (available) {
-      logger.info(`Port ${port} is available`);
+      logger.info(`Port ${port} is available after ${i + 1} attempts`);
       return;
     }
     logger.info(`Waiting for port ${port} (attempt ${i + 1}/${retries})`);
@@ -116,9 +118,7 @@ const startServer = async () => {
     });
 
     // Find available port
-    const port = await portfinder.getPortPromise({ 
-      port: process.env.PORT ? parseInt(process.env.PORT) : 3000 
-    });
+    const port = parseInt(process.env.PORT || '3000');
 
     // Wait for port to be available before starting
     await waitForPort(port);
