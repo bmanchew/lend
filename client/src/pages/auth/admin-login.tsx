@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth.tsx";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LoginResponse, LoginData } from "@/hooks/use-auth";
+import type { LoginData } from "@/types";
 
-// Define form schema
 const adminLoginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
@@ -32,45 +31,35 @@ export default function AdminLogin() {
 
   async function onSubmit(data: AdminLoginForm) {
     try {
-      console.log("[Auth] Attempting login:", {
+      const loginData: LoginData = {
+        username: data.username,
+        password: data.password,
+        loginType: "admin"
+      };
+
+      console.log('[AdminLogin] Attempting login:', {
         username: data.username,
         loginType: "admin",
         timestamp: new Date().toISOString()
       });
 
-      const loginData: LoginData = {
-        ...data,
-        loginType: "admin",
-        deviceInfo: {
-          isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
-        }
-      };
-
       const response = await loginMutation.mutateAsync(loginData);
 
       if (response.role === 'admin') {
-        // Store auth token
-        localStorage.setItem('token', response.token);
-
-        toast({
-          title: "Success",
-          description: "Successfully logged in as admin"
-        });
+        console.log('[AdminLogin] Login successful, redirecting to dashboard');
         navigate('/admin/dashboard', { replace: true });
       } else {
-        console.error('Unexpected role after login:', response.role);
+        console.error('[AdminLogin] Invalid role:', response.role);
         toast({
-          title: "Error",
-          description: "Invalid credentials or insufficient permissions",
+          title: "Access Denied",
+          description: "This login is for admin accounts only.",
           variant: "destructive"
         });
       }
     } catch (error: any) {
-      console.error("[Auth] Login failed:", error);
+      console.error("[AdminLogin] Login failed:", error);
       toast({
-        title: "Error",
+        title: "Login Error",
         description: error.message || "Failed to login. Please check your credentials.",
         variant: "destructive"
       });
@@ -99,7 +88,6 @@ export default function AdminLogin() {
                       type="text" 
                       placeholder="admin@example.com"
                       autoComplete="username"
-                      required 
                     />
                   </FormControl>
                   <FormMessage />
@@ -118,7 +106,6 @@ export default function AdminLogin() {
                       type="password" 
                       placeholder="••••••••"
                       autoComplete="current-password"
-                      required 
                     />
                   </FormControl>
                   <FormMessage />
@@ -134,12 +121,6 @@ export default function AdminLogin() {
             </Button>
           </form>
         </Form>
-
-        {loginMutation.isError && (
-          <div className="text-sm text-red-500 text-center">
-            {loginMutation.error?.message || "An error occurred during login"}
-          </div>
-        )}
       </div>
     </div>
   );

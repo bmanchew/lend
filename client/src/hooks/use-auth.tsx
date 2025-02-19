@@ -26,8 +26,6 @@ type AuthContextType = {
   loginMutation: UseMutationResult<LoginResponse, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<LoginResponse, Error, any>;
-  sendOtpMutation: UseMutationResult<any, Error, {phoneNumber: string}>;
-  verifyOtpMutation: UseMutationResult<LoginResponse, Error, {phoneNumber: string; code: string}>;
 };
 
 export const AuthContext = React.createContext<AuthContextType | null>(null);
@@ -58,16 +56,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return response.json();
     },
     onSuccess: (data) => {
-      // Store auth token
       if (data.token) {
         localStorage.setItem('token', data.token);
       }
-
-      // Update user data in query client
       queryClient.setQueryData(["/api/auth/me"], data);
 
       // Redirect based on role
-      if (data.role === 'merchant') {
+      if (data.role === 'admin') {
+        setLocation('/admin/dashboard');
+      } else if (data.role === 'merchant') {
         setLocation('/merchant/dashboard');
       } else {
         setLocation(`/${data.role}`);
@@ -80,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onError: (error: Error) => {
       console.error('[Auth] Login failed:', error);
-      localStorage.removeItem('token'); // Clear invalid token
+      localStorage.removeItem('token');
       toast({
         title: "Login Error",
         description: error.message,
@@ -121,11 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const error = await res.json();
         throw new Error(error.error || 'Registration failed');
       }
-      return await res.json() as LoginResponse; // Type assertion
+      return res.json();
     },
-    onSuccess: (user: LoginResponse) => {
-      queryClient.setQueryData(["/api/auth/me"], user);
-      setLocation(`/${user.role}`);
+    onSuccess: (data: LoginResponse) => {
+      queryClient.setQueryData(["/api/auth/me"], data);
+      setLocation(`/${data.role}`);
     },
     onError: (error: Error) => {
       toast({
@@ -133,43 +130,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: error.message,
         variant: "destructive",
       });
-    },
-  });
-
-  const sendOtpMutation = useMutation({
-    mutationFn: async ({ phoneNumber }: { phoneNumber: string }) => {
-      const res = await apiRequest("POST", "/api/auth/send-otp", { 
-        phoneNumber,
-        deviceInfo: {
-          isMobile,
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
-        }
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to send OTP");
-      }
-      return res.json();
-    },
-  });
-
-  const verifyOtpMutation = useMutation({
-    mutationFn: async ({ phoneNumber, code }: { phoneNumber: string; code: string }) => {
-      const res = await apiRequest("POST", "/api/auth/verify-otp", { 
-        phoneNumber, 
-        code,
-        deviceInfo: {
-          isMobile,
-          platform: navigator.platform,
-          userAgent: navigator.userAgent
-        }
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Invalid OTP");
-      }
-      return res.json() as LoginResponse; // Type assertion
     },
   });
 
@@ -182,8 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        sendOtpMutation,
-        verifyOtpMutation,
       }}
     >
       {children}

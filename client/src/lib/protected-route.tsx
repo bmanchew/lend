@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth.tsx";
 import { Loader2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
@@ -9,7 +9,6 @@ type ProtectedRouteProps = {
 
 export function ProtectedRoute({ component: Component, allowedRoles }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
-  console.log('[ProtectedRoute] Rendering with:', { user, allowedRoles });
 
   if (isLoading) {
     return (
@@ -20,13 +19,11 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
   }
 
   if (!user) {
-    console.log('[ProtectedRoute] No user, redirecting to auth');
     return <Navigate to="/auth/merchant" replace />;
   }
 
   // Role-based routing
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    console.log('[ProtectedRoute] Invalid role, redirecting to user role path');
     return <Navigate to={`/${user.role}`} replace />;
   }
 

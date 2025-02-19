@@ -47,19 +47,12 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const headers: HeadersInit = getAuthHeaders();
 
-    console.log('[API] Making query:', { 
-      queryKey, 
-      hasToken: !!localStorage.getItem('token'),
-      timestamp: new Date().toISOString()
-    });
-
     const res = await fetch(queryKey[0] as string, {
       headers,
       credentials: "include",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      // Clear token on 401 as it might be invalid/expired
       localStorage.removeItem('token');
       return null;
     }
