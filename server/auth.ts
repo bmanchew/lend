@@ -1,32 +1,18 @@
-// Type declarations
-declare module 'express-session' {
-  interface SessionData {
-    userId: number;
-    userRole: UserRole;
-    phoneNumber?: string;
-  }
-}
-
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
-import rateLimit from "express-rate-limit";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { users, insertUserSchema } from "@db/schema";
 import { db, dbInstance } from "@db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
-import SMSService from "./services/sms";
 import jwt from 'jsonwebtoken';
+import { logger } from "./lib/logger";
 
-const PostgresSessionStore = connectPg(session);
-
-// Add types for user roles
 export type UserRole = "admin" | "customer" | "merchant";
 
-// Auth configuration type
 interface AuthConfig {
   saltRounds: number;
   sessionDuration: number;
@@ -39,21 +25,13 @@ export interface User {
   email: string;
   role: UserRole;
   name?: string;
-  phoneNumber?: string;
-  lastOtpCode?: string;
-  otpExpiry?: Date;
-  kycStatus?: string;
-  createdAt?: Date;
-  plaidAccessToken?: string;
-  faceIdHash?: string;
 }
 
-// Extended User interface for internal use (includes password)
-export interface UserWithPassword extends User {
+// Extended User interface for internal use
+interface UserWithPassword extends User {
   password: string;
 }
 
-// Update Express.User interface
 declare global {
   namespace Express {
     interface User extends Omit<UserWithPassword, 'password'> {}
@@ -66,29 +44,15 @@ class AuthService {
     sessionDuration: 30 * 24 * 60 * 60 * 1000 // 30 days
   };
 
-  private readonly logger = {
-    info: (message: string, meta?: any) => console.log(`[AuthService] ${message}`, meta || ''),
-    error: (message: string, meta?: any) => console.error(`[AuthService] ${message}`, meta || ''),
-    debug: (message: string, meta?: any) => console.debug(`[AuthService] ${message}`, meta || '')
-  };
-
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
     try {
       if (!supplied || !stored) {
-        this.logger.error("Missing password:", { supplied: !!supplied, stored: !!stored });
+        logger.error("[Auth] Missing password");
         return false;
       }
-
-      if (!stored.startsWith('$2')) {
-        this.logger.error("Invalid hash format");
-        return false;
-      }
-
-      const isMatch = await bcrypt.compare(supplied, stored);
-      this.logger.debug("Password comparison result:", { isMatch });
-      return isMatch;
+      return bcrypt.compare(supplied, stored);
     } catch (error) {
-      this.logger.error("Password comparison error:", error);
+      logger.error("[Auth] Password comparison error:", error);
       return false;
     }
   }
@@ -97,30 +61,42 @@ class AuthService {
     return bcrypt.hash(password, this.config.saltRounds);
   }
 
-  async generateJWT(user: User): Promise<string> {
+  async generateJWT(user: Express.User): Promise<string> {
     const payload = {
       id: user.id,
       role: user.role,
       email: user.email,
       name: user.name,
-      phoneNumber: user.phoneNumber
+      username: user.username
     };
 
     const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
     return jwt.sign(payload, jwtSecret, { expiresIn: '30d' });
+  }
+
+  verifyJWT(token: string): Express.User | null {
+    try {
+      const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+      const decoded = jwt.verify(token, jwtSecret) as Express.User;
+      return decoded;
+    } catch (error) {
+      logger.error("[Auth] JWT verification failed:", error);
+      return null;
+    }
   }
 }
 
 export const authService = new AuthService();
 
 export async function setupAuth(app: Express): Promise<void> {
-  console.log('[Auth] Starting auth setup...');
+  logger.info('[Auth] Starting auth setup...');
 
   if (!dbInstance.pool) {
     throw new Error('Database pool not initialized');
   }
 
-  const store = new PostgresSessionStore({
+  const PostgresStore = connectPg(session);
+  const store = new PostgresStore({
     pool: dbInstance.pool,
     createTableIfMissing: true,
     tableName: 'user_sessions'
@@ -134,7 +110,7 @@ export async function setupAuth(app: Express): Promise<void> {
       saveUninitialized: false,
       cookie: {
         secure: app.get("env") === "production",
-        maxAge: 30 * 24 * 60 * 60 * 1000,
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     })
   );
@@ -152,26 +128,29 @@ export async function setupAuth(app: Express): Promise<void> {
         const loginType = req.body.loginType as UserRole || 'customer';
 
         if (!username || !password) {
+          logger.error('[Auth] Missing credentials');
           return done(null, false, { message: "Missing credentials" });
         }
 
         const [userRecord] = await db
           .select()
           .from(users)
-          .where(
-            and(
-              eq(users.username, username),
-              eq(users.role, loginType)
-            )
-          )
+          .where(eq(users.username, username))
           .limit(1);
 
         if (!userRecord || !userRecord.password) {
+          logger.error('[Auth] User not found or invalid password');
           return done(null, false, { message: "Invalid credentials" });
+        }
+
+        if (userRecord.role !== loginType) {
+          logger.error('[Auth] Invalid account type');
+          return done(null, false, { message: "Invalid account type" });
         }
 
         const isValid = await authService.comparePasswords(password, userRecord.password);
         if (!isValid) {
+          logger.error('[Auth] Invalid password');
           return done(null, false, { message: "Invalid credentials" });
         }
 
@@ -180,18 +159,13 @@ export async function setupAuth(app: Express): Promise<void> {
           username: userRecord.username,
           email: userRecord.email,
           role: userRecord.role as UserRole,
-          name: userRecord.name || undefined,
-          phoneNumber: userRecord.phoneNumber || undefined,
-          lastOtpCode: userRecord.lastOtpCode || undefined,
-          otpExpiry: userRecord.otpExpiry || undefined,
-          kycStatus: userRecord.kycStatus || undefined,
-          createdAt: userRecord.createdAt || undefined,
-          plaidAccessToken: userRecord.plaidAccessToken || undefined,
-          faceIdHash: userRecord.faceIdHash || undefined
+          name: userRecord.name || undefined
         };
 
+        logger.info('[Auth] Login successful:', { userId: user.id, role: user.role });
         return done(null, user);
       } catch (err) {
+        logger.error('[Auth] Login error:', err);
         return done(err);
       }
     })
@@ -218,14 +192,7 @@ export async function setupAuth(app: Express): Promise<void> {
         username: userRecord.username,
         email: userRecord.email,
         role: userRecord.role as UserRole,
-        name: userRecord.name || undefined,
-        phoneNumber: userRecord.phoneNumber || undefined,
-        lastOtpCode: userRecord.lastOtpCode || undefined,
-        otpExpiry: userRecord.otpExpiry || undefined,
-        kycStatus: userRecord.kycStatus || undefined,
-        createdAt: userRecord.createdAt || undefined,
-        plaidAccessToken: userRecord.plaidAccessToken || undefined,
-        faceIdHash: userRecord.faceIdHash || undefined
+        name: userRecord.name || undefined
       };
 
       done(null, user);
@@ -233,4 +200,6 @@ export async function setupAuth(app: Express): Promise<void> {
       done(err);
     }
   });
+
+  logger.info('[Auth] Auth setup completed successfully');
 }
