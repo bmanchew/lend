@@ -2,60 +2,25 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    let errorMessage;
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.message || errorData.error || res.statusText;
-    } catch {
-      errorMessage = res.statusText;
-    }
-    throw new Error(`${res.status}: ${errorMessage}`);
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
   }
-}
-
-// Helper to get auth headers
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('token');
-  return token ? { 
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  } : {
-    'Content-Type': 'application/json'
-  };
 }
 
 export async function apiRequest(
+  method: string,
   url: string,
-  init?: RequestInit
+  data?: unknown | undefined,
 ): Promise<Response> {
-  // Ensure URL starts with /api
-  const apiUrl = url.startsWith('/api') ? url : `/api${url}`;
-
-  const headers = new Headers({
-    ...getAuthHeaders(),
-    ...(init?.headers || {})
-  });
-
-  console.log('[API] Making request:', { 
-    method: init?.method || 'GET', 
-    url: apiUrl, 
-    hasToken: !!localStorage.getItem('token'),
-    timestamp: new Date().toISOString()
-  });
-
-  const response = await fetch(apiUrl, {
-    ...init,
-    headers,
+  const res = await fetch(url, {
+    method,
+    headers: data ? { "Content-Type": "application/json" } : {},
+    body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
 
-  if (response.status === 401) {
-    console.log('[API] Unauthorized request, clearing token');
-    localStorage.removeItem('token');
-  }
-
-  await throwIfResNotOk(response);
-  return response;
+  await throwIfResNotOk(res);
+  return res;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -64,33 +29,22 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    try {
-      const response = await fetch(queryKey[0] as string, {
-        headers: getAuthHeaders(),
-        credentials: "include",
-      });
+    const res = await fetch(queryKey[0] as string, {
+      credentials: "include",
+    });
 
-      if (response.status === 401) {
-        console.log('[API] Unauthorized query, clearing token');
-        localStorage.removeItem('token');
-        if (unauthorizedBehavior === "returnNull") {
-          return null;
-        }
-        throw new Error("Unauthorized");
-      }
-
-      await throwIfResNotOk(response);
-      return await response.json();
-    } catch (error) {
-      console.error('[API] Query error:', error);
-      throw error;
+    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      return null;
     }
+
+    await throwIfResNotOk(res);
+    return await res.json();
   };
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "returnNull" }),
+      queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,
