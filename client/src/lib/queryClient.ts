@@ -8,32 +8,30 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Helper to get auth headers
-function getAuthHeaders() {
+function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
 export async function apiRequest(
-  method: string,
   url: string,
-  data?: unknown | undefined,
+  init?: RequestInit
 ): Promise<Response> {
-  const headers = {
+  const headers = new Headers({
     ...getAuthHeaders(),
-    ...(data ? { "Content-Type": "application/json" } : {}),
-  };
+    ...(init?.headers || {})
+  });
 
   console.log('[API] Making request:', { 
-    method, 
+    method: init?.method || 'GET', 
     url, 
     hasToken: !!localStorage.getItem('token'),
     timestamp: new Date().toISOString()
   });
 
   const res = await fetch(url, {
-    method,
+    ...init,
     headers,
-    body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
 
@@ -47,7 +45,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const headers = getAuthHeaders();
+    const headers: HeadersInit = getAuthHeaders();
 
     console.log('[API] Making query:', { 
       queryKey, 

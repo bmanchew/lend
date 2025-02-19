@@ -19,50 +19,33 @@ import ApplyPage from "@/pages/apply";
 function AppRouter() {
   console.log('[Router] Rendering AppRouter');
 
-  // Structured route configurations with consistent /auth prefix
-  const authRoutes = [
-    { path: "/auth/customer", element: <CustomerLogin />, title: "Customer Login" },
-    { path: "/auth/merchant", element: <MerchantLogin />, title: "Merchant Login" },
-    { path: "/auth/admin", element: <AdminLogin />, title: "Admin Login" },
-  ];
-
-  const protectedRoutes = [
-    { 
-      path: "/customer/*", 
-      element: <ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />
-    },
-    { 
-      path: "/merchant/*", 
-      element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
-    },
-    { 
-      path: "/merchant/dashboard", 
-      element: <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />
-    },
-    { 
-      path: "/admin/*", 
-      element: <ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />
-    },
-    { 
-      path: "/admin/kyc-verifications", 
-      element: <ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />
-    }
-  ];
-
   return (
     <Routes>
       {/* Default redirect to merchant login */}
       <Route path="/" element={<Navigate to="/auth/merchant" replace />} />
 
       {/* Auth routes */}
-      {authRoutes.map(route => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
+      <Route path="/auth/customer" element={<CustomerLogin />} />
+      <Route path="/auth/merchant" element={<MerchantLogin />} />
+      <Route path="/auth/admin" element={<AdminLogin />} />
 
       {/* Protected routes */}
-      {protectedRoutes.map(route => (
-        <Route key={route.path} path={route.path} element={route.element} />
-      ))}
+      <Route 
+        path="/customer/*" 
+        element={<ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />}
+      />
+      <Route 
+        path="/merchant/*" 
+        element={<ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />}
+      />
+      <Route 
+        path="/admin/*" 
+        element={<ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />}
+      />
+      <Route 
+        path="/admin/kyc-verifications" 
+        element={<ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />}
+      />
 
       {/* Apply route */}
       <Route path="/apply/:token" element={<ApplyPage />} />

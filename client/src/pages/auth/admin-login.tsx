@@ -1,22 +1,24 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { LoginResponse, LoginData } from "@/hooks/use-auth";
 
 // Define form schema
 const adminLoginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
-  loginType: z.literal("admin")
 });
 
 type AdminLoginForm = z.infer<typeof adminLoginSchema>;
 
 export default function AdminLogin() {
+  const navigate = useNavigate();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
 
@@ -25,30 +27,40 @@ export default function AdminLogin() {
     defaultValues: {
       username: "",
       password: "",
-      loginType: "admin"
     },
   });
 
   async function onSubmit(data: AdminLoginForm) {
     try {
-      const response = await loginMutation.mutateAsync({
-        ...data,
-        deviceInfo: {
-          isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
-          platform: window.navigator.platform,
-          userAgent: window.navigator.userAgent
-        }
+      console.log("[Auth] Attempting login:", {
+        username: data.username,
+        loginType: "admin",
+        timestamp: new Date().toISOString()
       });
 
-      if (response?.role === 'admin') {
-        // Successfully logged in as admin
+      const loginData: LoginData = {
+        ...data,
+        loginType: "admin",
+        deviceInfo: {
+          isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+          platform: navigator.platform,
+          userAgent: navigator.userAgent
+        }
+      };
+
+      const response = await loginMutation.mutateAsync(loginData);
+
+      if (response.role === 'admin') {
+        // Store auth token
+        localStorage.setItem('token', response.token);
+
         toast({
           title: "Success",
           description: "Successfully logged in as admin"
         });
-        window.location.href = '/admin/dashboard';
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        console.error('Unexpected role after login:', response?.role);
+        console.error('Unexpected role after login:', response.role);
         toast({
           title: "Error",
           description: "Invalid credentials or insufficient permissions",
@@ -56,10 +68,10 @@ export default function AdminLogin() {
         });
       }
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.error("[Auth] Login failed:", error);
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to login. Please check your credentials.",
+        description: error.message || "Failed to login. Please check your credentials.",
         variant: "destructive"
       });
     }
