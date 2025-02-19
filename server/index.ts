@@ -98,19 +98,23 @@ const startServer = async () => {
     // Setup auth first (this adds the session middleware)
     await setupAuth(app);
 
-    // Mount API routes after auth setup
+    // Mount API routes after auth setup 
     app.use(apiRouter);
 
     // Setup Vite last
     await setupVite(app, httpServer);
 
-    // Error handling middleware
+    // Error handling middleware - Restore this
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
       logger.error('Error:', {
         error: err.message,
         stack: err.stack,
+        path: req.path,
+        method: req.method,
         timestamp: new Date().toISOString()
       });
+
+      // Send appropriate error response
       res.status(err.status || 500).json({
         error: err.message || 'Internal server error',
         ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
@@ -132,13 +136,23 @@ const startServer = async () => {
 
       // Make port available to other processes
       process.env.PORT = port.toString();
+
+      // Signal that the server is ready to accept connections
+      logger.info('Server is ready to accept connections');
     });
 
-    // Initialize Socket.IO
+    // Initialize Socket.IO with explicit error handling
     const io = new Server(httpServer, {
       cors: { origin: "*" },
       path: '/socket.io/',
       transports: ['websocket', 'polling']
+    });
+
+    io.on('error', (error) => {
+      logger.error('Socket.IO error:', {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
     });
 
     (global as any).io = io;
@@ -147,6 +161,14 @@ const startServer = async () => {
       logger.info('Client connected:', {
         socketId: socket.id,
         timestamp: new Date().toISOString()
+      });
+
+      socket.on('error', (error) => {
+        logger.error('Socket error:', {
+          socketId: socket.id,
+          error,
+          timestamp: new Date().toISOString()
+        });
       });
 
       socket.on('join_merchant_room', (merchantId: number) => {

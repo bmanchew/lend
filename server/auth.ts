@@ -45,19 +45,56 @@ class AuthService {
   async comparePasswords(supplied: string, stored: string): Promise<boolean> {
     try {
       if (!supplied || !stored) {
-        logger.error("[Auth] Missing password");
+        logger.error("[Auth] Missing password comparison input:", {
+          hasSupplied: !!supplied,
+          hasStored: !!stored,
+          timestamp: new Date().toISOString()
+        });
         return false;
       }
-      return bcrypt.compare(supplied, stored);
+
+      logger.info("[Auth] Attempting password comparison:", {
+        suppliedLength: supplied.length,
+        storedLength: stored.length,
+        suppliedPassword: supplied,  // Temporary for debugging
+        storedHash: stored,         // Temporary for debugging
+        timestamp: new Date().toISOString()
+      });
+
+      const isValid = await bcrypt.compare(supplied, stored);
+
+      logger.info("[Auth] Password comparison result:", {
+        isValid,
+        timestamp: new Date().toISOString()
+      });
+
+      return isValid;
     } catch (error) {
-      logger.error("[Auth] Password comparison error:", error);
+      logger.error("[Auth] Password comparison error:", {
+        error,
+        timestamp: new Date().toISOString()
+      });
       return false;
     }
   }
 
   async hashPassword(password: string): Promise<string> {
-    const salt = await bcrypt.genSalt(10);
-    return bcrypt.hash(password, salt);
+    try {
+      const salt = await bcrypt.genSalt(this.config.saltRounds);
+      const hash = await bcrypt.hash(password, salt);
+      logger.info("[Auth] Password hashed successfully:", {
+        inputLength: password.length,
+        hashLength: hash.length,
+        timestamp: new Date().toISOString()
+      });
+      return hash;
+    } catch (error) {
+      logger.error("[Auth] Password hashing error:", {
+        error,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
   }
 
   async generateJWT(user: Express.User): Promise<string> {
@@ -86,10 +123,10 @@ class AuthService {
 
 export const authService = new AuthService();
 
-export function setupAuth(app: Express): void {
+export async function setupAuth(app: Express): Promise<void> {
   logger.info('[Auth] Starting auth setup...');
 
-  // Initialize passport but don't set up sessions
+  // Initialize passport
   app.use(passport.initialize());
 
   // Set up the local strategy for username/password auth
@@ -97,54 +134,58 @@ export function setupAuth(app: Express): void {
     usernameField: 'username',
     passwordField: 'password',
     passReqToCallback: true
-  }, async (req, username, password, done) => {
+  }, async (req: any, username: string, password: string, done: any) => {
     try {
       const loginType = req.body.loginType as UserRole;
-      logger.info('[Auth] Login attempt:', { username, loginType });
+      logger.info('[Auth] LocalStrategy executing:', { 
+        username, 
+        loginType,
+        hasPassword: !!password,
+        timestamp: new Date().toISOString()
+      });
 
-      if (!username || !password) {
-        logger.error('[Auth] Missing credentials');
-        return done(null, false, { message: "Missing credentials" });
-      }
-
+      // Get user from database
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.username, username))
+        .where(eq(users.username, username.trim()))
         .limit(1);
 
-      logger.info('[Auth] User lookup result:', { 
+      logger.info('[Auth] User lookup result:', {
         found: !!user,
-        username,
+        username: username.trim(),
         requestedRole: loginType,
         actualRole: user?.role,
-        hasPassword: !!user?.password
+        hasPassword: !!user?.password,
+        userId: user?.id,
+        timestamp: new Date().toISOString()
       });
 
       if (!user || !user.password) {
-        logger.error('[Auth] User not found or invalid password');
+        logger.error('[Auth] User not found or invalid password:', {
+          username: username.trim(),
+          timestamp: new Date().toISOString()
+        });
         return done(null, false, { message: "Invalid credentials" });
       }
 
       // Enhanced role validation for admin users
       if (loginType === 'admin' && user.role !== 'admin') {
         logger.error('[Auth] Unauthorized admin access attempt:', {
-          username,
-          actualRole: user.role
+          username: username.trim(),
+          actualRole: user.role,
+          timestamp: new Date().toISOString()
         });
         return done(null, false, { message: "This login is for admin accounts only" });
       }
 
       const isValid = await authService.comparePasswords(password, user.password);
-      logger.info('[Auth] Password verification result:', { 
-        username,
-        isValid,
-        passwordLength: password.length,
-        storedPasswordLength: user.password.length
-      });
 
       if (!isValid) {
-        logger.error('[Auth] Invalid password for user:', username);
+        logger.error('[Auth] Invalid password for user:', {
+          username: username.trim(),
+          timestamp: new Date().toISOString()
+        });
         return done(null, false, { message: "Invalid credentials" });
       }
 
@@ -159,19 +200,23 @@ export function setupAuth(app: Express): void {
       logger.info('[Auth] Login successful:', {
         userId: user.id,
         role: user.role,
-        loginType
+        loginType,
+        timestamp: new Date().toISOString()
       });
 
       return done(null, userResponse);
     } catch (err) {
-      logger.error('[Auth] Login error:', err);
+      logger.error('[Auth] Login error:', {
+        error: err,
+        timestamp: new Date().toISOString()
+      });
       return done(err);
     }
   }));
 
   app.post("/api/auth/login", async (req, res, next) => {
-    logger.info('[Auth] Login attempt with:', { 
-      username: req.body.username?.trim(), 
+    logger.info('[Auth] Login request received:', {
+      username: req.body.username?.trim(),
       loginType: req.body.loginType,
       hasPassword: !!req.body.password,
       timestamp: new Date().toISOString()
@@ -179,25 +224,37 @@ export function setupAuth(app: Express): void {
 
     passport.authenticate('local', async (err: any, user: Express.User | false, info: any) => {
       if (err) {
-        logger.error('[Auth] Login error:', err);
+        logger.error('[Auth] Login error:', {
+          error: err,
+          timestamp: new Date().toISOString()
+        });
         return next(err);
       }
 
       if (!user) {
-        logger.error('[Auth] Authentication failed:', info);
+        logger.error('[Auth] Authentication failed:', {
+          info,
+          timestamp: new Date().toISOString()
+        });
         return res.status(401).json({ error: info.message || 'Authentication failed' });
       }
 
       try {
         const token = await authService.generateJWT(user);
-        logger.info('[Auth] Generated JWT token for user:', { userId: user.id });
+        logger.info('[Auth] Generated JWT token for user:', {
+          userId: user.id,
+          timestamp: new Date().toISOString()
+        });
 
         return res.json({
           ...user,
           token
         });
       } catch (error) {
-        logger.error('[Auth] Token generation error:', error);
+        logger.error('[Auth] Token generation error:', {
+          error,
+          timestamp: new Date().toISOString()
+        });
         return res.status(500).json({ error: 'Failed to generate authentication token' });
       }
     })(req, res, next);

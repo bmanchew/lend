@@ -226,12 +226,22 @@ router.post("/api/auth/register", asyncHandler(async (req: Request, res: Respons
 }));
 
 
-
 // JWT verification middleware - apply to all routes below this line
 router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const path = req.path;
-  // Skip JWT verification for public routes and static assets
-  if (path.startsWith('/api/auth/') || path === '/' || path.startsWith('/_next/') || path.startsWith('/static/')) {
+
+  // Skip JWT verification for public routes, static assets and frontend routes
+  if (
+    path.startsWith('/api/auth/') || 
+    path === '/' || 
+    path.startsWith('/_next/') || 
+    path.startsWith('/static/') ||
+    path.startsWith('/@vite/') ||
+    path.startsWith('/src/') ||
+    path.startsWith('/node_modules/') ||
+    path.startsWith('/assets/') ||
+    path.startsWith('/auth/')
+  ) {
     return next();
   }
 
