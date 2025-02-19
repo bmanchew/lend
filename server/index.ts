@@ -92,6 +92,9 @@ const waitForPort = async (port: number, retries = 30, interval = 500): Promise<
 
 const startServer = async () => {
   try {
+    // Set default port
+    const port = parseInt(process.env.PORT || '3000');
+    
     // Create HTTP server
     const httpServer = createServer(app);
 
