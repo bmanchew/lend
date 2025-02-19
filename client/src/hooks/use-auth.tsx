@@ -8,16 +8,7 @@ import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useMobile } from "@/hooks/use-mobile";
-import type { LoginData } from "@/types";
-
-export interface LoginResponse {
-  id: number;
-  username: string;
-  email: string;
-  role: string;
-  name?: string;
-  token: string;
-}
+import type { LoginData, LoginResponse } from "@/types";
 
 type AuthContextType = {
   user: LoginResponse | null;
@@ -47,26 +38,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginMutation = useMutation<LoginResponse, Error, LoginData>({
     mutationFn: async (data: LoginData) => {
       console.log('[Auth] Attempting login:', {
-        username: data.username,
+        username: data.username.trim(),
         loginType: data.loginType,
         timestamp: new Date().toISOString()
       });
 
       try {
-        const response = await apiRequest("/api/auth/login", {
+        const response = await apiRequest("/api/login", {
           method: 'POST',
-          body: JSON.stringify(data)
+          body: JSON.stringify({
+            ...data,
+            username: data.username.trim()
+          })
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          const errorData = await response.json();
           console.error('[Auth] Login response error:', {
             status: response.status,
             statusText: response.statusText,
             errorData,
             timestamp: new Date().toISOString()
           });
-          throw new Error(errorData.message || errorData.error || 'Login failed');
+          throw new Error(errorData.error || errorData.message || 'Login failed');
         }
 
         const responseData = await response.json();
@@ -90,16 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('token', data.token);
       }
       queryClient.setQueryData(["/api/user"], data);
-
-      // Redirect based on role
-      if (data.role === 'admin') {
-        setLocation('/admin/dashboard');
-      } else if (data.role === 'merchant') {
-        setLocation('/merchant/dashboard');
-      } else {
-        setLocation(`/${data.role}`);
-      }
-
       toast({
         title: "Success",
         description: `Successfully logged in as ${data.role}`
@@ -118,13 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("/api/logout", {
+      await apiRequest("/api/logout", {
         method: 'POST'
       });
-
-      if (!response.ok) {
-        throw new Error('Logout failed');
-      }
       localStorage.removeItem('token');
       queryClient.setQueryData(["/api/user"], null);
     },

@@ -51,6 +51,7 @@ export async function apiRequest(
     localStorage.removeItem('token');
   }
 
+  await throwIfResNotOk(response);
   return response;
 }
 

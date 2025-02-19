@@ -77,28 +77,6 @@ const cacheMiddleware = (duration: number) => {
   };
 };
 
-// JWT verification middleware
-const verifyJWT = async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  logger.info('[Auth] Verifying JWT for path:', req.path);
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-
-  if (!token) {
-    logger.error('[Auth] No token provided for path:', req.path);
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const user = authService.verifyJWT(token);
-  if (!user) {
-    logger.error('[Auth] JWT verification failed');
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-
-  req.user = user;
-  logger.info('[Auth] JWT verified successfully for user:', user.id);
-  next();
-};
-
 // Add input validation middleware
 const validateId = (req: Request, res: Response, next: NextFunction) => {
   const id = parseInt(req.params.id);
@@ -109,76 +87,99 @@ const validateId = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-// Public Routes (No Auth Required)
-router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
+// Register core middleware
+router.use(requestTrackingMiddleware);
+router.use(cacheMiddleware(300));
+
+// Public auth routes (NO JWT REQUIRED) - Moved to top of router
+router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
   logger.info('[Auth] Login attempt with:', { 
-    username: req.body.username, 
+    username: req.body.username?.trim(), 
     loginType: req.body.loginType,
     hasPassword: !!req.body.password,
-    body: req.body,
     timestamp: new Date().toISOString()
   });
+
   const { username, password, loginType } = req.body;
 
   if (!username || !password) {
-    logger.error('[Auth] Missing credentials:', { username: !!username, password: !!password });
+    logger.error('[Auth] Missing credentials:', { 
+      username: !!username, 
+      password: !!password,
+      timestamp: new Date().toISOString()
+    });
     return res.status(400).json({ error: "Username and password are required" });
   }
 
-  // Get user from database
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username.trim()))
-    .limit(1);
+  try {
+    // Get user from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username.trim()))
+      .limit(1);
 
-  if (!user) {
-    logger.info('[Auth] User not found:', username);
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
+    if (!user || !user.password) {
+      logger.info('[Auth] User not found or invalid password:', { 
+        username: username.trim(),
+        timestamp: new Date().toISOString()
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
-  // Verify password
-  const isValid = await authService.comparePasswords(password, user.password);
-  if (!isValid) {
-    logger.info('[Auth] Invalid password for user:', username);
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
+    // Verify password
+    const isValid = await authService.comparePasswords(password, user.password);
+    if (!isValid) {
+      logger.info('[Auth] Invalid password for user:', { 
+        username: username.trim(),
+        timestamp: new Date().toISOString()
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
-  // Check role match if loginType is provided
-  if (loginType && user.role !== loginType) {
-    logger.info('[Auth] Invalid role for user:', { 
-      username, 
-      expected: loginType, 
-      actual: user.role 
+    // Check role match if loginType is provided
+    if (loginType && user.role !== loginType) {
+      logger.info('[Auth] Invalid role for user:', { 
+        username, 
+        expected: loginType, 
+        actual: user.role,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+    }
+
+    // Create user response without password
+    const userResponse = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role as UserRole,
+      name: user.name || undefined
+    };
+
+    // Generate JWT token
+    const token = await authService.generateJWT(userResponse);
+    logger.info('[Auth] Login successful:', { 
+      userId: user.id, 
+      role: user.role,
+      timestamp: new Date().toISOString()
     });
-    return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+
+    return res.json({
+      token,
+      ...userResponse
+    });
+  } catch (error) {
+    logger.error('[Auth] Unexpected error during login:', {
+      error,
+      timestamp: new Date().toISOString()
+    });
+    return res.status(500).json({ error: "An unexpected error occurred" });
   }
-
-  // Create user object without password
-  const userWithoutPassword = {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    name: user.name
-  };
-
-  // Generate JWT token
-  const token = await authService.generateJWT(userWithoutPassword);
-  logger.info('[Auth] Login successful:', { 
-    userId: user.id, 
-    role: user.role,
-    timestamp: new Date().toISOString()
-  });
-
-  return res.json({
-    token,
-    ...userWithoutPassword
-  });
 }));
 
 router.post("/auth/register", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Registration attempt:', { username: req.body.username, role: req.body.role });
+  logger.info('[Auth] Registration attempt:', { username: req.body.username, role: req.body.role, timestamp: new Date().toISOString() });
   const { username, password, email, name, role } = req.body;
 
   if (!username || !password || !email || !name || !role) {
@@ -193,7 +194,7 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
     .limit(1);
 
   if (existingUser) {
-    logger.log('[Auth] Registration failed - username exists:', username);
+    logger.log('[Auth] Registration failed - username exists:', { username, timestamp: new Date().toISOString() });
     return res.status(400).json({ error: "Username already exists" });
   }
 
@@ -209,7 +210,7 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
     } as typeof users.$inferInsert)
     .returning();
 
-  logger.info('[Auth] Registration successful:', { userId: user.id, role: user.role });
+  logger.info('[Auth] Registration successful:', { userId: user.id, role: user.role, timestamp: new Date().toISOString() });
 
   // Generate JWT token for automatic login
   const token = await authService.generateJWT(user);
@@ -224,79 +225,50 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
   });
 }));
 
-// Register core middleware
-router.use(requestTrackingMiddleware);
-router.use(cacheMiddleware(300));
 
-// Public auth routes
-router.post("/api/auth/login", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Login attempt:', { 
-    username: req.body.username, 
-    loginType: req.body.loginType,
+// JWT verification middleware - apply to all routes below this line
+router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const path = req.path;
+  // Skip JWT verification for public routes
+  if (path === '/api/login' || path === '/auth/register') {
+    return next();
+  }
+
+  logger.info('[Auth] Verifying JWT for path:', {
+    path,
     timestamp: new Date().toISOString()
   });
-  const { username, password, loginType } = req.body;
 
-  if (!username || !password) {
-    logger.error('[Auth] Missing credentials:', { username: !!username, password: !!password });
-    return res.status(400).json({ error: "Username and password are required" });
-  }
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
-  // Get user from database
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username.trim()))
-    .limit(1);
-
-  if (!user) {
-    logger.info('[Auth] User not found:', username);
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  // Verify password
-  const isValid = await authService.comparePasswords(password, user.password);
-  if (!isValid) {
-    logger.info('[Auth] Invalid password for user:', username);
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  // Check role match if loginType is provided
-  if (loginType && user.role !== loginType) {
-    logger.info('[Auth] Invalid role for user:', { 
-      username, 
-      expected: loginType, 
-      actual: user.role 
+  if (!token) {
+    logger.error('[Auth] No token provided for path:', {
+      path,
+      timestamp: new Date().toISOString()
     });
-    return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
-  // Create user object without password
-  const userWithoutPassword = {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    name: user.name
-  };
+  const user = authService.verifyJWT(token);
+  if (!user) {
+    logger.error('[Auth] JWT verification failed:', {
+      path,
+      timestamp: new Date().toISOString()
+    });
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
 
-  // Generate JWT token
-  const token = await authService.generateJWT(userWithoutPassword);
-  logger.info('[Auth] Login successful:', { 
-    userId: user.id, 
-    role: user.role,
+  req.user = user;
+  logger.info('[Auth] JWT verified successfully:', {
+    userId: user.id,
+    path,
     timestamp: new Date().toISOString()
   });
-
-  return res.json({
-    token,
-    ...userWithoutPassword
-  });
-}));
+  next();
+});
 
 // Protected Routes (JWT Required)
-router.use(verifyJWT); // Apply JWT verification to all routes below this line
-
 router.get("/api/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -365,7 +337,7 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", userId);
+    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", {userId, timestamp: new Date().toISOString()});
 
     const merchantResults = await db
       .select()
@@ -388,7 +360,7 @@ router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser
 router.get("/merchants/:id/contracts", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const merchantId = parseInt(req.params.id);
-    logger.info("[Routes] Fetching contracts for merchant:", { merchantId });
+    logger.info("[Routes] Fetching contracts for merchant:", { merchantId, timestamp: new Date().toISOString() });
 
     const merchantContracts = await db.query.contracts.findMany({
       where: eq(contracts.merchantId, merchantId),
@@ -415,12 +387,12 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
 
   // Validate required fields
   if (!email || !companyName) {
-    logger.error("[Merchant Creation] Missing required fields");
+    logger.error("[Merchant Creation] Missing required fields", { timestamp: new Date().toISOString() });
     return res.status(400).json({ error: 'Email and company name are required' });
   }
 
   // Check for existing user first
-  logger.info("[Merchant Creation] Checking for existing user with email:", email);
+  logger.info("[Merchant Creation] Checking for existing user with email:", { email, timestamp: new Date().toISOString() });
   const existingUser = await db
     .select()
     .from(users)
@@ -435,13 +407,13 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       .set({ role: 'merchant' })
       .where(eq(users.id, existingUser[0].id))
       .returning();
-    logger.info("[Merchant Creation] Updated existing user to merchant:", merchantUser);
+    logger.info("[Merchant Creation] Updated existing user to merchant:", { merchantUser, timestamp: new Date().toISOString() });
   } else {
 
-    logger.info("[Merchant Creation] Generated temporary password");
+    logger.info("[Merchant Creation] Generated temporary password", { timestamp: new Date().toISOString() });
     const hashedPassword = await authService.hashPassword(tempPassword);
 
-    logger.info("[Merchant Creation] Creating new merchant user account");
+    logger.info("[Merchant Creation] Creating new merchant user account", { timestamp: new Date().toISOString() });
     [merchantUser] = await db
       .insert(users)
       .values({
@@ -458,7 +430,8 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
   logger.info("[Merchant Creation] Created merchant user:", {
     id: merchantUser.id,
     email: merchantUser.email,
-    role: merchantUser.role
+    role: merchantUser.role,
+    timestamp: new Date().toISOString()
   });
 
   // Create merchant record
@@ -480,7 +453,7 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
 }));
 
 router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  logger.info("[Merchants] Fetching all merchants");
+  logger.info("[Merchants] Fetching all merchants", { timestamp: new Date().toISOString() });
   try {
     const allMerchants = await db
       .select({
@@ -516,7 +489,7 @@ router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response
 }));
 
 router.post("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  logger.info("[Programs] Creating new program:", req.body);
+  logger.info("[Programs] Creating new program:", { ...req.body, timestamp: new Date().toISOString() });
   const { name, term, interestRate } = req.body;
   const merchantId = parseInt(req.params.id);
 
@@ -575,7 +548,7 @@ router.get("/contracts", asyncHandler(async (req: RequestWithUser, res: Response
 
     const allContracts = await query.orderBy(desc(contracts.createdAt));
 
-    logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length });
+    logger.info("[Routes] Successfully fetched contracts:", { count: allContracts.length, timestamp: new Date().toISOString() });
     return res.json(allContracts);
   } catch (err) {
     logger.error("[Routes] Error fetching contracts:", err);
@@ -785,7 +758,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
     // Generate application URL with proper encoding
     const appUrl = process.env.APP_URL || '';
     if (!appUrl) {
-      logger.error('[LoanApplication] Missing APP_URL environment variable');
+      logger.error('[LoanApplication] Missing APP_URL environment variable', { timestamp: new Date().toISOString() });
       return res.status(500).json({
         success: false,
         error: 'Server configuration error'
@@ -1006,16 +979,6 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
   }
 }));
 
-// Update PlaidContractUpdate interface to match schema
-interface PlaidContractUpdate {
-  status?: string;
-  plaidAccessToken?: string | null;
-  plaidAccountId?: string | null;
-  achVerificationStatus?: string | null;
-  lastPaymentId?: string | null;
-  lastPaymentStatus?: string | null;
-}
-
 router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
@@ -1030,7 +993,7 @@ router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Re
     if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
 
     const [updatedContract] = await db
-      .update(contracts)
+            .update(contracts)
       .set(updates)
       .where(eq(contracts.id, contractId))
       .returning();
@@ -1262,7 +1225,7 @@ router.post("/plaid/create-link-token", asyncHandler(async (req: RequestWithUser
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    logger.info('Creating Plaid link token for user:', { userId });
+    logger.info('Creating Plaid link token for user:', { userId, timestamp: new Date().toISOString() });
     const linkToken = await PlaidService.createLinkToken(userId.toString());
 
     return res.json({
