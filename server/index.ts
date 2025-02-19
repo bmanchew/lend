@@ -104,7 +104,7 @@ const startServer = async () => {
     // Setup Vite last
     await setupVite(app, httpServer);
 
-    // Error handling middleware - Restore this
+    // Error handling middleware
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
       logger.error('Error:', {
         error: err.message,
@@ -114,7 +114,6 @@ const startServer = async () => {
         timestamp: new Date().toISOString()
       });
 
-      // Send appropriate error response
       res.status(err.status || 500).json({
         error: err.message || 'Internal server error',
         ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
@@ -127,18 +126,43 @@ const startServer = async () => {
     // Wait for port to be available before starting
     await waitForPort(port);
 
-    // Start server
-    httpServer.listen(port, "0.0.0.0", () => {
-      logger.info(`Server started successfully`, {
-        url: `http://0.0.0.0:${port}`,
-        timestamp: new Date().toISOString()
+    // Start server with proper signaling
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(port, "0.0.0.0", () => {
+        logger.info(`Server started successfully`, {
+          url: `http://0.0.0.0:${port}`,
+          timestamp: new Date().toISOString()
+        });
+
+        // Make port available to other processes
+        process.env.PORT = port.toString();
+
+        // Signal that the server is fully ready
+        logger.info('Server is ready to accept connections', {
+          port,
+          environment: process.env.NODE_ENV,
+          timestamp: new Date().toISOString()
+        });
+
+        // Write a file to signal the port is ready
+        try {
+          const fs = require('fs');
+          fs.writeFileSync('.port-ready', port.toString());
+        } catch (err) {
+          logger.warn('Could not write port-ready file:', err);
+        }
+
+        resolve();
       });
 
-      // Make port available to other processes
-      process.env.PORT = port.toString();
-
-      // Signal that the server is ready to accept connections
-      logger.info('Server is ready to accept connections');
+      httpServer.on('error', (error: Error) => {
+        logger.error('Server failed to start:', {
+          error: error.message,
+          stack: error.stack,
+          timestamp: new Date().toISOString()
+        });
+        reject(error);
+      });
     });
 
     // Initialize Socket.IO with explicit error handling
