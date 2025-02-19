@@ -123,9 +123,6 @@ const startServer = async () => {
       });
     });
 
-    // Find available port
-    const port = parseInt(process.env.PORT || '3000');
-
     // Wait for port to be available before starting
     await waitForPort(port);
 
