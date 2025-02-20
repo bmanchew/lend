@@ -1,5 +1,6 @@
+
 import { db } from "@db";
-import { merchants, users, programs } from "@db/schema";
+import { merchants, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 async function createMerchant() {
@@ -28,45 +29,31 @@ async function createMerchant() {
         .set({
           companyName: "Pagel Enterprises",
           status: "active",
-          reserveBalance: "0", // Store as string to match schema
+          reserveBalance: 0,
           website: "https://pagel.com",
           address: "123 Main St"
         })
         .where(eq(merchants.id, existingMerchant[0].id))
         .returning();
-
       console.log("Updated merchant:", merchant);
     } else {
       console.log("Creating new merchant...");
       const [merchant] = await db
         .insert(merchants)
         .values({
+          userId: adminUser.id,
           companyName: "Pagel Enterprises",
           status: "active",
-          reserveBalance: "0", // Store as string to match schema
+          reserveBalance: 0,
           website: "https://pagel.com",
           address: "123 Main St",
-          userId: adminUser.id
+          ein: "12-3456789"
         })
         .returning();
-
-      // Create default program with fixed terms
-      const [program] = await db
-        .insert(programs)
-        .values({
-          merchantId: merchant.id,
-          name: 'Standard Program',
-          term: 24,
-          interestRate: '0',
-          active: true
-        })
-        .returning();
-
       console.log("Created merchant:", merchant);
-      console.log("Created program:", program);
     }
   } catch (err) {
-    console.error("Error in createMerchant:", err instanceof Error ? err.message : err);
+    console.error("Error in createMerchant:", err);
     process.exit(1);
   }
 }

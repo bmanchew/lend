@@ -8,7 +8,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,15 +48,14 @@ export function CreateMerchantForm() {
         body: JSON.stringify(data),
       });
 
-      const result = await response.json();
-
       if (!response.ok) {
-        throw new Error(result.error || "Failed to create merchant");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create merchant");
       }
 
       toast({
         title: "Success",
-        description: "Merchant account created successfully",
+        description: "Merchant account created and credentials sent",
       });
       form.reset();
     } catch (error) {
@@ -75,19 +73,6 @@ export function CreateMerchantForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="bg-muted/50 p-6 rounded-lg mb-6 border border-muted-foreground/20">
-          <h3 className="font-semibold mb-2">Fixed Program Terms</h3>
-          <FormDescription className="text-sm space-y-2">
-            <p>All merchants are automatically enrolled in our standard financing program:</p>
-            <ul className="list-disc list-inside ml-2">
-              <li>Term Length: 24 months</li>
-              <li>Interest Rate: 0% APR</li>
-              <li>No setup or enrollment fees</li>
-            </ul>
-            <p className="mt-2 text-xs">These terms are fixed and cannot be modified.</p>
-          </FormDescription>
-        </div>
-
         <FormField
           control={form.control}
           name="companyName"
@@ -153,7 +138,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isLoading} className="w-full">
+        <Button type="submit" disabled={isLoading}>
           {isLoading ? "Creating..." : "Create Merchant"}
         </Button>
       </form>
