@@ -21,7 +21,6 @@ const applicationSchema = z.object({
       const cleaned = val.replace(/\D/g, '');
       return cleaned.length === 10;
     }, "Must be a valid 10-digit phone number"),
-  program: z.string().min(1, "Program is required"),
   fundingAmount: z.number().min(1000, "Minimum funding amount is $1,000"),
   salesRepEmail: z.string().email("Valid sales rep email is required")
 }).required();
@@ -262,30 +261,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="program"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Program</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select program" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {programs?.map((program: any) => (
-                            <SelectItem key={program.id} value={program.id.toString()}>
-                              {program.name} ({program.term} months @ {program.interestRate}%)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              
               <FormField
                 control={form.control}
                 name="fundingAmount"
