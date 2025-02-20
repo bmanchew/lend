@@ -467,6 +467,12 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
   const tempPassword = Math.random().toString(36).slice(-8);
 
   try {
+    logger.info("[Merchant Creation] Starting merchant creation:", {
+      email,
+      companyName,
+      timestamp: new Date().toISOString()
+    });
+
     // Validate required fields
     if (!email || !companyName) {
       return res.status(400).json({ 
@@ -475,16 +481,18 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       });
     }
 
-    // Check for existing user first
-    const [existingUser] = await db
+    // Check for existing user
+    const existingUsers = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
+      .where(eq(users.email, email));
 
-    let merchantUser;
-    if (existingUser) {
-      // Update existing user to merchant role if found
+    const hashedPassword = await authService.hashPassword(tempPassword);
+    let userId;
+
+    if (existingUsers.length > 0) {
+      // Update existing user
+      const existingUser = existingUsers[0];
       await db
         .update(users)
         .set({ 
@@ -492,12 +500,15 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
           phoneNumber
         })
         .where(eq(users.id, existingUser.id));
+      userId = existingUser.id;
 
-      merchantUser = existingUser;
+      logger.info("[Merchant Creation] Updated existing user:", {
+        userId,
+        email,
+        timestamp: new Date().toISOString()
+      });
     } else {
-      // Create new user if not found
-      const hashedPassword = await authService.hashPassword(tempPassword);
-
+      // Create new user
       await db
         .insert(users)
         .values({
@@ -509,23 +520,28 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
           phoneNumber
         });
 
-      // Get the created user
-      [merchantUser] = await db
+      const newUsers = await db
         .select()
         .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
+        .where(eq(users.email, email));
+
+      if (newUsers.length === 0) {
+        throw new Error('Failed to create user');
+      }
+
+      userId = newUsers[0].id;
+      logger.info("[Merchant Creation] Created new user:", {
+        userId,
+        email,
+        timestamp: new Date().toISOString()
+      });
     }
 
-    if (!merchantUser) {
-      throw new Error('Failed to create or update user');
-    }
-
-    // Create merchant record with fixed program settings
+    // Create merchant record
     await db
       .insert(merchants)
       .values({
-        userId: merchantUser.id,
+        userId,
         companyName,
         address,
         website,
@@ -533,59 +549,56 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
         reserveBalance: '0'
       });
 
-    // Get the created merchant
-    const [merchant] = await db
+    const createdMerchants = await db
       .select()
       .from(merchants)
-      .where(eq(merchants.userId, merchantUser.id))
-      .limit(1);
+      .where(eq(merchants.userId, userId));
 
-    if (!merchant) {
+    if (createdMerchants.length === 0) {
       throw new Error('Failed to create merchant record');
     }
+
+    const merchantId = createdMerchants[0].id;
 
     // Create default program with fixed terms (24 months, 0% APR)
     await db
       .insert(programs)
       .values({
-        merchantId: merchant.id,
+        merchantId,
         name: 'Standard Program',
         term: 24,
         interestRate: '0',
         active: true
       });
 
-    // Get the created program
-    const [program] = await db
+    const createdPrograms = await db
       .select()
       .from(programs)
-      .where(eq(programs.merchantId, merchant.id))
-      .limit(1);
+      .where(eq(programs.merchantId, merchantId));
 
-    if (!program) {
+    if (createdPrograms.length === 0) {
       throw new Error('Failed to create program');
     }
 
-    // Log success
-    logger.info("[Merchant Creation] Successfully created merchant:", {
-      merchantId: merchant.id,
-      userId: merchantUser.id,
-      programId: program.id,
+    logger.info("[Merchant Creation] Successfully created merchant with program:", {
+      merchantId,
+      userId,
+      programId: createdPrograms[0].id,
       timestamp: new Date().toISOString()
     });
 
-    // Send the response
+    // Send response
     return res.status(201).json({
       status: 'success',
       data: {
-        merchant,
+        merchant: createdMerchants[0],
         user: {
-          id: merchantUser.id,
-          email: merchantUser.email,
-          role: merchantUser.role,
-          name: merchantUser.name
+          id: userId,
+          email,
+          role: 'merchant',
+          name: companyName
         },
-        program
+        program: createdPrograms[0]
       }
     });
   } catch (error) {
@@ -762,7 +775,6 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
     } as typeof contracts.$inferInsert);
 
     const [newContract] = await db.select().from(contracts).where(eq(contracts.contractNumber, contractNumber)).limit(1);
-
 
     // Get merchant details for notifications
     const [merchant] = await db

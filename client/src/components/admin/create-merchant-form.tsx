@@ -49,14 +49,15 @@ export function CreateMerchantForm() {
         body: JSON.stringify(data),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create merchant");
+        throw new Error(result.error || "Failed to create merchant");
       }
 
       toast({
         title: "Success",
-        description: "Merchant account created successfully with 24-month term at 0% APR",
+        description: "Merchant account created successfully",
       });
       form.reset();
     } catch (error) {
@@ -74,10 +75,16 @@ export function CreateMerchantForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="bg-muted/50 p-4 rounded-lg mb-6">
-          <FormDescription className="text-sm font-medium">
-            All merchants are automatically enrolled in a 24-month term contract at 0% APR.
-            This program is fixed and cannot be modified.
+        <div className="bg-muted/50 p-6 rounded-lg mb-6 border border-muted-foreground/20">
+          <h3 className="font-semibold mb-2">Fixed Program Terms</h3>
+          <FormDescription className="text-sm space-y-2">
+            <p>All merchants are automatically enrolled in our standard financing program:</p>
+            <ul className="list-disc list-inside ml-2">
+              <li>Term Length: 24 months</li>
+              <li>Interest Rate: 0% APR</li>
+              <li>No setup or enrollment fees</li>
+            </ul>
+            <p className="mt-2 text-xs">These terms are fixed and cannot be modified.</p>
           </FormDescription>
         </div>
 
@@ -146,7 +153,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading} className="w-full">
           {isLoading ? "Creating..." : "Create Merchant"}
         </Button>
       </form>
