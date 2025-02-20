@@ -1,22 +1,34 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
-import { useLocation, useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+// Define validation schema
+const loginFormSchema = z.object({
+  phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
+  code: z.string().optional(),
+  loginType: z.literal("customer")
+});
+
+type LoginFormData = z.infer<typeof loginFormSchema>;
 
 export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
-  const [user, setUser] = useState(null); // Added state to store user data
+  const [user, setUser] = useState<{ id: string; role: string; phoneNumber: string } | null>(null);
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
 
-  const form = useForm({
+  const form = useForm<LoginFormData>({
+    resolver: zodResolver(loginFormSchema),
     defaultValues: {
       phoneNumber: "",
       code: "",
@@ -76,7 +88,6 @@ export default function CustomerLogin() {
         description: error.response?.data?.message || "Failed to send code",
         variant: "destructive"
       });
-      console.error("OTP send error:", error);
     }
   };
 
@@ -89,7 +100,7 @@ export default function CustomerLogin() {
     }
   }, [location]);
 
-  const handleVerifyAndContinue = async (data) => {
+  const handleVerifyAndContinue = async (data: LoginFormData) => {
     try {
       if (!data.code) {
         toast({ 
@@ -100,7 +111,6 @@ export default function CustomerLogin() {
         return;
       }
 
-      // Prevent form from being cleared during verification
       const phoneNumber = data.phoneNumber;
       console.log('[CustomerLogin] Verifying OTP:', { 
         phoneNumber: phoneNumber,
@@ -132,13 +142,6 @@ export default function CustomerLogin() {
         timestamp: new Date().toISOString()
       });
 
-      console.log('[CustomerLogin] Attempting login with:', {
-        originalPhone: phoneNumber,
-        formattedPhone,
-        otp,
-        timestamp: new Date().toISOString()
-      });
-
       const response = await axios.post("/api/login", {
         username: formattedPhone,
         password: otp,
@@ -154,21 +157,6 @@ export default function CustomerLogin() {
       if (!userData?.id) {
         console.error('[CustomerLogin] Missing user ID in response:', userData);
         throw new Error('Invalid login response - missing user ID');
-      }
-
-      console.log('[CustomerLogin] Validating user data:', {
-        userData,
-        timestamp: new Date().toISOString()
-      });
-
-      if (!userData || !userData.id) {
-        console.error('[CustomerLogin] Invalid user data received:', userData);
-        toast({ 
-          title: "Error", 
-          description: "Invalid user data received", 
-          variant: "destructive" 
-        });
-        return;
       }
 
       // Strict user validation
@@ -197,14 +185,6 @@ export default function CustomerLogin() {
         return;
       }
 
-      // Log user data for debugging
-      console.log('[CustomerLogin] User data received:', {
-        userId: userData.id,
-        role: userData.role,
-        phone: userData.phoneNumber,
-        timestamp: new Date().toISOString()
-      });
-
       try {
         // Ensure user ID is valid and properly formatted
         const normalizedUserId = userId.toString().trim();
@@ -221,26 +201,12 @@ export default function CustomerLogin() {
         const storedTempId = localStorage.getItem('temp_user_id');
         const storedCurrentId = sessionStorage.getItem('current_user_id');
 
-        console.log('[CustomerLogin] Storage verification:', {
-          userId,
-          storedTempId,
-          storedCurrentId,
-          timestamp: new Date().toISOString()
-        });
-
         if (storedTempId !== userId || storedCurrentId !== userId) {
           throw new Error('Storage validation failed');
         }
 
         // Use timeout to ensure storage is committed
         setTimeout(() => {
-          console.log('[CustomerLogin] Redirecting with verified storage:', {
-            userId,
-            role: userData.role,
-            localStorage: localStorage.getItem('temp_user_id'),
-            sessionStorage: sessionStorage.getItem('current_user_id'),
-            timestamp: new Date().toISOString()
-          });
           window.location.href = `/apply/${userId}?verification=true&from=login`;
         }, 100);
 
@@ -252,30 +218,15 @@ export default function CustomerLogin() {
           variant: "destructive"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("[CustomerLogin] Error:", error);
       toast({ 
         title: "Error", 
-        description: "Invalid verification code", 
+        description: error.response?.data?.message || "Invalid verification code", 
         variant: "destructive" 
       });
     }
   };
-
-
-  const initiateKYC = (userId) => {
-    // Replace this with your actual KYC initiation logic.  This is a placeholder.
-    console.log(`Initiating KYC for user ID: ${userId}`);
-    //Example using axios:
-    // axios.post('/api/initiateKYC', { userId })
-    //   .then(res => {
-    //     //Handle success
-    //   })
-    //   .catch(err => {
-    //     //Handle error
-    //   })
-  };
-
 
   return (
     <div className="container flex min-h-screen items-center justify-center">
@@ -286,7 +237,7 @@ export default function CustomerLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleVerifyAndContinue)} className="space-y-4"> {/* Changed onSubmit handler */}
+          <form onSubmit={form.handleSubmit(handleVerifyAndContinue)} className="space-y-4">
             <FormField
               control={form.control}
               name="phoneNumber"
@@ -353,7 +304,7 @@ export default function CustomerLogin() {
               </Button>
             )}
             {isOtpSent && (
-              <Button type="submit" className="w-full" >
+              <Button type="submit" className="w-full">
                 Verify & Continue
               </Button>
             )}

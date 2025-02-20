@@ -1,7 +1,14 @@
 import { MailService } from '@sendgrid/mail';
 import crypto from 'crypto';
+import { z } from 'zod';
 
 const mailService = new MailService();
+
+// Email validation schema
+const emailConfigSchema = z.object({
+  apiKey: z.string().min(1, 'SendGrid API key is required'),
+  fromEmail: z.string().email('Invalid sender email')
+});
 
 // Validate API key format and structure
 function validateApiKey(apiKey: string): { isValid: boolean; error?: string } {
@@ -28,17 +35,33 @@ function validateApiKey(apiKey: string): { isValid: boolean; error?: string } {
 
 // Get API key from environment
 const apiKey = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL = 'merchant@shifi.io'; // Sender email
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'merchant@shifi.io';
 
-const validation = validateApiKey(apiKey || '');
-if (!validation.isValid) {
-  console.error('SendGrid API key validation failed:', validation.error);
+try {
+  const config = emailConfigSchema.parse({
+    apiKey,
+    fromEmail: FROM_EMAIL
+  });
+
+  const validation = validateApiKey(config.apiKey);
+  if (!validation.isValid) {
+    throw new Error(validation.error);
+  }
+
+  mailService.setApiKey(config.apiKey);
+} catch (error) {
+  console.error('Email service configuration error:', error instanceof Error ? error.message : 'Unknown error');
   console.warn('Email functionality will be disabled');
-} else {
-  mailService.setApiKey(apiKey!);
 }
 
-mailService.setApiKey(apiKey!);
+// Email sending types
+const emailSchema = z.object({
+  to: z.string().email('Invalid recipient email'),
+  subject: z.string().min(1, 'Subject is required'),
+  html: z.string().min(1, 'Email content is required')
+});
+
+type EmailData = z.infer<typeof emailSchema>;
 
 // Test SendGrid connection
 export async function testSendGridConnection(): Promise<boolean> {
@@ -73,16 +96,9 @@ export async function testSendGridConnection(): Promise<boolean> {
 export async function sendVerificationEmail(to: string, token: string): Promise<boolean> {
   try {
     const verificationUrl = `${process.env.APP_URL || 'http://localhost:5000'}/verify-email?token=${token}`;
-    console.log('Attempting to send email with configuration:', {
-      to,
-      from: FROM_EMAIL,
-      verificationUrl,
-      apiKeyPrefix: apiKey?.substring(0, 5) + '...' // Log only the prefix for security
-    });
 
-    const msg = {
+    const emailData = emailSchema.parse({
       to,
-      from: FROM_EMAIL,
       subject: 'Verify your ShiFi email address',
       html: `
         <div>
@@ -91,10 +107,14 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
           <a href="${verificationUrl}">Verify Email Address</a>
           <p>If you did not create this account, please ignore this email.</p>
         </div>
-      `,
-    };
+      `
+    });
 
-    await mailService.send(msg);
+    await mailService.send({
+      ...emailData,
+      from: FROM_EMAIL
+    });
+
     console.log('Verification email sent successfully to:', to);
     return true;
   } catch (error: any) {
@@ -119,9 +139,8 @@ export async function sendMerchantCredentials(
   password: string
 ): Promise<boolean> {
   try {
-    const msg = {
+    const emailData = emailSchema.parse({
       to,
-      from: FROM_EMAIL,
       subject: 'Your Merchant Account Credentials',
       html: `
         <div>
@@ -132,14 +151,23 @@ export async function sendMerchantCredentials(
           <p>Please change your password after your first login.</p>
           <p>If you did not request this account, please contact support immediately.</p>
         </div>
-      `,
-    };
+      `
+    });
 
-    await mailService.send(msg);
+    await mailService.send({
+      ...emailData,
+      from: FROM_EMAIL
+    });
+
     console.log('Merchant credentials sent successfully to:', to);
     return true;
   } catch (error: any) {
-    console.error('Error sending merchant credentials:', error);
+    console.error('Error sending merchant credentials:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.body,
+      details: error.response?.headers,
+    });
     return false;
   }
 }
