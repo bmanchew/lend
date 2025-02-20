@@ -34,19 +34,20 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
     );
   }
 
-  if (!user) {
-    setLocation("/auth/merchant");
-    return null;
-  }
+  useEffect(() => {
+    if (!user) {
+      setLocation("/auth/merchant");
+    } else if (allowedRoles && !allowedRoles.includes(user.role)) {
+      toast({
+        title: "Access Denied",
+        description: `You don't have permission to access this area.`,
+        variant: "destructive"
+      });
+      setLocation(`/${user.role}`);
+    }
+  }, [user, allowedRoles, toast, setLocation]);
 
-  // Role-based routing with improved error handling
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    toast({
-      title: "Access Denied",
-      description: `You don't have permission to access this area.`,
-      variant: "destructive"
-    });
-    setLocation(`/${user.role}`);
+  if (!user || (allowedRoles && !allowedRoles.includes(user.role))) {
     return null;
   }
 
