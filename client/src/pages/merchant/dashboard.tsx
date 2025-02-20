@@ -128,10 +128,15 @@ export default function MerchantDashboard() {
   });
 
   const socket = useSocket(merchant?.id ?? 0);
+  const [isHealthy, setIsHealthy] = useState(true);
 
   const healthCheck = useCallback(() => {
-    if (!socket) return;
+    if (!socket) {
+      setIsHealthy(false);
+      return;
+    }
     socket.emit('health_check', { merchantId: merchant?.id });
+    setIsHealthy(true);
   }, [socket, merchant?.id]);
 
   useEffect(() => {
