@@ -1009,7 +1009,7 @@ router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Re
     if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
     if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
     if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
-    if ('last_payment_status' in req.body) updates.lastPaymentStatus = reqbody.last_payment_status;
+    if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
 
     const [updatedContract] = await db
             .update(contracts)
