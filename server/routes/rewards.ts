@@ -13,3 +13,22 @@ router.get('/balance', asyncHandler(async (req, res) => {
 }));
 
 export default router;
+import express from 'express';
+import { asyncHandler } from '../lib/async-handler';
+import { calculateRewards } from '../services/reward';
+
+const router = express.Router();
+
+router.post('/calculate', asyncHandler(async (req, res) => {
+  const { paymentAmount, paymentType, contractId } = req.body;
+  
+  const rewards = await calculateRewards({
+    amount: paymentAmount,
+    type: paymentType,
+    contractId
+  });
+
+  res.json({ rewards });
+}));
+
+export default router;

@@ -153,6 +153,32 @@ export class PlaidService {
 
   static async getLedgerBalance() {
     try {
+
+async function handleACHVerification(accountId: string): Promise<boolean> {
+  try {
+    const microDeposits = await plaidClient.sandboxItemPublicTokenCreate({
+      institution_id: 'ins_109508',
+      initial_products: ['auth']
+    });
+
+    if (!microDeposits) {
+      logger.error('Failed to initiate micro-deposits');
+      return false;
+    }
+
+    // Wait for micro-deposits to be processed (2-3 business days in production)
+    const verificationResult = await plaidClient.itemMicrodepositsVerify({
+      account_id: accountId,
+      amounts: [0.01, 0.02] // Example amounts
+    });
+
+    return verificationResult !== null;
+  } catch (error) {
+    logger.error('ACH verification failed:', error);
+    return false;
+  }
+}
+
       logger.info('Getting Plaid ledger balance');
       await this.validateSandboxSetup();
 

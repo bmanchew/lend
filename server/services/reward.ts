@@ -89,3 +89,34 @@ export const rewardService = {
     );
   }
 };
+import { logger } from '../lib/logger';
+
+interface RewardParams {
+  amount: number;
+  type: 'down_payment' | 'early_payment' | 'additional_payment';
+  contractId: string;
+}
+
+export async function calculateRewards(params: RewardParams): Promise<number> {
+  const REWARD_RATES = {
+    down_payment: 0.05, // 5% rewards on down payments
+    early_payment: 0.03, // 3% on early payments
+    additional_payment: 0.02 // 2% on additional payments
+  };
+
+  try {
+    const rewardRate = REWARD_RATES[params.type];
+    const rewardAmount = params.amount * rewardRate;
+    
+    logger.info(`Calculated rewards for contract ${params.contractId}:`, {
+      amount: params.amount,
+      type: params.type,
+      rewards: rewardAmount
+    });
+
+    return rewardAmount;
+  } catch (error) {
+    logger.error('Failed to calculate rewards:', error);
+    return 0;
+  }
+}
