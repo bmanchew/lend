@@ -48,10 +48,15 @@ export default function Apply() {
   }, [params, searchParams, userId]);
 
   // KYC status check
+  const [isCheckingKyc, setIsCheckingKyc] = useState(false);
+  const [kycError, setKycError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!showVerification || !userId) return;
 
     const checkKycStatus = async () => {
+      setIsCheckingKyc(true);
+      setKycError(null);
       console.log('[Apply] Checking KYC status for user:', userId);
 
       try {
@@ -76,11 +81,15 @@ export default function Apply() {
         }
       } catch (error) {
         console.error('[Apply] Error checking KYC status:', error);
+        const errorMsg = 'Unable to check verification status. Please try again.';
+        setKycError(errorMsg);
         toast({
           title: "Verification Error",
-          description: "Unable to check verification status. Please try again.",
+          description: errorMsg,
           variant: "destructive",
         });
+      } finally {
+        setIsCheckingKyc(false);
       }
     };
 
@@ -94,6 +103,31 @@ export default function Apply() {
       description: "Your loan application has been submitted successfully.",
     });
   };
+
+  if (isCheckingKyc) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p>Checking verification status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (kycError) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-50 border border-red-200 rounded p-4 text-center">
+          <h2 className="text-red-800 font-semibold mb-2">Verification Error</h2>
+          <p className="text-red-600">{kycError}</p>
+          <Button onClick={() => window.location.reload()} className="mt-4">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
