@@ -37,13 +37,20 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
   useEffect(() => {
     if (!user) {
       setLocation("/auth/merchant");
-    } else if (allowedRoles && !allowedRoles.includes(user.role)) {
-      toast({
-        title: "Access Denied",
-        description: `You don't have permission to access this area.`,
-        variant: "destructive"
-      });
-      setLocation(`/${user.role}`);
+      return;
+    }
+    
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      const timeout = setTimeout(() => {
+        toast({
+          title: "Access Denied",
+          description: `You don't have permission to access this area.`,
+          variant: "destructive"
+        });
+        setLocation(`/${user.role}`);
+      }, 0);
+      
+      return () => clearTimeout(timeout);
     }
   }, [user, allowedRoles, toast, setLocation]);
 
