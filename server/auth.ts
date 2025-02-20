@@ -222,6 +222,7 @@ export function setupAuth(app: Express): void {
         .limit(1);
 
       if (!user) {
+        logger.warn('[Auth] User not found during deserialization', { userId: id });
         return done(null, false);
       }
 
@@ -233,9 +234,10 @@ export function setupAuth(app: Express): void {
         name: user.name || undefined
       };
 
-      done(null, userResponse);
+      return done(null, userResponse);
     } catch (err) {
-      done(err);
+      logger.error('[Auth] Error during user deserialization:', err);
+      return done(new AuthError(500, 'Session error', AUTH_ERROR_CODES.SESSION_EXPIRED));
     }
   });
 
