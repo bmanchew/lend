@@ -1,0 +1,22 @@
+I reviewed your file and overall the structure is well‐organized. Here are a few observations and potential issues:
+
+1. **Missing Imports:**  
+   - In the `/rewards/balance` route you reference a table named `rewardsBalances` (used in the database query), but it isn’t imported from your schema. Make sure that it’s included in your imports from `"@db/schema"` or wherever it’s defined.  
+   - Several Plaid ledger routes (e.g., `/plaid/ledger/start-sweeps`, `/plaid/ledger/stop-sweeps`, `/plaid/ledger/manual-sweep`) call methods on `ledgerManager`, yet there’s no import for `ledgerManager` at the top. Confirm that you’re importing or defining this variable correctly.
+
+2. **Error Handling and Logging:**  
+   - Your error handler and logging are robust, though you might consider adding more detailed error information (e.g., requestId) in the error responses when in development mode.
+
+3. **Token Verification:**  
+   - In your JWT verification middleware, you’re using a synchronous call to `authService.verifyJWT(token)`. If this method is asynchronous or might throw errors, consider wrapping it in a try/catch or using async/await.
+
+4. **Type Safety:**  
+   - You’ve enhanced type declarations (like `RequestWithUser`), which is great. Double-check that every dynamic type conversion (e.g., using `parseInt`) is validated—this will help avoid potential NaN issues.
+
+5. **Modularity:**  
+   - With a long routes file, you might consider splitting the routes into multiple files (for example, separate files for contracts, merchants, Plaid integrations, and rewards) for easier maintenance.
+
+6. **Helper Functions Placeholders:**  
+   - Functions like `generateVerificationToken`, `sendVerificationEmail`, etc., are marked as “not implemented.” Just ensure that these are implemented in production or appropriately handled if they’re only placeholders.
+
+Overall, the code appears clean with proper middleware usage and error handling. Addressing the missing imports and confirming that all external services (like `ledgerManager`) are correctly imported should resolve any potential bugs. Let me know if you need further help with any specific issues!

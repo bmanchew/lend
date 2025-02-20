@@ -16,6 +16,7 @@ import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
 import type { User } from "./auth";
 import { asyncHandler } from './lib/async-handler';
+import { sendMerchantCredentials } from './services/email';
 
 // Updated type declarations for better type safety
 interface RequestWithUser extends Request {
@@ -327,33 +328,17 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
     const { companyName, email, phoneNumber, address, website } = req.body;
 
     // Validate required fields
-    if (!email || !companyName || !phoneNumber) {
+    if (!email || !companyName) {
       logger.error("[Merchant Creation] Missing required fields", {
         requestId,
         timestamp: new Date().toISOString()
       });
-      return res.status(400).json({ 
-        error: 'Email, company name, and phone number are required',
+      return res.status(400).json({
+        error: 'Email and company name are required',
         missingFields: {
           email: !email,
-          companyName: !companyName,
-          phoneNumber: !phoneNumber
+          companyName: !companyName
         }
-      });
-    }
-
-    // Format phone number using smsService
-    let formattedPhone;
-    try {
-      formattedPhone = smsService.formatPhoneNumber(phoneNumber);
-    } catch (phoneError) {
-      logger.error("[Merchant Creation] Invalid phone number format", {
-        requestId,
-        phone: phoneNumber,
-        error: phoneError instanceof Error ? phoneError.message : 'Unknown error'
-      });
-      return res.status(400).json({
-        error: 'Please provide a valid 10-digit US phone number (e.g., 2025550123)'
       });
     }
 
@@ -379,9 +364,9 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       if (existingUser[0].role !== 'merchant') {
         [merchantUser] = await db
           .update(users)
-          .set({ 
+          .set({
             role: 'merchant',
-            phoneNumber: formattedPhone,
+            phoneNumber,
             password: await authService.hashPassword(tempPassword)
           })
           .where(eq(users.id, existingUser[0].id))
@@ -410,7 +395,7 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
           email,
           name: companyName,
           role: 'merchant',
-          phoneNumber: formattedPhone,
+          phoneNumber,
           kycStatus: 'pending'
         } as typeof users.$inferInsert)
         .returning();
@@ -426,7 +411,7 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
         website: website || null,
         status: 'active',
         reserveBalance: '0',
-        phone: formattedPhone
+        phone: phoneNumber
       } as typeof merchants.$inferInsert)
       .returning();
 
@@ -439,19 +424,18 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       status: "active"
     } as typeof programs.$inferInsert);
 
-    // Send welcome message with credentials
-    const welcomeResult = await smsService.sendMerchantWelcome(formattedPhone, {
-      companyName,
-      loginUrl: `${process.env.APP_URL}/auth/merchant`,
-      username: email,
+    // Send welcome email with credentials
+    const emailSent = await sendMerchantCredentials(
+      email,
+      email, // username is same as email
       tempPassword
-    });
+    );
 
-    if (!welcomeResult) {
-      logger.warn("[Merchant Creation] Failed to send welcome message", {
+    if (!emailSent) {
+      logger.warn("[Merchant Creation] Failed to send welcome email", {
         requestId,
         merchantId: merchant.id,
-        phone: formattedPhone
+        email
       });
     }
 
@@ -461,7 +445,7 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
         merchantName: companyName,
         customerName: email,
         amount: 0,
-        phone: formattedPhone
+        phone: phoneNumber || 'Not provided'
       });
     } catch (slackError) {
       logger.warn("[Merchant Creation] Failed to send Slack notification", {
@@ -479,7 +463,7 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
     return res.status(201).json({
       merchant,
       user: merchantUser,
-      credentialsSent: welcomeResult
+      credentialsSent: emailSent
     });
 
   } catch (err) {
@@ -1032,7 +1016,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
 router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
-    const updates: Partial<typeof contracts.$inferInsert> = {};
+    const updates: Partial<typeof contracts.$inferInsert>> = {};
 
     // Map the updates with proper typing
     if (req.body.status) updates.status = req.body.status;
@@ -1298,9 +1282,6 @@ async function sendVerificationEmail(email: string, token: string): Promise<bool
   throw new Error("Function not implemented.");
 }
 
-async function sendMerchantCredentials(email: string, username: string, password: string): Promise<void> {
-  throw new Error("Function not implemented.");
-}
 
 async function testSendGridConnection(): Promise<boolean> {
   throw new Error("Function not implemented.");
