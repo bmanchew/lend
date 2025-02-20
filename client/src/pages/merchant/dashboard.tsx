@@ -16,7 +16,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { SelectContract, SelectMerchant } from "@db/schema";
 import { LoanApplicationDialog } from "@/components/merchant/loan-application-dialog";
 import { useSocket } from "@/hooks/use-socket";
-import { useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
