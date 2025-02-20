@@ -11,8 +11,12 @@ import portfinder from 'portfinder';
 
 // Essential middleware
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? 'https://shifi.replit.app' : '*',
+  credentials: true
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.urlencoded({ extended: false }));
 
 // Initialize authentication first

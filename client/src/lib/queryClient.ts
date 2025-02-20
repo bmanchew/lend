@@ -24,24 +24,29 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
-export async function apiRequest(
+const API_BASE = process.env.NODE_ENV === 'production' 
+  ? 'https://shifi.replit.app' 
+  : '';
+
+export const apiRequest = async (
   url: string,
-  init?: RequestInit
-): Promise<Response> {
+  options: RequestInit = {}
+): Promise<Response> => {
+  const fullUrl = `${API_BASE}${url}`;
   const headers = new Headers({
     ...getAuthHeaders(),
-    ...(init?.headers || {})
+    ...(options?.headers || {})
   });
 
   console.log('[API] Making request:', { 
-    method: init?.method || 'GET', 
-    url, 
+    method: options?.method || 'GET', 
+    url: fullUrl, 
     hasToken: !!localStorage.getItem('token'),
     timestamp: new Date().toISOString()
   });
 
-  const response = await fetch(url, {
-    ...init,
+  const response = await fetch(fullUrl, {
+    ...options,
     headers,
     credentials: "include",
   });
