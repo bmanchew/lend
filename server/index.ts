@@ -39,8 +39,9 @@ const startServer = async () => {
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Find available port, starting from 3000
-    const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    // Find available port, starting from 3000 or use environment variable
+    const defaultPort = 3000;
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) || defaultPort : defaultPort;
     const host = '0.0.0.0';
 
     // Set default timeout
