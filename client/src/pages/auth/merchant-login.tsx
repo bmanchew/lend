@@ -25,11 +25,11 @@ export default function MerchantLogin() {
   // Check for existing token and redirect if already logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && !window.location.pathname.includes('/merchant/dashboard')) {
       console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
       setLocation('/merchant/dashboard');
     }
-  }, []); // Empty dependency array since we only want this to run once
+  }, [setLocation]);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
