@@ -21,11 +21,12 @@ app.get('/health', (_, res) => {
 });
 
 // Initialize authentication first
-await setupAuth(app);
+setupAuth(app);
 
 // Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
+// Add type for SocketError
 interface SocketError extends Error {
   data?: any;
 }
@@ -66,7 +67,7 @@ const startServer = async () => {
           const errorDetails = {
             message: err.message,
             stack: err.stack,
-            code: err.code,
+            code: (err as NodeJS.ErrnoException).code,
             timestamp: new Date().toISOString()
           };
           logger.error('Server startup error:', errorDetails);
@@ -80,49 +81,6 @@ const startServer = async () => {
 
     // Setup Vite AFTER server is listening
     await setupVite(app, httpServer);
-
-    // Socket.IO setup with proper error handling
-    const io = new Server(httpServer, {
-      cors: { origin: "*" },
-      path: '/socket.io/'
-    });
-
-    (global as any).io = io;
-
-    io.on('connection', (socket) => {
-      const socketContext = {
-        socketId: socket.id,
-        transport: socket.conn.transport.name,
-        remoteAddress: socket.handshake.address,
-        userAgent: socket.handshake.headers['user-agent'],
-        timestamp: new Date().toISOString()
-      };
-
-      logger.info("Socket connected:", socketContext);
-
-      socket.on('join_merchant_room', (merchantId: number) => {
-        const roomName = `merchant_${merchantId}`;
-        socket.join(roomName);
-        logger.info("Joined merchant room:", { merchantId, roomName, socketId: socket.id });
-      });
-
-      socket.on('error', (error: SocketError) => {
-        logger.error("Socket error:", { 
-          message: error.message,
-          data: error.data,
-          socketId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-
-      socket.on('disconnect', (reason) => {
-        logger.info("Socket disconnected:", { 
-          reason, 
-          socketId: socket.id,
-          timestamp: new Date().toISOString()
-        });
-      });
-    });
 
     // Signal that the server is ready for connections
     console.log("✨ Server is ready for connections");
@@ -145,14 +103,11 @@ const startServer = async () => {
   }
 };
 
-// Handle startup errors
+// Start the server
 startServer().catch((error) => {
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  const errorStack = error instanceof Error ? error.stack : undefined;
-
   logger.error("Critical server error:", {
-    message: errorMessage,
-    stack: errorStack,
+    message: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined,
     timestamp: new Date().toISOString()
   });
   process.exit(1);

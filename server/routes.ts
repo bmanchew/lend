@@ -992,7 +992,7 @@ router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Re
     // Map the updates with proper typing
     if (req.body.status) updates.status = req.body.status;
     if ('plaid_access_token' in req.body) updates.plaidAccessToken = req.body.plaid_access_token;
-    if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
+if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
     if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
     if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
     if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;

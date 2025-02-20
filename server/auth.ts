@@ -9,7 +9,7 @@ import { db, dbInstance } from "@db";
 import { eq } from "drizzle-orm";
 import jwt from 'jsonwebtoken';
 import { logger } from "./lib/logger";
-import { AuthError, AUTH_ERROR_CODES } from './lib/errors';
+import { AUTH_ERROR_CODES } from './lib/errors';
 
 export type UserRole = "admin" | "customer" | "merchant";
 
@@ -36,6 +36,16 @@ export interface User extends BaseUser {
 declare global {
   namespace Express {
     interface User extends BaseUser {}
+  }
+}
+
+class AuthError extends Error {
+  public statusCode: number;
+
+  constructor(code: string, message: string, statusCode: number) {
+    super(message);
+    this.name = 'AuthError';
+    this.statusCode = statusCode;
   }
 }
 
@@ -94,7 +104,10 @@ class AuthService {
 export const authService = new AuthService();
 
 export function setupAuth(app: Express): void {
-  logger.info('[Auth] Starting auth setup...');
+  logger.info('[Auth] Starting auth setup...', {
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 
   app.set('trust proxy', 1);
 
