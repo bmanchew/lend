@@ -18,6 +18,17 @@ interface MerchantWithContact extends SelectMerchant {
   phone?: string | null;
 }
 
+// Add type safety for contract amounts
+const formatAmount = (value: string | number | null | undefined): string => {
+  if (typeof value === 'string') {
+    return `$${(parseFloat(value) || 0).toFixed(2)}`;
+  }
+  if (typeof value === 'number') {
+    return `$${value.toFixed(2)}`;
+  }
+  return '$0.00';
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -62,12 +73,7 @@ export default function AdminDashboard() {
     {
       accessorKey: "amount",
       header: "Amount",
-      cell: ({ row }) => {
-        const amount = row.getValue("amount");
-        return typeof amount === 'string' || typeof amount === 'number'
-          ? `$${(parseFloat(amount.toString()) || 0).toFixed(2)}`
-          : '$0.00';
-      },
+      cell: ({ row }) => formatAmount(row.getValue("amount")),
     },
     {
       accessorKey: "status",
@@ -147,10 +153,11 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                ${contracts
-                  .filter(c => c.status === 'active')
-                  .reduce((sum, c) => sum + (parseFloat(String(c.amount)) || 0), 0)
-                  .toFixed(2)}
+                {formatAmount(
+                  contracts
+                    .filter(c => c.status === 'active')
+                    .reduce((sum, c) => sum + (parseFloat(String(c.amount)) || 0), 0)
+                )}
               </p>
             </CardContent>
           </Card>

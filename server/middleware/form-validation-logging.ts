@@ -39,7 +39,11 @@ export const formValidationLoggingMiddleware = (
       timestamp: new Date().toISOString()
     };
 
-    logger.error('Form validation failed', null, {
+    // Log the error with proper error object
+    const errorMessage = errors.map(e => e.message || e.toString()).join(', ');
+    const errorObj = new Error(errorMessage);
+
+    logger.error('Form validation failed', errorObj, {
       ...context,
       component: 'form_validation',
       action: 'validation_failed'
@@ -61,7 +65,7 @@ export const formValidationLoggingMiddleware = (
   const originalJson = res.json;
   res.json = function(body: any): Response {
     if (res.statusCode === 400 && body.errors) {
-      trackValidationError(body.errors);
+      trackValidationError(Array.isArray(body.errors) ? body.errors : [body.errors]);
     }
     return originalJson.call(this, body);
   };

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
@@ -12,20 +11,25 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-type FormData = {
-  companyName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  website: string;
-};
+const merchantSchema = z.object({
+  companyName: z.string().min(1, "Company name is required"),
+  email: z.string().email("Invalid email address"),
+  phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
+  address: z.string().min(1, "Address is required"),
+  website: z.string().url("Invalid website URL").optional().or(z.literal("")),
+});
+
+type FormData = z.infer<typeof merchantSchema>;
 
 export function CreateMerchantForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<FormData>({
+    resolver: zodResolver(merchantSchema),
     defaultValues: {
       companyName: "",
       email: "",
@@ -45,7 +49,8 @@ export function CreateMerchantForm() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create merchant");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create merchant");
       }
 
       toast({
@@ -54,9 +59,10 @@ export function CreateMerchantForm() {
       });
       form.reset();
     } catch (error) {
+      console.error("[CreateMerchantForm] Error:", error);
       toast({
         title: "Error",
-        description: "Failed to create merchant account",
+        description: error instanceof Error ? error.message : "Failed to create merchant account",
         variant: "destructive",
       });
     } finally {
@@ -74,7 +80,7 @@ export function CreateMerchantForm() {
             <FormItem>
               <FormLabel>Company Name</FormLabel>
               <FormControl>
-                <Input {...field} required />
+                <Input {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -87,7 +93,7 @@ export function CreateMerchantForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input {...field} type="email" required />
+                <Input {...field} type="email" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -100,7 +106,7 @@ export function CreateMerchantForm() {
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                <Input {...field} type="tel" required />
+                <Input {...field} type="tel" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -124,7 +130,7 @@ export function CreateMerchantForm() {
           name="website"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Website</FormLabel>
+              <FormLabel>Website (Optional)</FormLabel>
               <FormControl>
                 <Input {...field} type="url" />
               </FormControl>

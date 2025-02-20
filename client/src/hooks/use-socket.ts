@@ -24,9 +24,16 @@ export function useSocket(merchantId: number) {
   const connect = useCallback(() => {
     if (!merchantId) return;
 
+    // Cleanup existing socket connection
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = undefined;
+    }
+
     // Clear any existing retry timeout
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = undefined;
     }
 
     // Initialize socket with proper error handling
@@ -43,13 +50,13 @@ export function useSocket(merchantId: number) {
 
     const socket = socketRef.current;
 
-    socket.on('connect', () => {
+    const onConnect = () => {
       console.log('Socket connected:', socket.id);
       retriesRef.current = 0; // Reset retry count on successful connection
       joinMerchantRoom();
-    });
+    };
 
-    socket.on('connect_error', (error) => {
+    const onConnectError = (error: Error) => {
       console.error('Socket connection error:', error);
 
       if (retriesRef.current < MAX_RETRIES) {
@@ -70,33 +77,45 @@ export function useSocket(merchantId: number) {
           variant: "destructive"
         });
       }
-    });
+    };
 
-    socket.on('disconnect', (reason) => {
+    const onDisconnect = (reason: string) => {
       console.log('Socket disconnected:', reason);
       if (reason === 'io server disconnect') {
-        // Server initiated disconnect, attempt to reconnect
         connect();
       }
-    });
+    };
 
-    socket.on('reconnect', (attemptNumber) => {
+    const onReconnect = (attemptNumber: number) => {
       console.log('Socket reconnected after', attemptNumber, 'attempts');
-      joinMerchantRoom(); // Rejoin room after reconnection
-    });
+      joinMerchantRoom();
+    };
 
-    return socket;
+    // Add event listeners
+    socket.on('connect', onConnect);
+    socket.on('connect_error', onConnectError);
+    socket.on('disconnect', onDisconnect);
+    socket.on('reconnect', onReconnect);
+
+    return () => {
+      // Remove event listeners
+      socket.off('connect', onConnect);
+      socket.off('connect_error', onConnectError);
+      socket.off('disconnect', onDisconnect);
+      socket.off('reconnect', onReconnect);
+    };
   }, [merchantId, joinMerchantRoom, toast]);
 
   useEffect(() => {
-    const socket = connect();
+    const cleanup = connect();
 
     return () => {
+      if (cleanup) cleanup();
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
       }
     };
   }, [connect]);

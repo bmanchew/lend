@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { LoginResponse, LoginData } from "@/types";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -21,21 +21,14 @@ export default function MerchantLogin() {
   const [, setLocation] = useLocation();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
-  const mounted = useRef(false);
 
   // Check for existing token and redirect if already logged in
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      const token = localStorage.getItem('token');
-      if (token) {
-        console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
-        setLocation('/merchant/dashboard');
-      }
+    const token = localStorage.getItem('token');
+    if (token) {
+      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
+      setLocation('/merchant/dashboard');
     }
-    return () => {
-      mounted.current = false;
-    };
   }, []); // Empty dependency array since we only want this to run once on mount
 
   const form = useForm<LoginFormData>({

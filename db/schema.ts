@@ -90,16 +90,16 @@ export const contracts = pgTable('contracts', {
   downPayment: decimal('down_payment', { precision: 10, scale: 2 }),
   monthlyPayment: decimal('monthly_payment', { precision: 10, scale: 2 }),
   totalInterest: decimal('total_interest', { precision: 10, scale: 2 }),
-  status: varchar('status', { length: 50, enum: Object.values(ContractStatus) })
+  status: varchar('status', { length: 50 })
     .notNull()
-    .default(ContractStatus.PENDING),
+    .default('pending'),
   notes: text('notes'),
-  underwritingStatus: varchar('underwriting_status', { length: 50, enum: Object.values(UnderwritingStatus) })
-    .default(UnderwritingStatus.PENDING),
+  underwritingStatus: varchar('underwriting_status', { length: 50 })
+    .default('pending'),
   borrowerEmail: text('borrower_email'),
   borrowerPhone: text('borrower_phone'),
   lastPaymentId: text('last_payment_id'),
-  lastPaymentStatus: varchar('last_payment_status', { length: 50, enum: Object.values(PaymentStatus) }),
+  lastPaymentStatus: varchar('last_payment_status', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').default(true)
 });
@@ -119,8 +119,8 @@ export const webhookEvents = pgTable('webhook_events', {
   id: serial('id').primaryKey(),
   eventType: varchar('event_type', { length: 255 }).notNull(),
   sessionId: varchar('session_id', { length: 255 }).notNull().default('app'),
-  status: varchar('status', { length: 50, enum: Object.values(WebhookEventStatus) })
-    .default(WebhookEventStatus.PENDING),
+  status: varchar('status', { length: 50 })
+    .default('pending'),
   payload: json('payload'),
   error: text('error'),
   retryCount: integer('retry_count').default(0),
@@ -141,7 +141,7 @@ export const contractRelations = relations(contracts, ({ one }) => ({
   }),
 }));
 
-// Rewards tables and relations remain unchanged
+// Rewards tables and relations
 export const rewardsBalances = pgTable('rewards_balances', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id).notNull(),
