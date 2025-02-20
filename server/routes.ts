@@ -241,62 +241,161 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 }));
 
 
-// Get merchant by user ID - Ensure JSON response
+// Add retry logic and connection error handling
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+const withRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      logger.warn(`Database operation failed (attempt ${attempt}/${MAX_RETRIES}):`, {
+        error: lastError.message,
+        attempt,
+        timestamp: new Date().toISOString()
+      });
+
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
+      }
+    }
+  }
+
+  throw lastError;
+};
+
+// Update the merchant lookup route with retry logic
 router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response) => {
+  const requestId = Date.now().toString(36);
+
+  logger.info("[Merchant Lookup] Request received:", {
+    requestId,
+    path: req.path,
+    userId: req.params.userId,
+    hasAuthHeader: !!req.headers.authorization,
+    userInRequest: !!req.user,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", {
-      userId,
-      path: req.path,
-      method: req.method,
-      headers: req.headers,
-      timestamp: new Date().toISOString()
-    });
 
     if (!userId || isNaN(userId)) {
-      logger.error("[Merchant Lookup] Invalid user ID:", { userId });
+      logger.error("[Merchant Lookup] Invalid user ID provided:", {
+        userId: req.params.userId,
+        requestId,
+        timestamp: new Date().toISOString()
+      });
       return res.status(400).json({
         status: 'error',
-        error: 'Invalid user ID'
+        error: 'Invalid user ID format'
       });
     }
 
-    const merchantResults = await db
-      .select()
-      .from(merchants)
-      .where(eq(merchants.userId, userId));
-
-    logger.info("[Merchant Lookup] Query results:", {
-      userId,
-      resultsCount: merchantResults.length,
-      results: merchantResults
+    // First check if user exists with retry
+    const user = await withRetry(async () => {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      return user;
     });
 
-    const [merchant] = merchantResults;
+    if (!user) {
+      logger.error("[Merchant Lookup] User not found:", {
+        userId,
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(404).json({
+        status: 'error',
+        error: 'User not found'
+      });
+    }
+
+    logger.info("[Merchant Lookup] User found:", {
+      userId,
+      role: user.role,
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Then get merchant details with retry
+    const merchant = await withRetry(async () => {
+      const merchantResults = await db
+        .select({
+          id: merchants.id,
+          userId: merchants.userId,
+          companyName: merchants.companyName,
+          status: merchants.status,
+          reserveBalance: merchants.reserveBalance,
+          address: merchants.address,
+          website: merchants.website,
+          phone: merchants.phone,
+          createdAt: merchants.createdAt
+        })
+        .from(merchants)
+        .where(eq(merchants.userId, userId));
+
+      logger.info("[Merchant Lookup] Query executed:", {
+        userId,
+        foundResults: merchantResults.length > 0,
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+
+      return merchantResults[0];
+    });
+
     if (!merchant) {
-      logger.error("[Merchant Lookup] No merchant found for user:", { userId });
+      logger.error("[Merchant Lookup] No merchant found for user:", {
+        userId,
+        requestId,
+        timestamp: new Date().toISOString()
+      });
       return res.status(404).json({
         status: 'error',
         error: 'Merchant not found'
       });
     }
 
-    // Set proper content type for JSON response
+    // Set cache headers for production
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    }
+
+    // Set proper content type
     res.setHeader('Content-Type', 'application/json');
+
+    logger.info("[Merchant Lookup] Successfully returning merchant data:", {
+      merchantId: merchant.id,
+      userId,
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+
     return res.json({
       status: 'success',
       data: merchant
     });
-  } catch (err: any) {
-    logger.error("[Merchant Lookup] Error fetching merchant:", {
-      error: err.message,
-      stack: err.stack,
-      userId: req.params.userId
+
+  } catch (error) {
+    logger.error("[Merchant Lookup] Unexpected error:", {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.params.userId,
+      requestId,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
+
     return res.status(500).json({
       status: 'error',
-      error: 'Error fetching merchant data',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: 'Internal server error while fetching merchant data'
     });
   }
 }));

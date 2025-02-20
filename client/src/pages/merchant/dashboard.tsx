@@ -1,6 +1,4 @@
-
 import { useEffect, useMemo, useCallback } from "react";
-
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import type { SelectContract, SelectMerchant } from "@db/schema";
+import type { SelectContract } from "@db/schema";
 import { LoanApplicationDialog } from "@/components/merchant/loan-application-dialog";
 import { useSocket } from "@/hooks/use-socket";
 import { Badge } from "@/components/ui/badge";
@@ -22,12 +20,24 @@ import { apiRequest } from "@/lib/queryClient";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-type ContractStats = {
-  active: number;
-  pending: number;
-  completed: number;
-  total: number;
-};
+// Define proper types for merchant data
+interface MerchantData {
+  id: number;
+  userId: number;
+  companyName: string;
+  status: string | null;
+  reserveBalance: string | null;
+  address: string | null;
+  website: string | null;
+  phone: string | null;
+  createdAt: Date | null;
+}
+
+interface ApiResponse {
+  status: 'success' | 'error';
+  data?: MerchantData;
+  error?: string;
+}
 
 const formatAmount = (amount: string | number | null | undefined): string => {
   if (typeof amount === 'string') {
@@ -42,76 +52,103 @@ const formatAmount = (amount: string | number | null | undefined): string => {
 export default function MerchantDashboard() {
   const { user } = useAuth();
 
+  // Enhanced error logging
+  useEffect(() => {
+    if (user?.id) {
+      console.info('[MerchantDashboard] User authenticated:', { 
+        userId: user.id,
+        role: user.role,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      console.warn('[MerchantDashboard] No user ID available');
+    }
+  }, [user]);
+
   const {
-    data: merchant,
+    data: merchantResponse,
     isLoading: merchantLoading,
     error: merchantError,
     isError: isMerchantError,
-    fetchStatus
-  } = useQuery<SelectMerchant>({
-    onError: (error) => {
-      console.error('[Merchant] Data fetch error:', error);
-    },
-    onSuccess: (data) => {
-      const fetchTime = performance.now() - (window.merchantFetchStart || 0);
-      console.info('[Merchant] Data fetch completed in:', fetchTime, 'ms');
-    },
-    queryKey: ['merchant', user?.id],
-    queryFn: async () => {
-      if (!user?.id) throw new Error('No user ID available');
-      try {
-        const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch merchant');
-        }
-        const result = await response.json();
-        if (result.status === 'error') {
-          throw new Error(result.error);
-        }
-        return result.data;
-      } catch (error) {
-        console.error('Error fetching merchant:', error);
-        throw error;
-      }
-    },
+  } = useQuery<ApiResponse>({
+    queryKey: [`/api/merchants/by-user/${user?.id}`],
     enabled: !!user?.id,
     retry: 2,
     retryDelay: 1000,
+    queryFn: async () => {
+      if (!user?.id) throw new Error('No user ID available');
+      console.info('[MerchantDashboard] Fetching merchant data:', {
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      });
+
+      const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[MerchantDashboard] API Error:', {
+          status: response.status,
+          error: errorData,
+          timestamp: new Date().toISOString()
+        });
+        throw new Error(errorData.error || 'Failed to fetch merchant');
+      }
+
+      const data = await response.json();
+      console.info('[MerchantDashboard] Merchant data received:', {
+        status: data.status,
+        hasMerchantData: !!data.data,
+        timestamp: new Date().toISOString()
+      });
+      return data;
+    }
   });
+
+  const merchant = merchantResponse?.data;
 
   const {
     data: contracts = [],
     isLoading: contractsLoading,
-    refetch: refetchContracts
+    refetch: refetchContracts,
+    error: contractsError
   } = useQuery<SelectContract[]>({
-    queryKey: [`/merchants/${merchant?.id}/contracts`],
+    queryKey: [`/api/merchants/${merchant?.id}/contracts`],
     enabled: !!merchant?.id,
-    staleTime: 1000 * 60 // 1 minute
+    staleTime: 1000 * 60, // 1 minute
+    onError: (error) => {
+      console.error('[MerchantDashboard] Contracts fetch error:', {
+        error,
+        merchantId: merchant?.id,
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   const socket = useSocket(merchant?.id ?? 0);
-  
+
   const healthCheck = useCallback(() => {
     if (!socket) return;
     socket.emit('health_check', { merchantId: merchant?.id });
   }, [socket, merchant?.id]);
 
   useEffect(() => {
-    if (!socket || !merchant?.id) return;
-    
-    // Initial health check
+    if (!socket || !merchant?.id) {
+      console.info('[MerchantDashboard] Socket or merchant ID not available:', {
+        hasSocket: !!socket,
+        merchantId: merchant?.id,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
     healthCheck();
-    
-    // Set up interval for periodic health checks
-    const interval = setInterval(healthCheck, 30000); // Every 30 seconds
-    
-    return () => {
-      clearInterval(interval);
-    };
+    const interval = setInterval(healthCheck, 30000);
 
     const handleContractUpdate = (data: any) => {
-      if (data.merchantId === merchant.id) {
+      console.info('[MerchantDashboard] Contract update received:', {
+        data,
+        timestamp: new Date().toISOString()
+      });
+      if (data.merchantId === merchant?.id) {
         refetchContracts();
       }
     };
@@ -120,10 +157,11 @@ export default function MerchantDashboard() {
     socket.on('application_update', handleContractUpdate);
 
     return () => {
+      clearInterval(interval);
       socket.off('contract_update', handleContractUpdate);
       socket.off('application_update', handleContractUpdate);
     };
-  }, [socket, merchant?.id, refetchContracts]);
+  }, [socket, merchant?.id, refetchContracts, healthCheck]);
 
   const contractStats = useMemo<ContractStats>(() => {
     if (!contracts?.length) {
@@ -183,7 +221,16 @@ export default function MerchantDashboard() {
     );
   }
 
-  if (isMerchantError) {
+  if (isMerchantError || !merchant) {
+    const errorMessage = merchantResponse?.error || 
+      (merchantError instanceof Error ? merchantError.message : 'Failed to load merchant data');
+
+    console.error('[MerchantDashboard] Error state:', {
+      error: errorMessage,
+      merchantResponse,
+      timestamp: new Date().toISOString()
+    });
+
     return (
       <PortalLayout>
         <div className="p-4">
@@ -191,7 +238,7 @@ export default function MerchantDashboard() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>
-              Error loading merchant data: {merchantError instanceof Error ? merchantError.message : 'Unknown error'}
+              {errorMessage}
             </AlertDescription>
           </Alert>
         </div>
@@ -204,13 +251,11 @@ export default function MerchantDashboard() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold tracking-tight">
-            {merchant?.companyName} Dashboard
+            {merchant.companyName} Dashboard
           </h1>
-          {merchant && (
-            <div className="flex items-center gap-4">
-              <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            <LoanApplicationDialog merchantId={merchant.id} merchantName={merchant.companyName} />
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -337,4 +382,11 @@ export default function MerchantDashboard() {
       </div>
     </PortalLayout>
   );
+}
+
+interface ContractStats {
+  active: number;
+  pending: number;
+  completed: number;
+  total: number;
 }
