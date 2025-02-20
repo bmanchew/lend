@@ -29,7 +29,7 @@ interface RegisterData {
   role: 'admin' | 'merchant' | 'customer';
 }
 
-export const AuthContext = React.createContext<AuthContextType | null>(null);
+export const AuthContext = React.createContext<AuthContextType & { verifyToken: () => string | null } | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
@@ -232,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
+        verifyToken,
       }}
     >
       {children}
