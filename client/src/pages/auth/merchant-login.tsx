@@ -24,12 +24,22 @@ export default function MerchantLogin() {
 
   // Check for existing token and redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
-      setLocation('/merchant/dashboard');
-    }
-  }, []); // Empty dependency array since we only want this to run once on mount
+    let mounted = true;
+    
+    const checkToken = () => {
+      const token = localStorage.getItem('token');
+      if (token && mounted) {
+        console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
+        setLocation('/merchant/dashboard');
+      }
+    };
+
+    checkToken();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [setLocation]); // Add setLocation to dependencies
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
