@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit';
 import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
-import portfinder from 'portfinder';
 
 // Essential middleware
 const app = express();
@@ -21,27 +20,33 @@ await setupAuth(app);
 // Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
+const PORT = process.env.PORT || 3000;
+let server: Server | null = null;
+
 const startServer = async () => {
   try {
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Find available port, starting from 3000
-    const port = await portfinder.getPortPromise({
-      port: 3000, // Start with port 3000
-      host: '0.0.0.0'
-    });
-
     // Start HTTP server first
-    await new Promise<void>((resolve) => {
-      httpServer.listen(port, "0.0.0.0", () => {
-        logger.info(`Server listening on port ${port}`);
-        process.env.PORT = port.toString();
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(PORT, "0.0.0.0", () => {
+        logger.info(`Server listening on port ${PORT}`);
         resolve();
+      });
+
+      httpServer.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+          logger.error(`Port ${PORT} is already in use`);
+          reject(new Error(`Port ${PORT} is already in use`));
+        } else {
+          logger.error("Failed to start server:", error);
+          reject(error);
+        }
       });
     });
 
-    // Setup Vite AFTER server is listening and AFTER API routes are mounted
+    // Setup Vite AFTER server is listening
     await setupVite(app, httpServer);
 
     // Socket.IO setup
@@ -50,7 +55,7 @@ const startServer = async () => {
       path: '/socket.io/'
     });
 
-    (global as any).io = io;
+    server = io;
 
     io.on('connection', (socket) => {
       const socketContext = {
@@ -84,25 +89,35 @@ const startServer = async () => {
   }
 };
 
-startServer().catch((error) => {
-  logger.error("Critical server error:", error);
-  process.exit(1);
-});
+// Cleanup function
+const cleanup = () => {
+  if (server) {
+    server.close(() => {
+      logger.info("Server closed");
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+// Handle cleanup
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   logger.error("Uncaught exception:", error);
-  process.exit(1);
+  cleanup();
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason) => {
   logger.error("Unhandled rejection:", reason);
-  process.exit(1);
+  cleanup();
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info("Graceful shutdown initiated");
-  process.exit(0);
+startServer().catch((error) => {
+  logger.error("Critical server error:", error);
+  cleanup();
 });
