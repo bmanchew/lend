@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -18,9 +19,13 @@ export function ProtectedRoute({
   const { toast } = useToast();
   const hasRedirected = useRef(false);
 
-  // Handle authentication error
+  // Handle authentication and authorization in a single effect
   useEffect(() => {
-    if (error && !hasRedirected.current) {
+    if (isLoading || location.startsWith("/auth/") || hasRedirected.current) {
+      return;
+    }
+
+    if (error) {
       hasRedirected.current = true;
       toast({
         title: "Authentication Error",
@@ -28,25 +33,16 @@ export function ProtectedRoute({
         variant: "destructive",
       });
       setLocation("/auth/merchant");
-    }
-  }, [error, toast, setLocation]);
-
-  // Handle user and role checks
-  useEffect(() => {
-    // Skip if we're already on an auth page or if we've already redirected
-    if (location.startsWith("/auth/") || hasRedirected.current) {
       return;
     }
 
-    // Handle unauthenticated user
-    if (!user) {
+    if (!user && !hasRedirected.current) {
       hasRedirected.current = true;
       setLocation("/auth/merchant");
       return;
     }
 
-    // Handle unauthorized role
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user && allowedRoles && !allowedRoles.includes(user.role) && !hasRedirected.current) {
       hasRedirected.current = true;
       toast({
         title: "Access Denied",
@@ -55,7 +51,7 @@ export function ProtectedRoute({
       });
       setLocation(`/${user.role}`);
     }
-  }, [user, allowedRoles, toast, setLocation, location]);
+  }, [user, error, isLoading, allowedRoles, location, toast, setLocation]);
 
   // Reset redirect flag when location changes
   useEffect(() => {
