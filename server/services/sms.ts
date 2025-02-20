@@ -55,8 +55,72 @@ export const smsService = {
       throw new Error('Phone number must be exactly 10 digits after removing country code');
     }
 
+    // Validate area code (first 3 digits)
+    const areaCode = baseNumber.substring(0, 3);
+    if (areaCode === '000' || areaCode === '911') {
+      throw new Error('Invalid area code');
+    }
+
     // Format as +1XXXXXXXXXX
-    return `+1${baseNumber}`;
+    const formattedNumber = `+1${baseNumber}`;
+
+    logger.info('[SMS] Formatted phone number:', {
+      original: phone,
+      cleaned: cleanNumber,
+      formatted: formattedNumber
+    });
+
+    return formattedNumber;
+  }
+
+  async sendOTP(phone: string, code: string): Promise<boolean> {
+    try {
+      logger.info('[SMS] Sending OTP', { 
+        phone,
+        codeLength: code.length,
+        timestamp: new Date().toISOString()
+      });
+
+      if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+        throw new Error('Invalid OTP format - must be 6 digits');
+      }
+
+      const formattedPhone = this.formatPhoneNumber(phone);
+      const message = `Your verification code is: ${code}`;
+      const sent = await this.sendSMS(formattedPhone, message);
+
+      if (!sent) {
+        logger.error('[SMS] Failed to send OTP', {
+          phone: formattedPhone,
+          error: 'SMS sending failed',
+          timestamp: new Date().toISOString()
+        });
+
+        await slackService.notifySMSFailure({
+          phone: formattedPhone,
+          error: 'Failed to send OTP',
+          context: 'sendOTP'
+        });
+      }
+
+      return sent;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[SMS] Failed to send OTP', {
+        error: errorMessage,
+        phone,
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      });
+
+      await slackService.notifySMSFailure({
+        phone,
+        error: errorMessage,
+        context: 'sendOTP'
+      });
+
+      return false;
+    }
   },
 
   async tryUrlShortening(url: string, retries = 3): Promise<string> {
