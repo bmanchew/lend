@@ -799,7 +799,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
     }
 
     const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
-    const applicationUrl = `apply/${encodeURIComponent(formattedPhone)}`;
+    const applicationUrl = `${baseUrl}/apply/${encodeURIComponent(formattedPhone)}`;
 
     debugLog('Generated application URL', {
       baseUrl,

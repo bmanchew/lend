@@ -261,9 +261,9 @@ export const smsService = {
 
   async sendLoanApplicationLink(
     phone: string,
-    merchantName: string,
     url: string,
-    requestId: string
+    merchantName: string,
+    metadata: { requestId: string }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       logger.info('[SMS] Preparing loan application link', {
