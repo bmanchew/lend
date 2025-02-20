@@ -37,6 +37,7 @@ const startServer = async () => {
 
     // Find available port, starting from 3000
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+    const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 
     // Set default timeout
     httpServer.timeout = 120000; // 2 minutes
@@ -45,7 +46,7 @@ const startServer = async () => {
     // Start HTTP server first and wait for it to be ready
     await new Promise<void>((resolve, reject) => {
       try {
-        httpServer.listen(port, "0.0.0.0", () => {
+        httpServer.listen(port, host, () => {
           logger.info(`Server listening on port ${port}`);
           process.env.PORT = port.toString();
           resolve();
