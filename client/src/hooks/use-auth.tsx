@@ -59,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    staleTime: 30000, // Reduce refetch frequency
     refetchOnWindowFocus: false // Prevent unnecessary refetches
   });
 
