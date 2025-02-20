@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import portfinder from 'portfinder';
+import waitPort from 'wait-port';
 
 // Essential middleware
 const app = express();
@@ -50,15 +51,25 @@ const startServer = async () => {
     // Start HTTP server first and wait for it to be ready
     await new Promise<void>((resolve, reject) => {
       try {
-        httpServer.listen(port, "0.0.0.0", () => {
+        httpServer.listen(port, "0.0.0.0", async () => {
           // Log both to console and logger for workflow detection
           console.log(`Server running at http://0.0.0.0:${port}`);
           console.log(`Health check available at http://0.0.0.0:${port}/health`);
+
+          // Wait for port to be actually ready
+          await waitPort({
+            host: '0.0.0.0',
+            port,
+            timeout: 10000,
+            output: 'silent'
+          });
+
           logger.info(`Server listening on port ${port}`, {
             port,
             host: '0.0.0.0',
             timestamp: new Date().toISOString()
           });
+
           process.env.PORT = port.toString();
           resolve();
         });

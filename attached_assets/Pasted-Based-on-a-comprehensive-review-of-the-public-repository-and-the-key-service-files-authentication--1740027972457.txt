@@ -1,0 +1,101 @@
+Based on a comprehensive review of the public repository and the key service files (authentication, SMS, Didit/KYC integration, and the API routes), here are my consolidated recommendations and observations to help you get to a state where:
+
+- A customer receives the correct SMS with a shortened URL.
+- The OTP is sent, verified, and the user can log in.
+- The KYC flow is triggered correctly.
+
+---
+
+### **1. SMS & OTP Flow**
+
+- **Phone Number Formatting:**  
+  • Your `smsService.formatPhoneNumber` properly cleans and validates U.S. numbers.  
+  • Ensure that any front-end phone input matches this expectation (only digits, no formatting characters).  
+  • Consider using a more robust library if you plan to extend internationally.
+
+- **OTP Generation & Delivery:**  
+  • The OTP generator using `Math.floor(100000 + Math.random() * 900000)` is fine for MVP, though a more secure method (e.g., using `crypto.randomInt`) is recommended for production.  
+  • Verify that the SMS message content is clear and that the URL sent via `sendLoanApplicationLink` is properly shortened and formatted.  
+  • Ensure your Twilio credentials are correctly configured in Replit’s secrets so that messages are reliably sent.
+
+- **Retry Logic for SMS:**  
+  • Your retry logic in `sendLoanApplicationLink` is solid, with exponential delays and Slack notifications on failure. Make sure to test this on mobile to verify that the SMS client correctly detects the link.
+
+---
+
+### **2. Authentication & Session Management**
+
+- **JWT Verification:**  
+  • Your AuthService is set up to generate and verify tokens. The error log showed an "Invalid token" issue; double-check that the same secret is used consistently between token generation and verification.  
+  • Wrap the JWT verification logic in a try/catch block and throw a custom error with a defined status (e.g., 401) if verification fails.
+
+- **Passport Local Strategy:**  
+  • Your local strategy implementation appears correct. Ensure that after login, the token is returned along with the user session so that subsequent requests (e.g., OTP verification or KYC submission) can use the token.
+
+- **Session Configuration:**  
+  • Your session middleware uses connect-pg-simple with a PostgreSQL pool. Confirm that your session secret and configuration are stable, especially on Replit where port and environment variable issues can arise.
+
+- **AuthProvider / useAuth:**  
+  • Check your front-end authentication hooks to ensure they don’t trigger repeated updates (infinite loops). This might be one cause of the “Maximum update depth exceeded” error seen during merchant login. Ensure that any state updates triggered in useEffect have proper dependency arrays.
+
+---
+
+### **3. KYC / Didit Integration**
+
+- **KYC Session Initialization:**  
+  • Your `DiditService.initializeKycSession` is well constructed. Verify that the callback and redirect URLs are correctly set based on your deployment (Replit domain) so that the customer remains in the app without leaving the mobile flow.
+  • Ensure that the API response from Didit includes both the session URL and session ID, and that you’re storing the session in your database correctly for later webhook updates.
+
+- **Webhook Processing:**  
+  • Your webhook processing function updates both the verification session and the user’s KYC status. Confirm that the external Didit statuses (e.g., “approved”, “declined”) are mapped correctly to your internal statuses (e.g., “verified”, “failed”).
+  • The retry mechanism for failed webhook events is a good fallback—test it thoroughly to confirm that it triggers and processes retries as expected.
+
+- **Signature Verification:**  
+  • Your `verifyWebhookSignature` function appears secure, using HMAC with a timing-safe comparison. Ensure that Didit sends the headers in the expected format.
+
+---
+
+### **4. Front-End Considerations (Merchant Login & OTP)**
+
+- **Infinite Render Issue:**  
+  • The error "Maximum update depth exceeded" likely originates from a React component (such as in your AuthProvider or merchant login page). Check that:
+  - State updates in useEffect hooks include correct dependency arrays.
+  - The useAuth hook (or similar) isn’t continuously updating due to misconfigured dependencies.
+  - If you’re calling setState based on a token or user data, ensure that the data doesn’t get regenerated on every render.
+  
+- **Consistent User Experience:**  
+  • Make sure that after clicking the SMS link, the mobile flow is seamless. The link should direct to an in-app route where the user is prompted for OTP verification and then allowed to log in.
+  • Validate that the login page reads the token from the URL or context appropriately and that errors (e.g., "Invalid OTP" or "Session expired") are clearly communicated.
+
+---
+
+### **5. Configuration & Deployment on Replit**
+
+- **Environment Variables:**  
+  • Double-check that all required environment variables (e.g., DATABASE_URL, TWILIO_ACCOUNT_SID, JWT_SECRET, DIDIT_* variables) are set in Replit’s Secrets.  
+  • In your `.replit` file, ensure that your run command (likely `npm run dev` or similar) does not override these settings.
+
+- **Port & Session Handling:**  
+  • Ensure your server binds to the port provided by `process.env.PORT` to avoid conflicts on Replit.
+  • Revisit your session configuration if you see issues related to cookie settings (e.g., `secure: true` may cause issues if not running over HTTPS during development).
+
+---
+
+### **Next Steps**
+
+1. **Automated Testing:**  
+   - Use unit tests for individual services (AuthService, DiditService, SMS service) to simulate both success and failure conditions.
+   - Utilize integration tests for the full borrower flow: invitation → OTP → login → KYC session creation.
+
+2. **Debug Logging:**  
+   - Temporarily increase the verbosity of logging around your Auth and Didit integration flows to capture the state of tokens, session IDs, and webhook payloads.
+   
+3. **UI/UX Review:**  
+   - Verify the front-end merchant login and borrower OTP flow using React DevTools, ensuring state updates are well controlled.
+   - Confirm that the in-app navigation (using wouter or similar routing library) is not causing re-renders that lead to infinite loops.
+
+---
+
+By reviewing and addressing the above areas across your repository, you should be closer to having a seamless borrower application flow where the customer receives the SMS, clicks the link, completes OTP verification, logs in, and successfully completes KYC. 
+
+If you need more specific file-by-file feedback or additional testing strategies, let me know!

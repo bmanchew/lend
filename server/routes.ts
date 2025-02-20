@@ -26,16 +26,16 @@ interface RequestWithUser extends Request {
   user?: User;
 }
 
-interface LoggerError extends Error {
-  details?: any;
-  code?: string;
-  statusCode?: number;
+interface LogContext {
+  message: string;
+  timestamp: string;
+  [key: string]: any;
 }
 
 // Enhanced error class for consistent error handling
 class APIError extends Error {
   public statusCode: number;
-  public code?: string;
+  public code: string;
   public details?: any;
 
   constructor(code: string, message: string, statusCode: number, details?: any) {
@@ -48,20 +48,18 @@ class APIError extends Error {
 }
 
 // Middleware to ensure consistent error handling
-const errorHandler = (err: Error | APIError | LoggerError, req: Request, res: Response, next: NextFunction) => {
-  const errorLog = {
+const errorHandler = (err: Error | APIError, req: Request, res: Response, next: NextFunction) => {
+  const timestamp = new Date().toISOString();
+  const logContext: LogContext = {
     message: err.message,
     name: err.name,
-    stack: err.stack,
+    stack: err.stack || '',
     path: req.path,
     method: req.method,
-    timestamp: new Date().toISOString()
+    timestamp
   };
 
-  logger.error('[Error Handler]', {
-    ...errorLog,
-    error: err instanceof Error ? { message: err.message, stack: err.stack } : 'Unknown error'
-  });
+  logger.error('[Error Handler]', logContext);
 
   if (err instanceof APIError) {
     return res.status(err.statusCode).json({
@@ -992,7 +990,7 @@ router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Re
     // Map the updates with proper typing
     if (req.body.status) updates.status = req.body.status;
     if ('plaid_access_token' in req.body) updates.plaidAccessToken = req.body.plaid_access_token;
-if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
+    if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
     if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
     if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
     if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
