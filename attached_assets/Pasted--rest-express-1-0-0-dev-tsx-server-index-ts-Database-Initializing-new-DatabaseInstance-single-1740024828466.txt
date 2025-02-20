@@ -1,0 +1,22 @@
+
+> rest-express@1.0.0 dev
+> tsx server/index.ts
+
+[Database] Initializing new DatabaseInstance singleton
+[Database] Creating DatabaseInstance singleton
+[Database] Starting initial database connection
+[Database] Starting initialization
+[Database] Attempting to create pool (attempt 1/5)
+[Database] Pool created, testing connection...
+[Database] Connection test successful
+[Database] Pool created successfully
+[Database] Drizzle ORM initialized
+[Database] Initialization completed successfully
+{"level":"INFO","time":"2025-02-20T04:11:47.340Z","pid":10306,"hostname":"f58b200d34e5","message":"[Auth] Starting auth setup...","timestamp":"2025-02-20T04:11:47.340Z","environment":"development","requestId":"e895915a-b7d8-4ede-b262-99dab3e84ba8"}
+{"level":"INFO","time":"2025-02-20T04:11:47.342Z","pid":10306,"hostname":"f58b200d34e5","message":"[Auth] Auth setup completed successfully","timestamp":"2025-02-20T04:11:47.342Z","environment":"development","requestId":"a4df04b1-602d-4e14-a07b-42cd3c454f6f"}
+{"level":"INFO","time":"2025-02-20T04:11:47.359Z","pid":10306,"hostname":"f58b200d34e5","message":"Server listening on port 3000","timestamp":"2025-02-20T04:11:47.359Z","environment":"development","requestId":"16205a1b-9001-41a2-80e3-41c253731103"}
+{"level":"INFO","time":"2025-02-20T04:11:47.494Z","pid":10306,"hostname":"f58b200d34e5","message":"Server is ready for connections","timestamp":"2025-02-20T04:11:47.494Z","environment":"development","requestId":"0da42085-f50b-4b66-a263-89f4d8ce8358"}
+{"level":"INFO","time":"2025-02-20T04:11:55.480Z","pid":10306,"hostname":"f58b200d34e5","userId":3,"message":"[Auth] User data retrieved:","timestamp":"2025-02-20T04:11:55.480Z","environment":"development","requestId":"72e7ebe7-dc2e-4c3c-9950-4e002df41aa4"}
+{"level":"INFO","time":"2025-02-20T04:11:55.694Z","pid":10306,"hostname":"f58b200d34e5","userId":3,"message":"[Auth] User data retrieved:","timestamp":"2025-02-20T04:11:55.694Z","environment":"development","requestId":"0067b7e5-7100-437d-a51c-04179df92c78"}
+{"level":"INFO","time":"2025-02-20T04:12:51.239Z","pid":10306,"hostname":"f58b200d34e5","userId":3,"message":"[Auth] User data retrieved:","timestamp":"2025-02-20T04:12:51.239Z","environment":"development","requestId":"53f73371-d920-41bc-8729-b0509915668c"}
+{"level":"INFO","time":"2025-02-20T04:13:10.762Z","pid":10306,"hostname":"f58b200d34e5","userId":3,"message":"[Auth] User data retrieved:","timestamp":"2025-02-20T04:13:10.762Z","environment":"development","requestId":"4734849e-b066-4381-bbae-f79e9b2ca29b"}
