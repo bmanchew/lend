@@ -1,26 +1,21 @@
+<<<<<<< HEAD
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle, NeonDatabase } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
+=======
+
+import pkg from 'pg';
+const { Pool } = pkg;
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
 import * as schema from './schema';
-
-// Configure Neon with WebSocket
-neonConfig.webSocketConstructor = ws;
-
-// Connection configuration
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 5000; // 5 seconds
-const POOL_CONFIG = {
-  connectionString: process.env.DATABASE_URL,
-  max: 20, // Maximum pool size
-  idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-  connectionTimeoutMillis: 5000, // Connection timeout after 5 seconds
-  maxUses: 7500 // Close connection after this many queries
-};
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL must be set');
 }
 
+<<<<<<< HEAD
 // Create pool with retry logic
 const createPool = async (retryCount = 0) => {
   console.log(`[Database] Attempting to create pool (attempt ${retryCount + 1}/${MAX_RETRIES})`);
@@ -52,14 +47,46 @@ class DatabaseInstance {
 
   private constructor() {
     console.log('[Database] Creating DatabaseInstance singleton');
+=======
+const connectionString = process.env.DATABASE_URL;
+
+// Create postgres client
+const client = postgres(connectionString, {
+  max: 20,
+  idle_timeout: 30,
+  connect_timeout: 5,
+  prepare: false
+});
+
+const db = drizzle(client, { schema });
+
+// Health check function
+const checkConnection = async () => {
+  try {
+    await client.query('SELECT 1');
+    return true;
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    return false;
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   }
 
+<<<<<<< HEAD
   public static getInstance(): DatabaseInstance {
     if (!DatabaseInstance.instance) {
       console.log('[Database] Initializing new DatabaseInstance singleton');
       DatabaseInstance.instance = new DatabaseInstance();
     }
     return DatabaseInstance.instance;
+=======
+// Graceful shutdown
+const cleanup = async () => {
+  try {
+    await client.end();
+    console.log('Database connections closed');
+  } catch (error) {
+    console.error('Error during database cleanup:', error);
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   }
 
   public async initialize(): Promise<void> {
@@ -68,6 +95,7 @@ class DatabaseInstance {
       return this.initializationPromise;
     }
 
+<<<<<<< HEAD
     if (this.initialized) {
       console.log('[Database] Already initialized');
       return;
@@ -178,3 +206,6 @@ export const db = new Proxy({} as NeonDatabase<typeof schema>, {
 });
 
 export const checkConnection = () => dbInstance.checkConnection();
+=======
+export { db, checkConnection };
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116

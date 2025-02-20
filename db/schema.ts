@@ -220,7 +220,33 @@ export const verificationSessions = pgTable('verification_sessions', {
   userId: integer('user_id').references(() => users.id),
   sessionId: varchar('session_id', { length: 255 }).notNull(),
   status: varchar('status', { length: 50 }),
+  platform: varchar('platform', { length: 50 }).notNull(), 
+  userAgent: text('user_agent'), 
   features: text('features'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow()
+<<<<<<< HEAD
 });
+=======
+});
+
+export const webhookEvents = pgTable('webhook_events', {
+  id: serial('id').primaryKey(),
+  eventType: varchar('event_type', { length: 255 }).notNull(),
+  sessionId: varchar('session_id', { length: 255 }).notNull(),
+  status: varchar('status', { length: 50 }).default('pending'),
+  payload: json('payload'),
+  error: text('error'),
+  retryCount: integer('retry_count').default(0),
+  nextRetryAt: timestamp('next_retry_at'),
+  processedAt: timestamp('processed_at'),
+  createdAt: timestamp('created_at').defaultNow()
+});
+
+export type SelectUser = typeof users.$inferSelect;
+export type SelectMerchant = typeof merchants.$inferSelect;
+export type SelectContract = typeof contracts.$inferSelect;
+export type SelectProgram = typeof programs.$inferSelect;
+export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
+export type SelectWebhookEvent = typeof webhookEvents.$inferSelect;
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116

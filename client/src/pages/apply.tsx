@@ -1,3 +1,13 @@
+/**
+ * Loan Application Page Component
+ * 
+ * Manages the loan application process including KYC verification:
+ * - Handles verification flow initiation
+ * - Processes URL parameters for mobile deep linking
+ * - Manages verification state and completion
+ * - Integrates with KYC verification modal
+ */
+
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { KycVerificationModal } from "../components/kyc/verification-modal";
@@ -17,7 +27,12 @@ export default function Apply() {
   const userId = localStorage.getItem('temp_user_id');
 
   useEffect(() => {
+<<<<<<< HEAD
     const identifier = params?.identifier;
+=======
+    // Parse and handle URL parameters
+    const phoneNumber = searchParams.get('phone');
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
     const isVerification = searchParams.get('verification') === 'true';
     const fromLogin = searchParams.get('from') === 'login';
 
@@ -29,6 +44,7 @@ export default function Apply() {
       currentUrl: window.location.href
     });
 
+<<<<<<< HEAD
     // Handle phone number route
     if (identifier && !isVerification && !fromLogin) {
       const phoneNumber = decodeURIComponent(identifier);
@@ -43,11 +59,26 @@ export default function Apply() {
     // Handle verification flow
     if (userId && (fromLogin || isVerification)) {
       console.log('[Apply] Starting verification for user:', userId);
+=======
+    // Handle different entry points
+    if (phoneNumber) {
+      // Redirect to login if phone number provided
+      const loginUrl = `/auth/customer-login?phone=${phoneNumber}`;
+      console.log('[Apply] Redirecting to login:', loginUrl);
+      window.location.href = loginUrl;
+    } else if (userId && (fromLogin || isVerification)) {
+      // Auto-start verification for authenticated users
+      console.log('[Apply] Auto-starting verification for user:', userId);
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
       setShowVerification(true);
     }
   }, [params, searchParams, userId]);
 
+<<<<<<< HEAD
   // KYC status check
+=======
+  // Check KYC status on component mount or verification start
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   useEffect(() => {
     if (!showVerification || !userId) return;
 

@@ -81,9 +81,14 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
         }),
       });
 
+<<<<<<< HEAD
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to create contract');
+=======
+      if (response.ok) {
+        onSuccess?.();
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
       }
 
       const contract = await response.json();
@@ -185,19 +190,31 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
               phone = phone.slice(0, 10);
 
               // Format for display as (XXX) XXX-XXXX
+<<<<<<< HEAD
               let formattedPhone = phone;
               if (phone.length >= 6) {
                 formattedPhone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
+=======
+              if (phone.length === 10) {
+                phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
+              } else if (phone.length >= 6) {
+                phone = `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`;
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
               } else if (phone.length >= 3) {
                 formattedPhone = `(${phone.slice(0,3)}) ${phone.slice(3)}`;
               } else if (phone.length > 0) {
                 formattedPhone = `(${phone}`;
               }
 
+<<<<<<< HEAD
               setFormData({...formData, phone: formattedPhone});
+=======
+              setFormData({...formData, phone});
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
             }}
             maxLength={14}
             required
+            pattern="\(\d{3}\)\s\d{3}-\d{4}"
           />
         </div>
       </div>

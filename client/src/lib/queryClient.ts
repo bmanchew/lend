@@ -13,6 +13,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+<<<<<<< HEAD
 // Helper to get auth headers
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
@@ -23,11 +24,15 @@ function getAuthHeaders(): HeadersInit {
     'Content-Type': 'application/json'
   };
 }
+=======
+const API_BASE_URL = 'http://0.0.0.0:5000';
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
 
 export async function apiRequest(
   url: string,
   init?: RequestInit
 ): Promise<Response> {
+<<<<<<< HEAD
   const headers = new Headers({
     ...getAuthHeaders(),
     ...(init?.headers || {})
@@ -43,6 +48,13 @@ export async function apiRequest(
   const response = await fetch(url, {
     ...init,
     headers,
+=======
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  const res = await fetch(fullUrl, {
+    method,
+    headers: data ? { "Content-Type": "application/json" } : {},
+    body: data ? JSON.stringify(data) : undefined,
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
     credentials: "include",
   });
 

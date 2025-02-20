@@ -9,9 +9,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+<<<<<<< HEAD
 import { zodResolver } from "@hookform/resolvers/zod";
 
 // Define validation schema
+=======
+
+// Form validation schema
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
 const loginFormSchema = z.object({
   phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
   code: z.string().optional(),
@@ -23,12 +28,19 @@ type LoginFormData = z.infer<typeof loginFormSchema>;
 export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
+<<<<<<< HEAD
   const [user, setUser] = useState<{ id: string; role: string; phoneNumber: string } | null>(null);
+=======
+  const [user, setUser] = useState<any>(null);
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   const { toast } = useToast();
   const [location] = useLocation();
 
   const form = useForm<LoginFormData>({
+<<<<<<< HEAD
     resolver: zodResolver(loginFormSchema),
+=======
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
     defaultValues: {
       phoneNumber: "",
       code: "",
@@ -56,16 +68,12 @@ export default function CustomerLogin() {
 
       const phoneNumber = sanitizePhone(rawPhone);
 
-      console.log('[CustomerLogin] Formatted phone:', {
-        original: form.getValues("phoneNumber"),
-        formatted: phoneNumber
-      });
       console.log('[CustomerLogin] Attempting to send OTP:', {
         formattedPhone: phoneNumber,
         timestamp: new Date().toISOString()
       });
 
-      const response = await axios.post("/api/sendOTP", { phoneNumber });
+      const response = await axios.post("/api/auth/send-otp", { phoneNumber });
       console.log('[CustomerLogin] OTP Response:', response.data);
 
       if (response.data?.message === 'OTP sent successfully') {
@@ -130,7 +138,11 @@ export default function CustomerLogin() {
       // Validate OTP format
       const otp = data.code.trim();
       if (!otp || !/^\d{6}$/.test(otp)) {
-        toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
+        toast({ 
+          title: "Error", 
+          description: "Please enter a valid 6-digit code", 
+          variant: "destructive" 
+        });
         return;
       }
 
@@ -149,13 +161,13 @@ export default function CustomerLogin() {
       });
 
       const userData = response.data;
-      console.log("[CustomerLogin] Login response:", {
-        ...userData,
-        timestamp: new Date().toISOString()
-      });
 
       if (!userData?.id) {
+<<<<<<< HEAD
         console.error('[CustomerLogin] Missing user ID in response:', userData);
+=======
+        console.error('[CustomerLogin] Invalid user data received:', userData);
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
         throw new Error('Invalid login response - missing user ID');
       }
 
@@ -163,12 +175,7 @@ export default function CustomerLogin() {
       const userId = userData.id.toString();
       if (!userId || userId === 'undefined' || userId === 'null') {
         console.error('[CustomerLogin] Invalid user ID:', userId);
-        toast({ 
-          title: "Error", 
-          description: "Invalid user ID received", 
-          variant: "destructive" 
-        });
-        return;
+        throw new Error('Invalid user ID received');
       }
 
       // Strict role validation
@@ -177,12 +184,7 @@ export default function CustomerLogin() {
           userId,
           role: userData.role
         });
-        toast({ 
-          title: "Error", 
-          description: "Invalid account type", 
-          variant: "destructive" 
-        });
-        return;
+        throw new Error('Invalid account type');
       }
 
       try {
@@ -222,7 +224,11 @@ export default function CustomerLogin() {
       console.error("[CustomerLogin] Error:", error);
       toast({ 
         title: "Error", 
+<<<<<<< HEAD
         description: error.response?.data?.message || "Invalid verification code", 
+=======
+        description: error.message || "Invalid verification code", 
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
         variant: "destructive" 
       });
     }

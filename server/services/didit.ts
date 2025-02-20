@@ -227,8 +227,8 @@ class DiditService {
   verifyWebhookSignature(requestBody: string, signatureHeader: string, timestampHeader: string): boolean {
     console.log("[DiditService] Verifying webhook signature");
     try {
-      if (!signatureHeader || !timestampHeader) {
-        console.error('[DiditService] Missing webhook headers');
+      if (!signatureHeader || !timestampHeader || !requestBody) {
+        console.error('[DiditService] Missing webhook headers or request body');
         return false;
       }
 

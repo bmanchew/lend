@@ -1,7 +1,11 @@
 import * as React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
+<<<<<<< HEAD
 import { Switch, Route, useLocation, Router } from "wouter";
+=======
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth.tsx";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -19,6 +23,7 @@ import ApplyPage from "@/pages/apply";
 function AppRouter() {
   const [location, setLocation] = useLocation();
 
+<<<<<<< HEAD
   React.useEffect(() => {
     // Redirect root to merchant login
     if (location === "/" && window.location.pathname === "/") {
@@ -71,10 +76,31 @@ function AppRouter() {
       {/* Catch-all route */}
       <Route component={NotFound} />
     </Switch>
+=======
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login/customer" />} />
+      <Route path="/login/customer" element={<CustomerLogin />} />
+      <Route path="/auth/customer-login" element={<CustomerLogin />} />
+      <Route path="/login/merchant" element={<MerchantLogin />} />
+      <Route path="/login/admin" element={<AdminLogin />} />
+      <Route path="/customer" element={<ProtectedRoute component={CustomerDashboard} />} />
+      <Route path="/merchant" element={<ProtectedRoute component={MerchantDashboard} />} />
+      <Route path="/admin" element={<ProtectedRoute component={AdminDashboard} />} />
+      <Route path="/admin/kyc-verifications" element={<ProtectedRoute component={KycVerificationsPage} />} />
+      <Route path="/merchant/dashboard" element={<ProtectedRoute path="/merchant/dashboard" allowedRoles={["merchant"]} component={MerchantDashboard} />} />
+      <Route path="/apply/:token" element={<ApplyPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   );
 }
 
 function App() {
+<<<<<<< HEAD
+=======
+  console.log('[App] Rendering App');
+>>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   return (
     <Router>
       <QueryClientProvider client={queryClient}>
