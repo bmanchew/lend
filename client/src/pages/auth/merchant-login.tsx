@@ -53,36 +53,11 @@ export default function MerchantLogin() {
         loginType: "merchant"
       };
 
-<<<<<<< HEAD
       const response = await loginMutation.mutateAsync(loginData) as LoginResponse;
       console.log("[MerchantLogin] Received response:", {
         success: true,
         hasToken: !!response.token,
         role: response.role,
-=======
-      if (response?.role === 'merchant') {
-        console.log('[MerchantLogin] Redirecting merchant to dashboard:', {
-          userId: response.id,
-          role: response.role,
-          timestamp: new Date().toISOString()
-        });
-        navigate('/merchant/dashboard', { replace: true });
-      } else {
-        console.warn("[MerchantLogin] Unexpected role:", response?.role);
-        toast({
-          title: "Login successful, but unexpected role.",
-          description: `Role: ${response?.role}`,
-          variant: "warning"
-        });
-      }
-
-    } catch (error) {
-      console.error("[MerchantLogin] Login failed:", {
-        error,
-        data,
-        errorType: error instanceof Error ? error.name : 'Unknown',
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
         timestamp: new Date().toISOString()
       });
 

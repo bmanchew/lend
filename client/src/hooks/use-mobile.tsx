@@ -13,102 +13,40 @@ export function useMobile() {
   const detectMobile = useCallback(() => {
     if (typeof window === 'undefined') return false;
 
-    // Enhanced device information for logging
+    // Detailed device information for logging
     const deviceInfo = {
       userAgent: navigator.userAgent.toLowerCase(),
       platform: navigator.platform,
-      vendor: navigator.vendor,
-      dimensions: {
-        screen: {
-          width: window.screen.width,
-          height: window.screen.height,
-          orientation: window.screen.orientation?.type || 'unknown'
-        },
-        viewport: {
-          width: window.innerWidth,
-          height: window.innerHeight
-        }
-      },
-      touch: {
-        maxTouchPoints: navigator.maxTouchPoints,
-        hasTouch: 'ontouchstart' in window,
-        hasFinePointer: window.matchMedia('(pointer: fine)').matches,
-        hasCoarsePointer: window.matchMedia('(pointer: coarse)').matches,
-        hasHover: window.matchMedia('(hover: hover)').matches
-      },
-      hardware: {
-        memory: (navigator as any).deviceMemory,
-        cores: navigator.hardwareConcurrency,
-        connection: (navigator as any).connection?.effectiveType || 'unknown'
-      }
+      width: window.innerWidth,
+      height: window.innerHeight,
+      touchPoints: navigator.maxTouchPoints,
+      hasTouch: 'ontouchstart' in window,
+      orientation: window.screen.orientation?.type || 'unknown'
     };
 
-    // Enhanced mobile detection criteria with weighted scoring
-    const mobileIndicators = {
-      // Primary indicators (most reliable)
+    // Mobile detection criteria with weighted importance
+    const mobileChecks = {
+      // Primary checks (most reliable)
       userAgent: /iphone|ipad|ipod|android|blackberry|windows phone|opera mini|silk/i.test(deviceInfo.userAgent),
       platform: /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(deviceInfo.platform),
 
-      // Secondary indicators
-      touch: {
-        hasTouch: deviceInfo.touch.hasTouch,
-        noFinePointer: !deviceInfo.touch.hasFinePointer,
-        hasCoarsePointer: deviceInfo.touch.hasCoarsePointer,
-        noHover: !deviceInfo.touch.hasHover
-      },
+      // Secondary checks (supporting evidence)
+      touch: deviceInfo.touchPoints > 0 && deviceInfo.hasTouch,
 
-      // Supplementary indicators
-      screen: {
-        isNarrow: window.innerWidth <= 768,
-        isPortrait: window.innerHeight > window.innerWidth,
-        hasHighDensity: window.devicePixelRatio > 1
-      }
+      // Screen size is now a supplementary check, not primary
+      screen: window.innerWidth <= 768 && !/macintosh|windows nt|linux/i.test(deviceInfo.platform)
     };
-
-    // Calculate mobile score (0-100)
-    const weights = {
-      userAgent: 40,
-      platform: 30,
-      touch: 20,
-      screen: 10
-    };
-
-    let mobileScore = 0;
-    if (mobileIndicators.userAgent) mobileScore += weights.userAgent;
-    if (mobileIndicators.platform) mobileScore += weights.platform;
-
-    // Touch score (up to 20)
-    const touchScore = (
-      (mobileIndicators.touch.hasTouch ? 5 : 0) +
-      (mobileIndicators.touch.noFinePointer ? 5 : 0) +
-      (mobileIndicators.touch.hasCoarsePointer ? 5 : 0) +
-      (mobileIndicators.touch.noHover ? 5 : 0)
-    );
-    mobileScore += touchScore;
-
-    // Screen score (up to 10)
-    const screenScore = (
-      (mobileIndicators.screen.isNarrow ? 4 : 0) +
-      (mobileIndicators.screen.isPortrait ? 3 : 0) +
-      (mobileIndicators.screen.hasHighDensity ? 3 : 0)
-    );
-    mobileScore += screenScore;
-
-    const isMobileDevice = mobileScore >= 60; // Threshold for mobile classification
 
     // Log detailed detection info
     console.log('[useMobile] Device detection:', {
       ...deviceInfo,
-      indicators: mobileIndicators,
-      scores: {
-        total: mobileScore,
-        touch: touchScore,
-        screen: screenScore
-      },
-      result: isMobileDevice
+      checks: mobileChecks,
+      // Device is mobile if either userAgent or platform indicates mobile,
+      // or if both touch and screen size suggest mobile
+      result: mobileChecks.userAgent || mobileChecks.platform || (mobileChecks.touch && mobileChecks.screen)
     });
 
-    return isMobileDevice;
+    return mobileChecks.userAgent || mobileChecks.platform || (mobileChecks.touch && mobileChecks.screen);
   }, []);
 
   useEffect(() => {
@@ -120,12 +58,9 @@ export function useMobile() {
         console.log('[useMobile] Device type changed:', {
           from: wasMobile ? 'mobile' : 'desktop',
           to: nowMobile ? 'mobile' : 'desktop',
-          timestamp: new Date().toISOString(),
-          screen: {
-            width: window.innerWidth,
-            height: window.innerHeight,
-            orientation: window.screen.orientation?.type
-          }
+          width: window.innerWidth,
+          platform: navigator.platform,
+          userAgent: navigator.userAgent
         });
         setIsMobile(nowMobile);
       }

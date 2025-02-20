@@ -1,3 +1,4 @@
+
 import twilio from 'twilio';
 const { Twilio } = twilio;
 import shorturl from 'shorturl';
@@ -46,11 +47,37 @@ export const smsService = {
   },
 
   formatPhoneNumber(phone: string): string {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length !== 10) {
-      throw new Error('Phone number must be 10 digits');
+    if (!phone) {
+      throw new Error('Phone number is required');
     }
-    return `+1${cleaned}`;
+
+    // Remove all non-numeric characters first
+    const cleanNumber = phone.replace(/\D/g, '');
+
+    // Handle numbers that might start with 1
+    const baseNumber = cleanNumber.startsWith('1') ? cleanNumber.slice(1) : cleanNumber;
+
+    // Check if we have a valid 10-digit number after cleaning
+    if (baseNumber.length !== 10) {
+      throw new Error('Phone number must be exactly 10 digits after removing country code');
+    }
+
+    // Validate area code (first 3 digits)
+    const areaCode = baseNumber.substring(0, 3);
+    if (areaCode === '000' || areaCode === '911') {
+      throw new Error('Invalid area code');
+    }
+
+    // Format as +1XXXXXXXXXX
+    const formattedNumber = `+1${baseNumber}`;
+
+    logger.info('[SMS] Formatted phone number:', {
+      original: phone,
+      cleaned: cleanNumber,
+      formatted: formattedNumber
+    });
+
+    return formattedNumber;
   },
 
   async sendOTP(phone: string, code: string): Promise<boolean> {
@@ -230,8 +257,7 @@ export const smsService = {
   },
 
   generateOTP(): string {
-    const crypto = require('crypto');
-    return crypto.randomInt(100000, 999999).toString().padStart(6, '0');
+    return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
   async sendLoanApplicationLink(

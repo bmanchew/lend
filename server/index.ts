@@ -8,7 +8,6 @@ import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import portfinder from 'portfinder';
-import waitPort from 'wait-port';
 
 // Essential middleware
 const app = express();
@@ -16,18 +15,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Add health check endpoint
-app.get('/health', (_, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
 // Initialize authentication first
-setupAuth(app);
+await setupAuth(app);
 
 // Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
-// Add type for SocketError
 interface SocketError extends Error {
   data?: any;
 }
@@ -51,38 +44,17 @@ const startServer = async () => {
     // Start HTTP server first and wait for it to be ready
     await new Promise<void>((resolve, reject) => {
       try {
-        httpServer.listen(port, "0.0.0.0", async () => {
-          // Log both to console and logger for workflow detection
-          console.log(`Server running at http://0.0.0.0:${port}`);
-          console.log(`Health check available at http://0.0.0.0:${port}/health`);
-
-          // Wait for port to be actually ready
-          await waitPort({
-            host: '0.0.0.0',
-            port,
-            timeout: 10000,
-            output: 'silent'
-          });
-
-          logger.info(`Server listening on port ${port}`, {
-            port,
-            host: '0.0.0.0',
-            timestamp: new Date().toISOString()
-          });
-
+        httpServer.listen(port, "0.0.0.0", () => {
+          logger.info(`Server listening on port ${port}`);
           process.env.PORT = port.toString();
           resolve();
         });
 
         httpServer.on('error', (err) => {
-          const errorDetails = {
-            message: err.message,
-            stack: err.stack,
-            code: (err as NodeJS.ErrnoException).code,
-            timestamp: new Date().toISOString()
-          };
-          logger.error('Server startup error:', errorDetails);
-          console.error('Failed to start server:', errorDetails);
+          logger.error('Server startup error:', {
+            error: err.message,
+            stack: err.stack
+          });
           reject(err);
         });
       } catch (err) {
@@ -93,12 +65,45 @@ const startServer = async () => {
     // Setup Vite AFTER server is listening
     await setupVite(app, httpServer);
 
-    // Signal that the server is ready for connections
-    console.log("✨ Server is ready for connections");
-    logger.info("Server is ready for connections", {
-      port,
-      timestamp: new Date().toISOString()
+    // Socket.IO setup with proper error handling
+    const io = new Server(httpServer, {
+      cors: { origin: "*" },
+      path: '/socket.io/'
     });
+
+    (global as any).io = io;
+
+    io.on('connection', (socket) => {
+      const socketContext = {
+        socketId: socket.id,
+        transport: socket.conn.transport.name,
+        remoteAddress: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent']
+      };
+
+      logger.info("Socket connected:", socketContext);
+
+      socket.on('join_merchant_room', (merchantId: number) => {
+        const roomName = `merchant_${merchantId}`;
+        socket.join(roomName);
+        logger.info("Joined merchant room:", { merchantId, roomName, socketId: socket.id });
+      });
+
+      socket.on('error', (error: SocketError) => {
+        logger.error("Socket error:", { 
+          message: error.message,
+          data: error.data,
+          socketId: socket.id 
+        });
+      });
+
+      socket.on('disconnect', (reason) => {
+        logger.info("Socket disconnected:", { reason, socketId: socket.id });
+      });
+    });
+
+    // Signal that the server is ready for connections
+    logger.info("Server is ready for connections");
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown server error';
@@ -106,20 +111,21 @@ const startServer = async () => {
 
     logger.error("Failed to start server:", {
       message: errorMessage,
-      stack: errorStack,
-      timestamp: new Date().toISOString()
+      stack: errorStack
     });
 
     process.exit(1);
   }
 };
 
-// Start the server
+// Handle startup errors
 startServer().catch((error) => {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  const errorStack = error instanceof Error ? error.stack : undefined;
+
   logger.error("Critical server error:", {
-    message: error instanceof Error ? error.message : 'Unknown error',
-    stack: error instanceof Error ? error.stack : undefined,
-    timestamp: new Date().toISOString()
+    message: errorMessage,
+    stack: errorStack
   });
   process.exit(1);
 });
@@ -129,8 +135,7 @@ process.on('uncaughtException', (error: Error) => {
   logger.error("Uncaught exception:", {
     message: error.message,
     stack: error.stack,
-    name: error.name,
-    timestamp: new Date().toISOString()
+    name: error.name
   });
   process.exit(1);
 });
@@ -141,16 +146,13 @@ process.on('unhandledRejection', (reason: unknown) => {
   logger.error("Unhandled rejection:", {
     message: error.message,
     stack: error.stack,
-    name: error.name,
-    timestamp: new Date().toISOString()
+    name: error.name
   });
   process.exit(1);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info("Graceful shutdown initiated", {
-    timestamp: new Date().toISOString()
-  });
+  logger.info("Graceful shutdown initiated");
   process.exit(0);
 });

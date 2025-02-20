@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './use-auth';
@@ -129,8 +128,3 @@ export function useSocket(merchantId: number) {
 
   return socketRef.current;
 }
-=======
-
-// Socket functionality removed - using REST endpoints only
-export const useSocket = () => null;
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116

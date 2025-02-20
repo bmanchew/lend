@@ -9,13 +9,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { SelectProgram } from "@db/schema";
 
 const applicationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"), 
   email: z.string().email("Valid email is required"),
-<<<<<<< HEAD
   phone: z
     .string()
     .min(10, "Phone number must be at least 10 digits")
@@ -24,13 +22,8 @@ const applicationSchema = z.object({
       return cleaned.length === 10;
     }, "Must be a valid 10-digit phone number"),
   fundingAmount: z.number().min(1000, "Minimum funding amount is $1,000"),
-=======
-  phone: z.string().min(10, "Valid phone number is required"),
-  program: z.string().min(1, "Program is required"),
-  fundingAmount: z.number().min(0, "Funding amount must be positive"),
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
   salesRepEmail: z.string().email("Valid sales rep email is required")
-});
+}).required();
 
 type ApplicationFormData = z.infer<typeof applicationSchema>;
 
@@ -45,7 +38,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-<<<<<<< HEAD
   // Enhanced logging function
   const logEvent = (event: string, data?: any, error?: any) => {
     const logData = {
@@ -79,20 +71,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         logEvent('FETCH_PROGRAMS_ERROR', undefined, error);
         throw error;
       }
-=======
-  const { data: programs } = useQuery<SelectProgram[]>({
-    queryKey: ['programs', merchantId],
-    queryFn: async () => {
-      console.log('[LoanDialog] Fetching programs for merchant:', merchantId);
-      const response = await fetch(`/api/merchants/${merchantId}/programs`);
-      if (!response.ok) {
-        console.error('[LoanDialog] Failed to fetch programs:', response.statusText);
-        throw new Error('Failed to fetch programs');
-      }
-      const data = await response.json();
-      console.log('[LoanDialog] Fetched programs:', data);
-      return data;
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
     },
   });
 
@@ -111,7 +89,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
-<<<<<<< HEAD
       setIsSubmitting(true);
       logEvent('SUBMIT_APPLICATION_START', { formData: data });
 
@@ -124,49 +101,10 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         }
 
         const payload = {
-=======
-      console.log('[LoanApplication] Starting submission:', {
-        data,
-        timestamp: new Date().toISOString(),
-        merchantId,
-        merchantName
-      });
-
-      if (!merchantId) {
-        console.error('[LoanDialog] Missing merchantId');
-        throw new Error('Missing merchant ID');
-      }
-
-      // Validate phone format
-      const phone = data.phone?.replace(/\D/g, '');
-      if (!phone || phone.length !== 10) {
-        throw new Error('Invalid phone number format');
-      }
-
-      if (data.fundingAmount <= 0) {
-        throw new Error('Invalid funding amount');
-      }
-
-      const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
           ...data,
-          merchantId,
           merchantName,
-<<<<<<< HEAD
           phone: phone,
         };
-=======
-          amount: data.fundingAmount,
-          phone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10),
-          rawPhone: data.phone?.replace(/\D/g, '').replace(/^1/, '').slice(-10)
-        }),
-      });
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
 
         logEvent('API_REQUEST_START', { endpoint: '/send-loan-application', payload });
 
@@ -177,7 +115,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
           },
           body: JSON.stringify(payload),
         });
-<<<<<<< HEAD
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -206,34 +143,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       setOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
-=======
-        throw new Error(errorData.error || "Failed to send invitation");
-      }
-
-      console.log('[LoanApplication] API Success Response:', {
-        status: response.status,
-        timestamp: new Date().toISOString()
-      });
-
-      return response.json();
-    },
-    onSuccess: (data) => {
-      console.log('[LoanApplication] Submission successful:', {
-        data,
-        timestamp: new Date().toISOString()
-      });
-
-      toast({
-        title: "Success",
-        description: "Application sent successfully",
-        variant: "default"
-      });
-
-      // Reset form and update UI state
-      setOpen(false);
-      form.reset();
-      queryClient.invalidateQueries({ queryKey: ['applications', merchantId] });
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
     },
     onError: (error: any) => {
       logEvent('SUBMIT_APPLICATION_FAILURE', undefined, error);
@@ -352,34 +261,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-<<<<<<< HEAD
               
-=======
-              <FormField
-                control={form.control}
-                name="program"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Program</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select program" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {programs?.map((program: SelectProgram) => (
-                            <SelectItem key={program.id} value={program.id.toString()}>
-                              {program.name} ({program.term} months @ {program.interestRate}%)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
               <FormField
                 control={form.control}
                 name="fundingAmount"
@@ -388,7 +270,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                     <FormLabel>Funding Amount Needed</FormLabel>
                     <FormControl>
                       <Input 
-<<<<<<< HEAD
                         {...field} 
                         type="number" 
                         min="1000" 
@@ -398,15 +279,6 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                           logEvent('FUNDING_AMOUNT_CHANGED', {value: e.target.value});
                           field.onChange(parseFloat(e.target.value));
                         }}
-=======
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        placeholder="9800"
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                        value={field.value || ''}
->>>>>>> 5f3313f344debc3d201818f060b5e618febf5116
                       />
                     </FormControl>
                     <FormMessage />

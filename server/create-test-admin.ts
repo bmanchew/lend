@@ -12,35 +12,20 @@ async function hashPassword(password: string) {
 }
 
 async function createTestAdmin() {
-  const adminPassword = process.env.ADMIN_TEST_PASSWORD || 'change_me_in_production';
-  const adminEmail = process.env.ADMIN_TEST_EMAIL || 'admin@example.com';
-
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('[WARNING] Running createTestAdmin in production environment');
-    return;
-  }
-
-  const hashedPassword = await hashPassword(adminPassword);
-
-  try {
-    const [user] = await db
-      .insert(users)
-      .values({
-        username: "admin",
-        password: hashedPassword,
-        email: adminEmail,
-        name: "Admin User",
-        role: "admin",
-      })
-      .returning();
-
-    console.log("Created test admin user:", { username: user.username, email: user.email });
-  } catch (error) {
-    console.error("Failed to create test admin:", error);
-  }
+  const hashedPassword = await hashPassword("admin123");
+  
+  const [user] = await db
+    .insert(users)
+    .values({
+      username: "admin",
+      password: hashedPassword,
+      email: "admin@shifi.com",
+      name: "Admin User",
+      role: "admin",
+    })
+    .returning();
+    
+  console.log("Created test admin user:", user);
 }
 
-// Only run in development
-if (process.env.NODE_ENV !== 'production') {
-  createTestAdmin().catch(console.error);
-}
+createTestAdmin().catch(console.error);
