@@ -1,8 +1,7 @@
-
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 type ProtectedRouteProps = {
@@ -10,18 +9,23 @@ type ProtectedRouteProps = {
   allowedRoles?: string[];
 };
 
-export function ProtectedRoute({ component: Component, allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  component: Component,
+  allowedRoles,
+}: ProtectedRouteProps) {
   const { user, isLoading, error } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const hasRedirected = useRef(false);
 
   // Handle authentication error
   useEffect(() => {
-    if (error) {
+    if (error && !hasRedirected.current) {
+      hasRedirected.current = true;
       toast({
         title: "Authentication Error",
         description: "Please login again to continue.",
-        variant: "destructive"
+        variant: "destructive",
       });
       setLocation("/auth/merchant");
     }
@@ -29,21 +33,34 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
 
   // Handle user and role checks
   useEffect(() => {
-    const [location] = useLocation();
-    if (!user && !location.startsWith("/auth/")) {
+    // Skip if we're already on an auth page or if we've already redirected
+    if (location.startsWith("/auth/") || hasRedirected.current) {
+      return;
+    }
+
+    // Handle unauthenticated user
+    if (!user) {
+      hasRedirected.current = true;
       setLocation("/auth/merchant");
       return;
     }
 
-    if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    // Handle unauthorized role
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      hasRedirected.current = true;
       toast({
         title: "Access Denied",
         description: `You don't have permission to access this area.`,
-        variant: "destructive"
+        variant: "destructive",
       });
-      setLocation(`/${user?.role}`);
+      setLocation(`/${user.role}`);
     }
-  }, [user, allowedRoles, toast, setLocation]);
+  }, [user, allowedRoles, toast, setLocation, location]);
+
+  // Reset redirect flag when location changes
+  useEffect(() => {
+    hasRedirected.current = false;
+  }, [location]);
 
   if (isLoading) {
     return (
@@ -60,13 +77,16 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
   try {
     return <Component />;
   } catch (err) {
-    console.error('Protected route render error:', err);
-    toast({
-      title: "Error",
-      description: "Something went wrong. Please try again.",
-      variant: "destructive"
-    });
-    setLocation(`/${user.role}`);
+    console.error("Protected route render error:", err);
+    if (!hasRedirected.current) {
+      hasRedirected.current = true;
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+      setLocation(`/${user.role}`);
+    }
     return null;
   }
 }
