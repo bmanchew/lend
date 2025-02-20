@@ -380,9 +380,16 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId });
+    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { 
+      userId,
+      path: req.path,
+      method: req.method,
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
 
     if (!userId || isNaN(userId)) {
+      logger.error("[Merchant Lookup] Invalid user ID:", { userId });
       return res.status(400).json({
         status: 'error',
         error: 'Invalid user ID'
@@ -392,11 +399,17 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
     const merchantResults = await db
       .select()
       .from(merchants)
-      .where(eq(merchants.userId, userId))
-      .limit(1);
+      .where(eq(merchants.userId, userId));
+
+    logger.info("[Merchant Lookup] Query results:", { 
+      userId,
+      resultsCount: merchantResults.length,
+      results: merchantResults 
+    });
 
     const [merchant] = merchantResults;
     if (!merchant) {
+      logger.error("[Merchant Lookup] No merchant found for user:", { userId });
       return res.status(404).json({
         status: 'error',
         error: 'Merchant not found'
@@ -410,7 +423,11 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
       data: merchant
     });
   } catch (err: any) {
-    logger.error("Error fetching merchant by user:", err);
+    logger.error("[Merchant Lookup] Error fetching merchant:", { 
+      error: err.message,
+      stack: err.stack,
+      userId: req.params.userId 
+    });
     return res.status(500).json({
       status: 'error',
       error: 'Error fetching merchant data',
@@ -974,7 +991,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
       return res.status(400).json({ error: 'Invalid parameters' });
     }
 
-    let totalPoints = 0;
+    lettotalPoints = 0;
     let details: Record<string, any> = {};
 
     switch (type) {

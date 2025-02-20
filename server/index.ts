@@ -15,16 +15,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Mount API routes first, before Vite middleware
-app.use("/api", apiRouter);  // Ensure all routes are under /api
+// Initialize authentication first
+await setupAuth(app);
+
+// Mount API routes under /api prefix
+app.use("/api", apiRouter);
 
 const startServer = async () => {
   try {
     // Create HTTP server
     const httpServer = createServer(app);
-
-    // Setup authentication
-    await setupAuth(app);
 
     // Find available port
     const port = await portfinder.getPortPromise({

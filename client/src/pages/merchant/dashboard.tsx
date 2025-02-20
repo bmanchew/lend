@@ -50,7 +50,7 @@ export default function MerchantDashboard() {
     queryFn: async () => {
       if (!user?.id) throw new Error('No user ID available');
       try {
-        const response = await apiRequest(`/merchants/by-user/${user.id}`);
+        const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to fetch merchant');
