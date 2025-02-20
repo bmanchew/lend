@@ -52,7 +52,7 @@ function AppRouter() {
       />
 
       {/* Apply route */}
-      <Route path="/apply/:token" component={ApplyPage} />
+      <Route path="/apply/:phone" component={ApplyPage} />
 
       {/* Legacy route redirects */}
       <Route path="/login/merchant">
