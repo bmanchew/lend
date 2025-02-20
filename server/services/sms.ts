@@ -1,4 +1,3 @@
-
 import twilio from 'twilio';
 const { Twilio } = twilio;
 import shorturl from 'shorturl';
@@ -305,9 +304,8 @@ export const smsService = {
 
       // Use minimal format with URL on its own line
       const message = [
-        `${merchantName} loan application link:`,
-        'Link:',
-        shortUrl
+        `${merchantName} loan application:`,
+        `https://${shortUrl}`
       ].join('\n');
 
       let attempt = 1;
