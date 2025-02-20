@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -14,8 +15,8 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  // Handle authentication error
   useEffect(() => {
-    // Show error toast if authentication fails
     if (error) {
       toast({
         title: "Authentication Error",
@@ -26,6 +27,23 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
     }
   }, [error, toast, setLocation]);
 
+  // Handle user and role checks
+  useEffect(() => {
+    if (!user) {
+      setLocation("/auth/merchant");
+      return;
+    }
+
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      toast({
+        title: "Access Denied",
+        description: `You don't have permission to access this area.`,
+        variant: "destructive"
+      });
+      setLocation(`/${user.role}`);
+    }
+  }, [user, allowedRoles, toast, setLocation]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -34,31 +52,10 @@ export function ProtectedRoute({ component: Component, allowedRoles }: Protected
     );
   }
 
-  useEffect(() => {
-    if (!user) {
-      setLocation("/auth/merchant");
-      return;
-    }
-    
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-      const timeout = setTimeout(() => {
-        toast({
-          title: "Access Denied",
-          description: `You don't have permission to access this area.`,
-          variant: "destructive"
-        });
-        setLocation(`/${user.role}`);
-      }, 0);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [user, allowedRoles, toast, setLocation]);
-
   if (!user || (allowedRoles && !allowedRoles.includes(user.role))) {
     return null;
   }
 
-  // Error boundary wrapper
   try {
     return <Component />;
   } catch (err) {
