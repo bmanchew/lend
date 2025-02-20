@@ -22,14 +22,26 @@ export default function MerchantLogin() {
   const { loginMutation } = useAuth();
   const { toast } = useToast();
 
-  // Check for existing token and redirect if already logged in
+  // Check for existing token and valid auth state before redirecting
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token && !window.location.pathname.includes('/merchant/dashboard')) {
-      console.log('[MerchantLogin] Existing token found, redirecting to dashboard');
-      setLocation('/merchant/dashboard');
+    if (token && !window.location.pathname.includes('/merchant/dashboard') && !loginMutation.isPending) {
+      try {
+        // Verify token is valid JWT
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.exp * 1000 > Date.now() && payload.role === 'merchant') {
+          console.log('[MerchantLogin] Valid token found, redirecting to dashboard');
+          setLocation('/merchant/dashboard');
+        } else {
+          console.log('[MerchantLogin] Invalid or expired token found, clearing');
+          localStorage.removeItem('token');
+        }
+      } catch (error) {
+        console.error('[MerchantLogin] Token validation error:', error);
+        localStorage.removeItem('token');
+      }
     }
-  }, [setLocation]);
+  }, [setLocation, loginMutation.isPending]);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),

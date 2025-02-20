@@ -200,16 +200,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return null;
 
     try {
-      // Check token expiration
       const payload = JSON.parse(atob(token.split('.')[1]));
       if (payload.exp * 1000 < Date.now()) {
+        console.log('[Auth] Token expired, cleaning up');
         localStorage.removeItem('token');
+        queryClient.setQueryData(["/api/user"], null);
+        return null;
+      }
+      if (!payload.role) {
+        console.log('[Auth] Invalid token format, cleaning up');
+        localStorage.removeItem('token');
+        queryClient.setQueryData(["/api/user"], null);
         return null;
       }
       return token;
     } catch (error) {
       console.error('[Auth] Token validation error:', error);
       localStorage.removeItem('token');
+      queryClient.setQueryData(["/api/user"], null);
       return null;
     }
   };
