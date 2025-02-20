@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth.tsx";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -19,7 +19,7 @@ const adminLoginSchema = z.object({
 type AdminLoginForm = z.infer<typeof adminLoginSchema>;
 
 export default function AdminLogin() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { loginMutation } = useAuth();
   const { toast } = useToast();
 
@@ -69,7 +69,7 @@ export default function AdminLogin() {
           title: "Success",
           description: "Successfully logged in as admin"
         });
-        navigate('/admin/dashboard', { replace: true });
+        setLocation('/admin/dashboard');
       } else {
         console.error('[AdminLogin] Invalid role:', {
           expectedRole: 'admin',
