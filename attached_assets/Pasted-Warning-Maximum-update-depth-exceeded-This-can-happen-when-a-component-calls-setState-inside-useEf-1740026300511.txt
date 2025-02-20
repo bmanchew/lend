@@ -1,0 +1,19 @@
+Warning: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn&#x27;t have a dependency array, or one of the dependencies changes on every render.
+    at Route (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:323:16)
+    at Switch (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:379:17)
+    at AppRouter (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/App.tsx?v=d_PDk0o3VEYZJRy5QUzOD:36:35)
+    at AuthProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/hooks/use-auth.tsx:28:32)
+    at QueryClientProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=6b7afe8f:2805:3)
+    at Router (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:291:17)
+    at App
+[MerchantLogin] Existing token found, redirecting to dashboard
+Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+Warning: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn&#x27;t have a dependency array, or one of the dependencies changes on every render.
+    at Route (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:323:16)
+    at Switch (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:379:17)
+    at AppRouter (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/App.tsx?v=d_PDk0o3VEYZJRy5QUzOD:36:35)
+    at AuthProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/hooks/use-auth.tsx:28:32)
+    at QueryClientProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=6b7afe8f:2805:3)
+    at Router (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=6b7afe8f:291:17)
+    at App
+[MerchantLogin] Existing token found, redirecting to dashboard
