@@ -1,0 +1,211 @@
+Below is a draft Product Requirements Document (PRD) that Replit AI developers and other team members can use as a single source of truth for your ShiFi Lend project. This document combines the borrower application flow details, technical integration points, and branding guidelines discussed earlier.
+
+---
+
+# ShiFi Lend – Product Requirements Document (PRD)
+
+## 1. Overview
+
+**Project Name:** ShiFi Lend  
+**Project Type:** Fintech – Borrower Loan Application Portal  
+**Target Audience:** Borrowers and Merchants seeking flexible financing solutions  
+**Document Version:** 1.0  
+**Last Updated:** February 20, 2025
+
+---
+
+## 2. Vision & Goals
+
+**Vision:**  
+Create a modern, secure, and user-friendly borrower portal that provides an intuitive application process for flexible payment options. This platform should build trust through transparent financing options and robust identity verification, while seamlessly integrating with external services like Twilio, Plaid, and DiDit for SMS notifications, bank payments, and identity verification.
+
+**Goals:**
+- Provide a frictionless borrower experience from initial invitation to loan approval.
+- Enable merchants to send invitation links and manage borrower contracts.
+- Ensure secure authentication (via Passport, JWT, and sessions) and identity verification.
+- Integrate with third-party services for SMS (Twilio), payment processing (Plaid), and identity verification (DiDit).
+- Maintain high standards of logging, error handling, and robust configuration management.
+
+---
+
+## 3. User Roles & Personas
+
+### 3.1 Borrower
+- **Description:** Individuals invited by merchants to apply for a loan.  
+- **Key Actions:**
+  - Enter phone number and receive OTP
+  - Verify OTP and create a profile
+  - Provide personal and financial details for identity verification and loan application
+  - View application status, contract details, and payment schedules
+
+### 3.2 Merchant
+- **Description:** Business entities or agents who invite borrowers, review applications, and manage financing contracts.  
+- **Key Actions:**
+  - Send invitation links via the portal
+  - View borrower applications and contracts
+  - Receive notifications (via Slack) on loan application events
+  - Configure default loan programs (e.g., 24-month 0% APR financing)
+
+### 3.3 Admin
+- **Description:** Internal staff managing user accounts, application troubleshooting, and platform configuration.  
+- **Key Actions:**
+  - Monitor logs and error reports
+  - Manage user sessions and authentication issues
+  - Oversee integrations with third-party services
+
+---
+
+## 4. Functional Requirements
+
+### 4.1 Borrower Application Flow (MVP)
+1. **Invitation & Phone Verification:**
+   - Borrower receives an invitation from a merchant.
+   - The borrower enters their mobile number on the ShiFi Portal.
+   - The system sends an OTP via SMS using Twilio.
+   - Borrower enters the OTP for verification.
+
+2. **Profile Creation & Identity Verification:**
+   - After OTP verification, the borrower fills out a profile form with fields such as first name, last name, email, DOB, employment status, annual income, housing status, and address.
+   - The system then triggers a KYC/ID verification flow (e.g., using DiDit).
+   - Display validation and disqualification criteria (e.g., under 18, income threshold, housing payment ratio).
+
+3. **Loan Application & Payment Options:**
+   - Once verified, borrowers are presented with financing options:
+     - Display product details (e.g., product name, total price).
+     - Breakdown of payment schedule (e.g., “24 Payments: $X every month, with $X due today”).
+     - Clearly state APR (0% for eligible US residents) and required down payment (5%).
+   - Borrowers select a payment method: debit/credit card input or connecting via Plaid.
+   - Final contract information is pre-filled (e.g., name, email).
+
+4. **Contract & Payment Processing:**
+   - On submission, create a loan contract record.
+   - Trigger a notification (via Slack) to the merchant.
+   - Emit real-time events (via Socket.IO) for contract updates.
+   - Integrate with Plaid for processing payments and ACH verification.
+   - Update contract status based on payment events and ACH verifications.
+
+5. **Rewards & Incentives:**
+   - Provide endpoints to calculate rewards (for down payments, early or additional payments) and track rewards transactions.
+   - Update borrower rewards balances based on contract actions.
+
+### 4.2 Authentication & Authorization
+- **JWT and Session-Based Authentication:**
+  - Use Passport with LocalStrategy to authenticate users.
+  - Generate and validate JWT tokens with proper error handling.
+  - Secure sessions using express-session with a PostgreSQL-backed store.
+  - Ensure public endpoints (e.g., `/login`, `/auth/register`) bypass JWT checks while all protected endpoints enforce authentication.
+
+### 4.3 Error Handling & Logging
+- **Centralized Error Handler:**  
+  - Implement custom error classes (e.g., `APIError`, `AuthError`) with detailed error codes and messages.
+  - Ensure all endpoints pass errors to a global error handler that defaults to a 500 status code if none is provided.
+  - Log errors with sufficient context (request IDs, timestamps, and stack traces) without exposing sensitive data.
+
+### 4.4 Third-Party Integrations
+- **Twilio (SMS):**
+  - Validate Twilio configuration using environment variables.
+  - Implement robust error handling and logging in SMS functions.
+  - Include fallback mechanisms and Slack notifications for SMS failures.
+
+- **Plaid (Payments & ACH):**
+  - Implement endpoints for exchanging tokens, processing transfers, and verifying ACH micro-deposits.
+  - Ensure error states (e.g., missing environment variables, failed verifications) are handled gracefully.
+
+- **DiDit (ID Verification):**
+  - Integrate with the DiDit service for identity verification during the borrower profile creation.
+
+- **Slack:**
+  - Use Slack notifications for critical error alerts and successful operations (e.g., new merchant creation, loan application events).
+
+---
+
+## 5. Non-Functional Requirements
+
+- **Performance & Scalability:**  
+  - Ensure the API can handle multiple concurrent loan applications and real-time updates.
+  - Use caching (e.g., NodeCache or Redis) for frequently accessed endpoints (e.g., GET requests).
+
+- **Security:**  
+  - Secure sensitive endpoints using HTTPS and proper session management.
+  - Use environment variables for all configuration settings and secrets.
+  - Implement input validation (using Zod or similar libraries) on all user inputs.
+
+- **Maintainability:**  
+  - Modularize the codebase by separating routes, services, middleware, and configuration files.
+  - Use consistent error handling and logging patterns.
+  - Include documentation and inline comments for critical sections of the code.
+
+- **User Experience:**  
+  - Design UI components (borrower application forms, OTP screens, payment options) according to the Shifi brand guide.
+  - Provide clear error messages and feedback at every step (e.g., form validation errors, SMS failures).
+
+---
+
+## 6. Technical Environment & Configuration
+
+- **Development Environment:**  
+  - Node.js with Express and TypeScript.
+  - Drizzle ORM with PostgreSQL (using Neon for serverless deployments).
+  - Passport for authentication, Socket.IO for real-time notifications, and third-party libraries for SMS and payment integrations.
+
+- **Configuration Files:**
+  - **.env:** Store sensitive configurations like database URL, JWT secret, Twilio credentials, Plaid tokens.
+  - **.replit:** Configure the run command and environment for Replit deployments.
+  - **Package.json:** Maintain scripts for development, testing, and production builds.
+
+- **Port Binding & Environment Variables:**
+  - Dynamically bind to the port provided via `process.env.PORT`.
+  - Ensure Replit’s configuration does not override your settings by specifying environment variables in the Replit secrets and `.replit` file.
+
+---
+
+## 7. Timeline & Milestones
+
+- **MVP Development:**  
+  - Borrower Application Flow – 40h (front-end and back-end)
+  - Authentication & Session Management – 16h
+  - Payment Processing & ACH Verification (Plaid integration) – 24h
+  - SMS Integration (Twilio, OTP) – 16h
+  - Rewards & Contract Management – 24h
+  - Testing, Logging, and Error Handling – 16h
+
+- **Future Enhancements:**  
+  - Additional analytics and reporting dashboards  
+  - Expanded international support (phone formatting, currency handling)  
+  - Deeper integration with external identity providers  
+  - UI/UX refinements per customer feedback
+
+---
+
+## 8. Branding & UI Guidelines (Investor & Borrower Portals)
+
+Refer to the attached brand guide (see previous Replit AI output) for consistent styling across the investor and borrower portals. Key points include:
+
+- **Color Palette & Typography:** Use dark, sophisticated backgrounds with vibrant accent colors (deep navy, vibrant teal) and modern, sans-serif fonts.
+- **UI Consistency:**  
+  - Ensure uniform button styles, form input designs, and navigation elements.
+  - Use clear, concise language in all user communications (e.g., SMS messages, onboarding instructions).
+
+---
+
+## 9. Replit AI Developer Considerations
+
+- **Environment Consistency:**  
+  - Define all necessary environment variables (PORT, DATABASE_URL, JWT_SECRET, TWILIO credentials, PLAID tokens, etc.) in Replit’s Secrets and `.replit` file.
+- **Error & Log Reference:**  
+  - Ensure that detailed logging (including request IDs) is enabled in development mode to aid in troubleshooting.
+- **Modular Code Structure:**  
+  - Organize code into modules: routes, services (SMS, payment, auth), middleware, configuration, and utility functions.
+- **Testing & Debugging:**  
+  - Use unit and integration tests to simulate various borrower and merchant flows.
+  - Monitor Replit logs for configuration or port issues, and adjust the `.replit` file accordingly.
+
+---
+
+## 10. Final Notes
+
+This PRD serves as a living document. As the project evolves, update this document to reflect new features, integrations, or changes in branding. Maintaining a single source of truth will help your development team (including Replit AI) implement and reference changes consistently.
+
+---
+
+Feel free to adjust or expand this document based on further requirements or feedback from stakeholders. Let me know if you need further refinements or additional sections!
