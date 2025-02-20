@@ -9,11 +9,18 @@ import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import portfinder from 'portfinder';
 import { createServer as createNetServer } from 'net';
-import { 
-  requestLoggingMiddleware, 
-  errorLoggingMiddleware, 
-  performanceLoggingMiddleware 
+import {
+  requestLoggingMiddleware,
+  errorLoggingMiddleware,
+  performanceLoggingMiddleware
 } from './middleware/logging';
+import { auditLoggingMiddleware } from './middleware/audit-logging';
+import { createDBLogger } from './middleware/db-logging';
+import { createFileLogger } from './middleware/file-logging';
+import { authLoggingMiddleware } from './middleware/auth-logging';
+import { createCacheLogger, createLoggingCache } from './middleware/cache-logging';
+import { businessEventMiddleware } from './middleware/business-events';
+import NodeCache from 'node-cache';
 
 // Rate limiter configuration
 const limiter = rateLimit({
@@ -30,9 +37,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(limiter);
 
-// Add logging middleware
+// Initialize loggers
+const dbLogger = createDBLogger();
+const fileLogger = createFileLogger();
+
+// Initialize cache with logging
+const cache = createLoggingCache(new NodeCache({ stdTTL: 600 }));
+
+// Add comprehensive logging middleware
 app.use(requestLoggingMiddleware);
 app.use(performanceLoggingMiddleware);
+app.use(auditLoggingMiddleware);
+app.use(authLoggingMiddleware);
+app.use(businessEventMiddleware); // Add business event tracking
 
 // Function to check if a port is available
 const isPortAvailable = (port: number): Promise<boolean> => {
@@ -71,61 +88,45 @@ const startServer = async () => {
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Setup auth first (this adds the session middleware)
     logger.info('Setting up authentication...', {
       component: 'server',
       action: 'auth_setup'
     });
+
+    // Setup authentication
     await setupAuth(app);
-    logger.info('Authentication setup completed', {
-      component: 'server',
-      action: 'auth_setup_complete'
+
+    logger.logBusinessEvent('auth_setup', 'system', 'success', {
+      timestamp: new Date().toISOString()
     });
 
-    // Mount API routes after auth setup
+    // Mount API routes
     app.use(apiRouter);
 
-    // Setup Vite last
+    // Setup Vite
     logger.info('Setting up Vite...', {
       component: 'server',
       action: 'vite_setup'
     });
+
     await setupVite(app, httpServer);
-    logger.info('Vite setup completed', {
-      component: 'server',
-      action: 'vite_setup_complete'
+
+    logger.logBusinessEvent('vite_setup', 'system', 'success', {
+      timestamp: new Date().toISOString()
     });
 
     // Error handling middleware
     app.use(errorLoggingMiddleware);
 
     // Find available port
-    const port = await portfinder.getPortPromise({ 
-      port: process.env.PORT ? parseInt(process.env.PORT) : 3000 
+    const port = await portfinder.getPortPromise({
+      port: Number(process.env.PORT) || 3000
     });
 
-    // Wait for port to be available before starting
+    // Wait for port to be available
     await waitForPort(port);
 
-    // Start server
-    httpServer.listen(port, "0.0.0.0", () => {
-      const duration = logger.endTimer(startTime);
-      logger.info('Server startup completed', {
-        component: 'server',
-        action: 'startup_complete',
-        url: `http://0.0.0.0:${port}`,
-        startupDuration: duration,
-        environment: process.env.NODE_ENV || 'development',
-        nodeVersion: process.version,
-        memoryUsage: process.memoryUsage(),
-        cpuUsage: process.cpuUsage()
-      });
-
-      // Make port available to other processes
-      process.env.PORT = port.toString();
-    });
-
-    // Initialize Socket.IO with enhanced logging
+    // Socket.IO setup with enhanced logging
     const io = new Server(httpServer, {
       cors: { origin: "*" },
       path: '/socket.io/',
@@ -134,7 +135,7 @@ const startServer = async () => {
 
     (global as any).io = io;
 
-    // Enhanced Socket.IO logging
+    // Enhanced Socket.IO logging with business events
     io.on('connection', (socket) => {
       const socketContext = {
         component: 'socket.io',
@@ -144,102 +145,113 @@ const startServer = async () => {
         userAgent: socket.handshake.headers['user-agent']
       };
 
-      logger.info('Socket client connected', {
-        ...socketContext,
-        action: 'client_connect',
+      logger.logSocketEvent('connection', socket.id, {
+        transport: socket.conn.transport.name,
         query: socket.handshake.query
       });
 
       socket.on('join_merchant_room', (merchantId: number) => {
         const roomName = `merchant_${merchantId}`;
         socket.join(roomName);
-        logger.info('Socket joined merchant room', {
-          ...socketContext,
-          action: 'join_room',
+
+        logger.logSocketEvent('join_merchant_room', socket.id, {
           merchantId,
           room: roomName,
           currentRooms: Array.from(socket.rooms)
         });
+
+        logger.logBusinessEvent('merchant_room_join', 'socket', 'success', {
+          merchantId,
+          socketId: socket.id,
+          room: roomName
+        });
       });
 
       socket.on('error', (error: Error) => {
-        logger.error('Socket error occurred', error, {
-          ...socketContext,
-          action: 'socket_error'
+        logger.logSocketEvent('error', socket.id, undefined, error);
+
+        logger.logBusinessEvent('socket_error', 'socket', 'failure', {
+          socketId: socket.id,
+          error: {
+            message: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          }
         });
       });
 
       socket.on('disconnect', (reason) => {
-        logger.info('Socket client disconnected', {
-          ...socketContext,
-          action: 'client_disconnect',
+        logger.logSocketEvent('disconnect', socket.id, {
           reason,
-          duration: socket.conn.transport.name 
+          duration: socket.conn.transport.name
         });
       });
     });
 
+    // Start HTTP server
+    httpServer.listen(port, "0.0.0.0", () => {
+      const duration = logger.endTimer(startTime);
+      logger.logBusinessEvent('server_startup', 'system', 'success', {
+        port,
+        startupDuration: duration,
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || 'development'
+      });
+      process.env.PORT = port.toString();
+    });
+
   } catch (error: any) {
-    logger.fatal('Server startup failed', error, {
-      component: 'server',
-      action: 'startup_failed',
-      startupDuration: logger.endTimer(startTime),
-      nodeVersion: process.version,
-      environment: process.env.NODE_ENV || 'development',
-      memoryUsage: process.memoryUsage(),
-      cpuUsage: process.cpuUsage()
+    logger.logBusinessEvent('server_startup', 'system', 'failure', {
+      error: {
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      }
     });
     process.exit(1);
   }
 };
 
-// Handle uncaught exceptions with enhanced context
+// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  logger.fatal('Uncaught Exception detected', error, {
-    component: 'process',
-    action: 'uncaught_exception',
-    type: 'uncaughtException',
-    processUptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    cpuUsage: process.cpuUsage()
+  logger.logBusinessEvent('uncaught_exception', 'process', 'failure', {
+    error: {
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }
   });
   process.exit(1);
 });
 
-// Handle unhandled promise rejections with enhanced context
+// Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  logger.fatal('Unhandled Rejection detected', reason instanceof Error ? reason : new Error(String(reason)), {
-    component: 'process',
-    action: 'unhandled_rejection',
-    type: 'unhandledRejection',
-    processUptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    cpuUsage: process.cpuUsage()
+  logger.logBusinessEvent('unhandled_rejection', 'process', 'failure', {
+    error: reason instanceof Error ? {
+      message: reason.message,
+      stack: process.env.NODE_ENV === 'development' ? reason.stack : undefined
+    } : { message: String(reason) }
   });
   process.exit(1);
 });
 
-// Graceful shutdown with enhanced logging
+// Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, starting graceful shutdown', {
-    component: 'process',
-    action: 'graceful_shutdown',
+  logger.logBusinessEvent('graceful_shutdown', 'process', 'success', {
     processUptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    cpuUsage: process.cpuUsage()
+    memoryUsage: process.memoryUsage()
   });
   process.exit(0);
 });
 
 startServer().catch((error) => {
-  logger.fatal('Critical server error', error, {
-    component: 'server',
-    action: 'critical_error',
+  logger.logBusinessEvent('critical_error', 'server', 'failure', {
+    error: {
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    },
     processUptime: process.uptime(),
-    nodeVersion: process.version,
-    environment: process.env.NODE_ENV || 'development',
-    memoryUsage: process.memoryUsage(),
-    cpuUsage: process.cpuUsage()
+    nodeVersion: process.version
   });
   process.exit(1);
 });
+
+// Export loggers and middleware for use in other parts of the application
+export { dbLogger, fileLogger, cache, createCacheLogger, authLoggingMiddleware };

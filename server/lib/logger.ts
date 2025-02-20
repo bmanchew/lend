@@ -11,6 +11,13 @@ interface LogContext {
   component?: string;
   action?: string;
   duration?: number;
+  businessEvent?: {
+    type: string;
+    category: string;
+    subCategory?: string;
+    status: 'success' | 'failure' | 'pending';
+    metadata?: any;
+  };
   [key: string]: any;
 }
 
@@ -100,6 +107,26 @@ class Logger {
     this.logger.fatal(this.formatMessage(message, errorContext));
   }
 
+  // Business event logging
+  logBusinessEvent(
+    eventType: string,
+    category: string,
+    status: 'success' | 'failure' | 'pending',
+    metadata?: any,
+    context: LogContext = {}
+  ) {
+    const businessContext = {
+      ...context,
+      businessEvent: {
+        type: eventType,
+        category,
+        status,
+        metadata
+      }
+    };
+    this.info(`Business event: ${eventType}`, businessContext);
+  }
+
   // Performance logging
   startTimer(): [number, number] {
     return process.hrtime();
@@ -135,6 +162,42 @@ class Logger {
         this.fatal(message, undefined, perfContext);
         break;
     }
+  }
+
+  // Socket.IO event logging
+  logSocketEvent(
+    eventName: string,
+    socketId: string,
+    eventData?: any,
+    error?: Error,
+    context: LogContext = {}
+  ) {
+    const socketContext = {
+      ...context,
+      component: 'socket.io',
+      socketId,
+      event: eventName,
+      eventData: this.sanitizeSocketData(eventData)
+    };
+
+    if (error) {
+      this.error(`Socket.IO event error: ${eventName}`, error, socketContext);
+    } else {
+      this.info(`Socket.IO event: ${eventName}`, socketContext);
+    }
+  }
+
+  private sanitizeSocketData(data: any): any {
+    if (!data) return data;
+
+    const sanitized = { ...data };
+    const sensitiveFields = ['password', 'token', 'secret', 'apiKey'];
+    sensitiveFields.forEach(field => {
+      if (field in sanitized) {
+        sanitized[field] = '[REDACTED]';
+      }
+    });
+    return sanitized;
   }
 
   // Request tracking

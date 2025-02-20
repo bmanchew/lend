@@ -39,14 +39,39 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: programs } = useQuery({
+  // Enhanced logging function
+  const logEvent = (event: string, data?: any, error?: any) => {
+    const logData = {
+      timestamp: new Date().toISOString(),
+      event,
+      merchantId,
+      merchantName,
+      ...data
+    };
+
+    if (error) {
+      console.error(`[LoanApplication] ${event}:`, { ...logData, error });
+    } else {
+      console.log(`[LoanApplication] ${event}:`, logData);
+    }
+  };
+
+  const { data: programs, error: programsError } = useQuery({
     queryKey: ['programs', merchantId],
     queryFn: async () => {
-      const response = await fetch(`/api/merchants/${merchantId}/programs`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch programs');
+      logEvent('FETCH_PROGRAMS_START');
+      try {
+        const response = await fetch(`/api/merchants/${merchantId}/programs`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch programs');
+        }
+        const data = await response.json();
+        logEvent('FETCH_PROGRAMS_SUCCESS', { programCount: data.length });
+        return data;
+      } catch (error) {
+        logEvent('FETCH_PROGRAMS_ERROR', undefined, error);
+        throw error;
       }
-      return response.json();
     },
   });
 
@@ -66,35 +91,50 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
   const sendInviteMutation = useMutation({
     mutationFn: async (data: ApplicationFormData) => {
       setIsSubmitting(true);
+      logEvent('SUBMIT_APPLICATION_START', { formData: data });
+
       try {
         const phone = data.phone.replace(/\D/g, '');
         if (phone.length !== 10) {
-          throw new Error('Invalid phone number format');
+          const error = new Error('Invalid phone number format');
+          logEvent('VALIDATION_ERROR', { field: 'phone' }, error);
+          throw error;
         }
+
+        const payload = {
+          ...data,
+          merchantName,
+          phone: phone,
+        };
+
+        logEvent('API_REQUEST_START', { endpoint: '/send-loan-application', payload });
 
         const response = await fetch(`/api/merchants/${merchantId}/send-loan-application`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            ...data,
-            merchantName,
-            phone: phone,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
           const errorData = await response.json();
+          logEvent('API_REQUEST_ERROR', { statusCode: response.status }, errorData);
           throw new Error(errorData.error || "Failed to send invitation");
         }
 
-        return response.json();
+        const responseData = await response.json();
+        logEvent('API_REQUEST_SUCCESS', { responseData });
+        return responseData;
+      } catch (error) {
+        logEvent('SUBMIT_APPLICATION_ERROR', undefined, error);
+        throw error;
       } finally {
         setIsSubmitting(false);
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      logEvent('SUBMIT_APPLICATION_SUCCESS', { data });
       toast({
         title: "Success",
         description: "Loan application sent successfully",
@@ -106,7 +146,7 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
       queryClient.invalidateQueries({ queryKey: [`/api/merchants/${merchantId}/contracts`] });
     },
     onError: (error: any) => {
-      console.error('[LoanDialog] Error:', error);
+      logEvent('SUBMIT_APPLICATION_FAILURE', undefined, error);
       toast({
         title: "Error",
         description: error.message || "Failed to send loan application invitation",
@@ -115,7 +155,12 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
     },
   });
 
+  if (programsError) {
+    logEvent('PROGRAMS_LOAD_ERROR', undefined, programsError);
+  }
+
   const onSubmit = (data: ApplicationFormData) => {
+    logEvent('FORM_SUBMIT', { formData: data });
     sendInviteMutation.mutate(data);
   };
 
@@ -125,7 +170,10 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
         <Button 
           size="lg" 
           className="gap-2 bg-primary text-white hover:bg-primary/90"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            logEvent('DIALOG_OPEN');
+            setOpen(true);
+          }}
         >
           <span>Send Loan Application</span>
         </Button>
@@ -251,7 +299,10 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
                         min="1000" 
                         step="100" 
                         placeholder="10000"
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) => {
+                          logEvent('FUNDING_AMOUNT_CHANGED', {value: e.target.value});
+                          field.onChange(parseFloat(e.target.value));
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -278,12 +329,21 @@ export function LoanApplicationDialog({ merchantId, merchantName }: Props) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  logEvent('DIALOG_CANCEL');
+                  setOpen(false);
+                }}
                 disabled={isSubmitting}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button 
+                type="submit" 
+                disabled={isSubmitting}
+                onClick={() => {
+                  logEvent('FORM_VALIDATION_CHECK', {formState: form.formState});
+                }}
+              >
                 {isSubmitting ? "Sending..." : "Send Application"}
               </Button>
             </div>

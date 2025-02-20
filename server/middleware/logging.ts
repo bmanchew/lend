@@ -2,10 +2,17 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../lib/logger';
 import { randomUUID } from 'crypto';
 
+// Enhanced request context interface with rate limiting
 export interface RequestWithContext extends Request {
   context?: {
     requestId: string;
     startTime: [number, number];
+  };
+  rateLimit?: {
+    remaining: number;
+    limit: number;
+    windowMs: number;
+    reset?: number;
   };
 }
 
@@ -65,7 +72,7 @@ export const requestLoggingMiddleware = (
     body: sanitizeBody(req.body),
     headers: sanitizeHeaders(req.headers),
     ip: req.ip,
-    userAgent: req.get('user-agent'),
+    userAgent: req.get('user-agent') ?? 'unknown',
     protocol: req.protocol,
     secure: req.secure,
     xhr: req.xhr,
@@ -75,6 +82,17 @@ export const requestLoggingMiddleware = (
 
   // Log request details
   requestLogger.info('Incoming request', requestContext);
+
+  // Rate limit tracking
+  if (req.rateLimit) {
+    requestLogger.info('Rate limit status', {
+      component: 'rate_limiter',
+      action: 'check_limit',
+      remaining: req.rateLimit.remaining,
+      limit: req.rateLimit.limit,
+      windowMs: req.rateLimit.windowMs
+    });
+  }
 
   // Capture response
   const originalSend = res.send;
@@ -86,13 +104,26 @@ export const requestLoggingMiddleware = (
       statusCode: res.statusCode,
       duration,
       size: Buffer.byteLength(body),
-      headers: res.getHeaders(),
+      headers: sanitizeHeaders(res.getHeaders()),
       component: 'http',
-      action: 'response_sent'
+      action: 'response_sent',
+      performance: {
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage()
+      }
     };
 
-    // Log response
-    requestLogger.info('Outgoing response', responseContext);
+    // Log response with rate limit info if available
+    const logContext = {
+      ...responseContext,
+      rateLimit: req.rateLimit ? {
+        remaining: req.rateLimit.remaining,
+        limit: req.rateLimit.limit,
+        reset: req.rateLimit.reset
+      } : undefined
+    };
+
+    requestLogger.info('Outgoing response', logContext);
 
     return originalSend.call(this, body);
   };
@@ -117,9 +148,13 @@ export const errorLoggingMiddleware = (
     path: req.path,
     statusCode: res.statusCode || 500,
     ip: req.ip,
-    userAgent: req.get('user-agent'),
+    userAgent: req.get('user-agent') ?? 'unknown',
     component: 'http',
     action: 'request_error',
+    performance: {
+      memory: process.memoryUsage(),
+      cpu: process.cpuUsage()
+    },
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   };
 
@@ -151,7 +186,13 @@ export const performanceLoggingMiddleware = (
       component: 'http',
       action: 'request_completed',
       memoryUsage: process.memoryUsage(),
-      timestamp: new Date().toISOString()
+      cpuUsage: process.cpuUsage(),
+      timestamp: new Date().toISOString(),
+      rateLimit: req.rateLimit ? {
+        remaining: req.rateLimit.remaining,
+        limit: req.rateLimit.limit,
+        reset: req.rateLimit.reset
+      } : undefined
     };
 
     logger.info('Request completed', performanceContext);
