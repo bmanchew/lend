@@ -6,53 +6,85 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth.tsx";
 import { ProtectedRoute } from "./lib/protected-route";
 
-// Page imports
-import {
-  NotFound,
-  CustomerLogin,
-  MerchantLogin,
-  AdminLogin,
-  CustomerDashboard,
-  MerchantDashboard,
-  AdminDashboard,
-  KycVerificationsPage,
-  ApplyPage
-} from "@/pages";
+import NotFound from "@/pages/not-found";
+import CustomerLogin from "./pages/auth/customer-login";
+import MerchantLogin from "./pages/auth/merchant-login";
+import AdminLogin from "./pages/auth/admin-login";
+import CustomerDashboard from "@/pages/customer/dashboard";
+import MerchantDashboard from "@/pages/merchant/dashboard";
+import AdminDashboard from "@/pages/admin/dashboard";
+import KycVerificationsPage from "@/pages/admin/kyc-verifications";
+import ApplyPage from "@/pages/apply";
 
-const App: React.FC = () => {
+function AppRouter() {
+  const [location, setLocation] = useLocation();
+
+  React.useEffect(() => {
+    // Redirect root to merchant login
+    if (location === "/") {
+      setLocation("/auth/merchant");
+    }
+  }, [location, setLocation]);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router>
-          <Switch>
-            {/* Public routes */}
-            <Route path="/login/customer" component={CustomerLogin} />
-            <Route path="/login/merchant" component={MerchantLogin} />
-            <Route path="/login/admin" component={AdminLogin} />
-            <Route path="/apply" component={ApplyPage} />
+    <Switch>
+      {/* Auth routes */}
+      <Route path="/auth/customer" component={CustomerLogin} />
+      <Route path="/auth/merchant" component={MerchantLogin} />
+      <Route path="/auth/admin" component={AdminLogin} />
 
-            {/* Protected routes */}
-            <Route path="/dashboard/customer">
-              <ProtectedRoute role="customer" component={CustomerDashboard} />
-            </Route>
-            <Route path="/dashboard/merchant">
-              <ProtectedRoute role="merchant" component={MerchantDashboard} />
-            </Route>
-            <Route path="/dashboard/admin">
-              <ProtectedRoute role="admin" component={AdminDashboard} />
-            </Route>
-            <Route path="/admin/kyc">
-              <ProtectedRoute role="admin" component={KycVerificationsPage} />
-            </Route>
+      {/* Protected routes */}
+      <Route 
+        path="/customer/*"
+        component={() => <ProtectedRoute component={CustomerDashboard} allowedRoles={["customer"]} />}
+      />
+      <Route 
+        path="/merchant/*"
+        component={() => <ProtectedRoute component={MerchantDashboard} allowedRoles={["merchant"]} />}
+      />
+      <Route 
+        path="/admin/*"
+        component={() => <ProtectedRoute component={AdminDashboard} allowedRoles={["admin"]} />}
+      />
+      <Route 
+        path="/admin/kyc-verifications"
+        component={() => <ProtectedRoute component={KycVerificationsPage} allowedRoles={["admin"]} />}
+      />
 
-            {/* Fallback route */}
-            <Route component={NotFound} />
-          </Switch>
-        </Router>
-        <Toaster />
-      </AuthProvider>
-    </QueryClientProvider>
+      {/* Apply route */}
+      <Route path="/apply/:token" component={ApplyPage} />
+
+      {/* Legacy route redirects */}
+      <Route path="/login/merchant">
+        {() => {
+          setLocation("/auth/merchant");
+          return null;
+        }}
+      </Route>
+      <Route path="/login/admin">
+        {() => {
+          setLocation("/auth/admin");
+          return null;
+        }}
+      </Route>
+
+      {/* Catch-all route */}
+      <Route component={NotFound} />
+    </Switch>
   );
-};
+}
+
+function App() {
+  return (
+    <Router>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </Router>
+  );
+}
 
 export default App;
