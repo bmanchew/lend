@@ -8,6 +8,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,10 @@ export function CreateMerchantForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormDescription className="text-sm text-muted-foreground mb-4">
+          All merchants are automatically enrolled in a 24-month term contract at 0% APR.
+        </FormDescription>
+
         <FormField
           control={form.control}
           name="companyName"

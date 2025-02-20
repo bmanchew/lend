@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Express, Request, Response, NextFunction } from "express";
 import { db } from "@db";
-import { users, contracts, merchants, programs, webhookEvents, ContractStatus, WebhookEventStatus, PaymentStatus } from "@db/schema";
+import { users, contracts, merchants, programs } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import express from 'express';
 import NodeCache from 'node-cache';
@@ -455,80 +455,99 @@ router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: Requ
   }
 }));
 
-router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  logger.info("[Merchant Creation] Received request:", {
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-
+router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response) => {
   const { companyName, email, phoneNumber, address, website } = req.body;
   const tempPassword = Math.random().toString(36).slice(-8);
 
-  // Validate required fields
-  if (!email || !companyName) {
-    logger.error("[Merchant Creation] Missing required fields", { timestamp: new Date().toISOString() });
-    return res.status(400).json({ error: 'Email and company name are required' });
-  }
+  try {
+    // Validate required fields
+    if (!email || !companyName) {
+      return res.status(400).json({ error: 'Email and company name are required' });
+    }
 
-  // Check for existing user first
-  logger.info("[Merchant Creation] Checking for existing user with email:", { email, timestamp: new Date().toISOString() });
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+    // Check for existing user first
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-  let merchantUser;
-  if (existingUser.length > 0) {
-    // Update existing user to merchant role
-    [merchantUser] = await db
-      .update(users)
-      .set({ role: 'merchant' })
-      .where(eq(users.id, existingUser[0].id))
-      .returning();
-    logger.info("[Merchant Creation] Updated existing user to merchant:", { merchantUser, timestamp: new Date().toISOString() });
-  } else {
+    let merchantUser;
+    if (existingUser.length > 0) {
+      // Update existing user to merchant role
+      [merchantUser] = await db
+        .update(users)
+        .set({ role: 'merchant' })
+        .where(eq(users.id, existingUser[0].id))
+        .returning();
+    } else {
+      const hashedPassword = await authService.hashPassword(tempPassword);
 
-    logger.info("[Merchant Creation] Generated temporary password", { timestamp: new Date().toISOString() });
-    const hashedPassword = await authService.hashPassword(tempPassword);
+      [merchantUser] = await db
+        .insert(users)
+        .values({
+          username: email,
+          password: hashedPassword,
+          email,
+          name: companyName,
+          role: 'merchant',
+          phoneNumber
+        })
+        .returning();
+    }
 
-    logger.info("[Merchant Creation] Creating new merchant user account", { timestamp: new Date().toISOString() });
-    [merchantUser] = await db
-      .insert(users)
+    // Create merchant record with fixed program settings
+    const [merchant] = await db
+      .insert(merchants)
       .values({
-        username: email,
-        password: hashedPassword,
-        email,
-        name: companyName,
-        role: 'merchant',
-        phoneNumber
-      } as typeof users.$inferInsert)
+        userId: merchantUser.id,
+        companyName,
+        address,
+        website,
+        status: 'active',
+        reserveBalance: '0' // Store as string to match schema
+      })
       .returning();
+
+    // Create default program with fixed terms
+    const [program] = await db
+      .insert(programs)
+      .values({
+        merchantId: merchant.id,
+        name: 'Standard Program',
+        term: 24, // 24 months
+        interestRate: '0', // 0% APR
+        active: true
+      })
+      .returning();
+
+    // Send login credentials via email (assume this function exists)
+    if (typeof sendMerchantCredentials === 'function') {
+      await sendMerchantCredentials(email, email, tempPassword);
+    }
+
+    return res.status(201).json({
+      status: 'success',
+      data: {
+        merchant,
+        user: {
+          id: merchantUser.id,
+          email: merchantUser.email,
+          role: merchantUser.role,
+          name: merchantUser.name
+        },
+        program
+      }
+    });
+  } catch (error) {
+    logger.error("[Merchant Creation] Error:", {
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+    return res.status(500).json({
+      status: 'error',
+      error: 'Failed to create merchant account'
+    });
   }
-
-  logger.info("[Merchant Creation] Created merchant user:", {
-    id: merchantUser.id,
-    email: merchantUser.email,
-    role: merchantUser.role,
-    timestamp: new Date().toISOString()
-  });
-
-  // Create merchant record
-  const [merchant] = await db
-    .insert(merchants)
-    .values({
-      userId: merchantUser.id,
-      companyName,
-      address,
-      website,
-      status: 'active'
-    } as typeof merchants.$inferInsert)
-    .returning();
-
-  // Send login credentials via email
-  await sendMerchantCredentials(email, email, tempPassword);
-
-  return res.status(201).json({ merchant, user: merchantUser });
 }));
 
 router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
@@ -720,7 +739,6 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
   }
 }));
 
-// Add webhook event handling with proper types
 router.post("/webhooks/process", asyncHandler(async (req: RequestWithUser, res: Response) => {
   const { eventType, sessionId, payload } = req.body;
 
