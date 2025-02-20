@@ -127,7 +127,6 @@ export default function AdminDashboard() {
       <div className="space-y-8">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold tracking-tight">Admin CRM Dashboard</h1>
-          <CreateMerchantForm />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -219,7 +218,10 @@ export default function AdminDashboard() {
           <TabsContent value="merchants">
             <Card>
               <CardHeader>
-                <CardTitle>Merchant Management</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Merchant Management</CardTitle>
+                  <CreateMerchantForm />
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
