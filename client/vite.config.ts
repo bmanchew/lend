@@ -7,16 +7,16 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3001,
-    strictPort: true, // Ensure Vite only uses the specified port
     proxy: {
       '/api': {
-        target: 'http://0.0.0.0:3000',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false
       },
       '/socket.io': {
-        target: 'http://0.0.0.0:3000',
-        ws: true
+        target: 'http://localhost:3000',
+        ws: true,
+        changeOrigin: true
       }
     }
   },

@@ -69,14 +69,11 @@ const errorHandler = (err: Error, req: Request, res: Response, next: NextFunctio
 
 const router = Router();
 
-// Custom error class for API errors
-//This is already defined above.
-
 // Define public routes that don't require JWT verification
 const PUBLIC_ROUTES = [
-  '/api/login',
+  '/login',
   '/auth/register',
-  '/api/health',
+  '/health',
   '/',
   '/apply',
   '/auth/customer',
@@ -127,8 +124,8 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   next();
 });
 
-// Public auth routes (NO JWT REQUIRED) - Moved to top of router
-router.post("/api/login", asyncHandler(async (req: Request, res: Response) => {
+// Public auth routes (NO JWT REQUIRED)
+router.post("/login", asyncHandler(async (req: Request, res: Response) => {
   logger.info('[Auth] Login attempt with:', {
     username: req.body.username?.trim(),
     loginType: req.body.loginType,
@@ -317,7 +314,7 @@ router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
 // Protected Routes (JWT Required)
-router.get("/api/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
+router.get("/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -379,17 +376,18 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 }));
 
 
-router.get("/api/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
+// Get merchant by user ID - Ensure JSON response
+router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = parseInt(req.params.userId);
     logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId });
 
     if (!userId || isNaN(userId)) {
-      return res.status(400).json({ error: 'Invalid user ID' });
+      return res.status(400).json({
+        status: 'error',
+        error: 'Invalid user ID'
+      });
     }
-
-    // Set JSON content type header before any response
-    res.setHeader('Content-Type', 'application/json');
 
     const merchantResults = await db
       .select()
@@ -399,26 +397,29 @@ router.get("/api/merchants/by-user/:userId", async (req: RequestWithUser, res: R
 
     const [merchant] = merchantResults;
     if (!merchant) {
-      return res.status(404).json({ 
-        error: 'Merchant not found',
-        status: 404
+      return res.status(404).json({
+        status: 'error',
+        error: 'Merchant not found'
       });
     }
 
+    // Set proper content type for JSON response
+    res.setHeader('Content-Type', 'application/json');
     return res.json({
       status: 'success',
       data: merchant
     });
   } catch (err: any) {
     logger.error("Error fetching merchant by user:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
+      status: 'error',
       error: 'Error fetching merchant data',
       message: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
-});
+}));
 
-router.get("/merchants/:id/contracts", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const merchantId = parseInt(req.params.id);
     logger.info("[Routes] Fetching contracts for merchant:", { merchantId, timestamp: new Date().toISOString() });
@@ -435,7 +436,7 @@ router.get("/merchants/:id/contracts", validateId, async (req: RequestWithUser, 
     logger.error("Error fetching merchant contracts:", err);
     next(err);
   }
-});
+}));
 
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   logger.info("[Merchant Creation] Received request:", {
@@ -983,7 +984,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
 
       case 'early_payment':
         const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
-        const earlyPayoff = Math.floor(Number(amount) * (1 + (monthsEarly * 0.1)));
+        const earlyPayoff = Math.floor(Number(amount) * (1+ (monthsEarly *0.1)));
         totalPoints = earlyPayoff;
         details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
         break;      case 'additional_payment':

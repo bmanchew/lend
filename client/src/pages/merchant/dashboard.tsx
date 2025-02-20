@@ -49,13 +49,21 @@ export default function MerchantDashboard() {
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error('No user ID available');
-      const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch merchant');
+      try {
+        const response = await apiRequest(`/merchants/by-user/${user.id}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch merchant');
+        }
+        const result = await response.json();
+        if (result.status === 'error') {
+          throw new Error(result.error);
+        }
+        return result.data;
+      } catch (error) {
+        console.error('Error fetching merchant:', error);
+        throw error;
       }
-      const result = await response.json();
-      return result.data;
     },
     enabled: !!user?.id,
     retry: 2,
@@ -67,7 +75,7 @@ export default function MerchantDashboard() {
     isLoading: contractsLoading,
     refetch: refetchContracts
   } = useQuery<SelectContract[]>({
-    queryKey: [`/api/merchants/${merchant?.id}/contracts`],
+    queryKey: [`/merchants/${merchant?.id}/contracts`],
     enabled: !!merchant?.id,
     staleTime: 1000 * 60 // 1 minute
   });
