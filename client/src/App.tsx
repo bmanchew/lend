@@ -21,10 +21,10 @@ function AppRouter() {
 
   React.useEffect(() => {
     // Redirect root to merchant login
-    if (location === "/") {
+    if (location === "/" && window.location.pathname === "/") {
       setLocation("/auth/merchant");
     }
-  }, [location, setLocation]);
+  }, []); // Run only once on mount
 
   return (
     <Switch>

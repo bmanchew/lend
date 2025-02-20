@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
   } = useQuery<LoginResponse | null, Error>({
     queryKey: ["/api/user"] as const,
-    staleTime: Infinity,
+    staleTime: 30000, // Reduce refetch frequency
     cacheTime: 1000 * 60 * 30, // 30 minutes
     queryFn: async ({ signal }) => {
       try {
@@ -59,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    staleTime: 30000, // Reduce refetch frequency
     refetchOnWindowFocus: false // Prevent unnecessary refetches
   });
 
