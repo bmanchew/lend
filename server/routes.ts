@@ -96,27 +96,32 @@ const PUBLIC_ROUTES = [
 
 // JWT verification middleware - skip for public routes
 router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const path = req.path;
+  try {
+    const path = req.path;
 
-  // Skip JWT verification for public routes
-  if (PUBLIC_ROUTES.some(route => path.startsWith(route))) {
-    return next();
+    // Skip JWT verification for public routes
+    if (PUBLIC_ROUTES.some(route => path.startsWith(route))) {
+      return next();
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = await authService.verifyJWT(token);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error('Auth middleware error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const user = authService.verifyJWT(token);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-
-  req.user = user;
-  next();
 });
 
 // Request tracking middleware
