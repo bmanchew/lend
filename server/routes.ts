@@ -1001,21 +1001,21 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
 router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
-    const updates: Partial<typeof contracts.$inferInsert> = {};
+    const updates: Partial<typeof contracts.$inferInsert>> = {};
 
     // Map the updates with proper typing
     if (req.body.status) updates.status = req.body.status;
     if ('plaid_access_token' in req.body) updates.plaidAccessToken = req.body.plaid_access_token;
     if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
-    if ('ach_verificationstatus' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
+    if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
     if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
-    if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
+    if ('last_payment_status' in req.body) updates.lastPaymentStatus = reqbody.last_payment_status;
 
     const [updatedContract] = await db
             .update(contracts)
-            .set(updates)
-            .where(eq(contracts.id, contractId))
-            .returning();
+      .set(updates)
+      .where(eq(contracts.id, contractId))
+      .returning();
 
     return res.json(updatedContract);
   } catch (err) {
@@ -1266,6 +1266,7 @@ async function generateVerificationToken(): Promise<string> {
 async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
   throw new Error("Function not implemented.");
 }
+
 
 async function testSendGridConnection(): Promise<boolean> {
   throw new Error("Function not implemented.");
