@@ -991,12 +991,12 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
       return res.status(400).json({ error: 'Invalid parameters' });
     }
 
-    lettotalPoints = 0;
+    let totalPoints = 0;
     let details: Record<string, any> = {};
 
     switch (type) {
       case 'down_payment':
-        totalPoints = Math.floor(Number(amount) / 10); // Basic reward for down payment        details = { basePoints: totalPoints };
+        totalPoints = Math.floor(Numberamount) / 10); // Basic reward for down payment        details = { basePoints: totalPoints };
         break;
 
       case 'early_payment':
