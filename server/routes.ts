@@ -1001,7 +1001,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
 router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
-    const updates: Partial<typeof contracts.$inferInsert>> = {};
+    const updates: Partial<typeof contracts.$inferInsert> = {};
 
     // Map the updates with proper typing
     if (req.body.status) updates.status = req.body.status;
