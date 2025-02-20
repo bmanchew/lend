@@ -306,7 +306,7 @@ export const smsService = {
       // Use minimal format with URL on its own line
       const message = [
         `${merchantName} loan application:`,
-        `https://${shortUrl}`
+        shortUrl
       ].join('\n');
 
       let attempt = 1;
