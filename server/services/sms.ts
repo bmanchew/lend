@@ -1,3 +1,4 @@
+
 import twilio from 'twilio';
 const { Twilio } = twilio;
 import shorturl from 'shorturl';
@@ -39,6 +40,7 @@ export const smsService = {
       return false;
     }
   },
+
   formatPhoneNumber(phone: string): string {
     if (!phone) {
       throw new Error('Phone number is required');
@@ -71,7 +73,7 @@ export const smsService = {
     });
 
     return formattedNumber;
-  }
+  },
 
   async sendOTP(phone: string, code: string): Promise<boolean> {
     try {
@@ -249,30 +251,6 @@ export const smsService = {
     return Math.floor(100000 + Math.random() * 900000).toString();
   },
 
-  async sendOTP(phone: string, code: string): Promise<boolean> {
-    try {
-      logger.info('[SMS] Sending OTP', { phone, codeLength: code.length });
-      const message = `Your verification code is: ${code}`;
-      const sent = await this.sendSMS(phone, message);
-
-      if (!sent) {
-        await slackService.notifySMSFailure({
-          phone,
-          error: 'Failed to send OTP',
-          context: 'sendOTP'
-        });
-      }
-
-      return sent;
-    } catch (error) {
-      logger.error('[SMS] Failed to send OTP', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        phone
-      });
-      return false;
-    }
-  },
-
   async sendLoanApplicationLink(
     phone: string,
     merchantName: string,
@@ -317,7 +295,6 @@ export const smsService = {
       }
 
       // Use minimal format with URL on its own line
-      // This format has the highest chance of link detection
       const message = [
         `${merchantName} loan application link:`,
         'Link:',
@@ -393,6 +370,7 @@ export const smsService = {
       return { success: false, error: errorMessage };
     }
   },
+
   async sendMerchantWelcome(
     phone: string,
     { companyName, loginUrl, username, tempPassword }: {
