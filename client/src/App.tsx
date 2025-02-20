@@ -29,7 +29,7 @@ function AppRouter() {
   return (
     <Switch>
       {/* Auth routes */}
-      <Route path="/auth/customer" component={CustomerLogin} />
+      <Route path="/auth/customer-login" component={CustomerLogin} />
       <Route path="/auth/merchant" component={MerchantLogin} />
       <Route path="/auth/admin" component={AdminLogin} />
 
