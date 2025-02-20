@@ -1,13 +1,16 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import apiRouter from "./routes";
-import { setupVite } from "./vite";
+import { setupVite, serveStatic } from "./vite";
 import cors from "cors";
 import rateLimit from 'express-rate-limit';
 import { Server } from 'socket.io';
 import { setupAuth } from "./auth";
 import { logger } from "./lib/logger";
 import portfinder from 'portfinder';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 // Essential middleware
 const app = express();
@@ -16,7 +19,6 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 app.use(express.urlencoded({ extended: false }));
 
 // Initialize authentication first
@@ -39,9 +41,9 @@ const startServer = async () => {
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Find available port, starting from 3000 or use environment variable
-    const defaultPort = 3000;
-    const port = process.env.PORT ? parseInt(process.env.PORT, 10) || defaultPort : defaultPort;
+    // Configure port finder
+    portfinder.basePort = 5000;
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : await portfinder.getPortPromise();
     const host = '0.0.0.0';
 
     // Set default timeout
@@ -52,7 +54,11 @@ const startServer = async () => {
     await new Promise<void>((resolve, reject) => {
       try {
         httpServer.listen(port, host, () => {
-          logger.info(`Server listening on port ${port}`);
+          logger.info(`Server listening on port ${port}`, {
+            port,
+            env: process.env.NODE_ENV,
+            timestamp: new Date().toISOString()
+          });
           process.env.PORT = port.toString();
           resolve();
         });
@@ -60,7 +66,8 @@ const startServer = async () => {
         httpServer.on('error', (err) => {
           logger.error('Server startup error:', {
             error: err.message,
-            stack: err.stack
+            stack: err.stack,
+            timestamp: new Date().toISOString()
           });
           reject(err);
         });
@@ -69,8 +76,32 @@ const startServer = async () => {
       }
     });
 
-    // Setup Vite AFTER server is listening
-    await setupVite(app, httpServer);
+    // Setup static file serving based on environment
+    if (process.env.NODE_ENV === 'production') {
+      // Get current file's directory path using ES modules
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      // In production, serve from dist/public
+      const staticPath = path.resolve(__dirname, '..', 'dist', 'public');
+      logger.info(`Serving static files from: ${staticPath}`, {
+        env: process.env.NODE_ENV,
+        timestamp: new Date().toISOString()
+      });
+
+      // Serve static files
+      app.use(express.static(staticPath));
+
+      // Serve index.html for client-side routing
+      app.get('*', (req, res) => {
+        if (!req.path.startsWith('/api')) {
+          res.sendFile(path.join(staticPath, 'index.html'));
+        }
+      });
+    } else {
+      // In development, use Vite middleware
+      await setupVite(app, httpServer);
+    }
 
     // Socket.IO setup with proper error handling
     const io = new Server(httpServer, {
@@ -98,19 +129,28 @@ const startServer = async () => {
 
       socket.on('error', (error: SocketError) => {
         logger.error("Socket error:", { 
-          message: error.message,
+          error: error.message,
           data: error.data,
-          socketId: socket.id 
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
         });
       });
 
       socket.on('disconnect', (reason) => {
-        logger.info("Socket disconnected:", { reason, socketId: socket.id });
+        logger.info("Socket disconnected:", { 
+          reason, 
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
+        });
       });
     });
 
     // Signal that the server is ready for connections
-    logger.info("Server is ready for connections");
+    logger.info("Server is ready for connections", {
+      port,
+      env: process.env.NODE_ENV,
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown server error';
@@ -118,7 +158,8 @@ const startServer = async () => {
 
     logger.error("Failed to start server:", {
       message: errorMessage,
-      stack: errorStack
+      stack: errorStack,
+      timestamp: new Date().toISOString()
     });
 
     process.exit(1);
@@ -132,7 +173,8 @@ startServer().catch((error) => {
 
   logger.error("Critical server error:", {
     message: errorMessage,
-    stack: errorStack
+    stack: errorStack,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
@@ -142,7 +184,8 @@ process.on('uncaughtException', (error: Error) => {
   logger.error("Uncaught exception:", {
     message: error.message,
     stack: error.stack,
-    name: error.name
+    name: error.name,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
@@ -153,13 +196,16 @@ process.on('unhandledRejection', (reason: unknown) => {
   logger.error("Unhandled rejection:", {
     message: error.message,
     stack: error.stack,
-    name: error.name
+    name: error.name,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info("Graceful shutdown initiated");
+  logger.info("Graceful shutdown initiated", {
+    timestamp: new Date().toISOString()
+  });
   process.exit(0);
 });
