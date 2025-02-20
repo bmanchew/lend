@@ -18,6 +18,11 @@ const validateConfig = () => {
     throw new Error('Missing Twilio configuration. Please set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER');
   }
 
+  logger.info('[SMS] Config validation successful', { 
+    accountSidLength: accountSid.length,
+    twilioPhone 
+  });
+
   return { accountSid, authToken, twilioPhone };
 };
 
@@ -189,6 +194,10 @@ export const smsService = {
     try {
       const { twilioPhone } = validateConfig();
       const formattedPhone = this.formatPhoneNumber(to);
+
+      if (!formattedPhone.startsWith('+')) {
+        throw new Error('Phone number must start with +');
+      }
 
       logger.info('[SMS] Attempting to send message', {
         requestId,
