@@ -52,56 +52,60 @@ const formatAmount = (amount: string | number | null | undefined): string => {
 export default function MerchantDashboard() {
   const { user } = useAuth();
 
-  // Enhanced error logging
-  useEffect(() => {
-    if (user?.id) {
-      console.info('[MerchantDashboard] User authenticated:', { 
-        userId: user.id,
-        role: user.role,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      console.warn('[MerchantDashboard] No user ID available');
-    }
-  }, [user]);
+  // Enhanced error logging and loading state
+  const [isLoadingMerchant, setIsLoadingMerchant] = useState(false);
+  const [merchantError, setMerchantError] = useState<string | null>(null);
 
   const {
     data: merchantResponse,
-    isLoading: merchantLoading,
-    error: merchantError,
-    isError: isMerchantError,
+    isLoading,
+    error,
   } = useQuery<ApiResponse>({
     queryKey: [`/api/merchants/by-user/${user?.id}`],
     enabled: !!user?.id,
-    retry: 2,
-    retryDelay: 1000,
+    retry: 3, // Increased retries
+    retryDelay: 2000, // Increased retry delay
     queryFn: async () => {
+      setIsLoadingMerchant(true);
+      setMerchantError(null);
       if (!user?.id) throw new Error('No user ID available');
       console.info('[MerchantDashboard] Fetching merchant data:', {
         userId: user.id,
         timestamp: new Date().toISOString()
       });
 
-      const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[MerchantDashboard] API Error:', {
-          status: response.status,
-          error: errorData,
+      try {
+        const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[MerchantDashboard] API Error:', {
+            status: response.status,
+            error: errorData,
+            timestamp: new Date().toISOString()
+          });
+          throw new Error(errorData.error || 'Failed to fetch merchant');
+        }
+
+        const data = await response.json();
+        console.info('[MerchantDashboard] Merchant data received:', {
+          status: data.status,
+          hasMerchantData: !!data.data,
           timestamp: new Date().toISOString()
         });
-        throw new Error(errorData.error || 'Failed to fetch merchant');
+        return data;
+      } finally {
+        setIsLoadingMerchant(false);
       }
-
-      const data = await response.json();
-      console.info('[MerchantDashboard] Merchant data received:', {
-        status: data.status,
-        hasMerchantData: !!data.data,
-        timestamp: new Date().toISOString()
-      });
-      return data;
     }
   });
+
+  useEffect(() => {
+    if (error) {
+      setMerchantError(error.message);
+      console.error('[MerchantDashboard] Error fetching merchant data:', error);
+    }
+  }, [error]);
+
 
   const merchant = merchantResponse?.data;
 
@@ -163,7 +167,7 @@ export default function MerchantDashboard() {
     };
   }, [socket, merchant?.id, refetchContracts, healthCheck]);
 
-  const contractStats = useMemo<ContractStats>(() => {
+  const contractStats = useMemo(() => {
     if (!contracts?.length) {
       return {
         active: 0,
@@ -199,7 +203,7 @@ export default function MerchantDashboard() {
     return Object.entries(monthlyData).map(([name, value]) => ({ name, value }));
   }, [contracts]);
 
-  if (merchantLoading) {
+  if (isLoadingMerchant) {
     return (
       <PortalLayout>
         <div className="space-y-4">
@@ -221,13 +225,9 @@ export default function MerchantDashboard() {
     );
   }
 
-  if (isMerchantError || !merchant) {
-    const errorMessage = merchantResponse?.error || 
-      (merchantError instanceof Error ? merchantError.message : 'Failed to load merchant data');
-
+  if (merchantError || !merchant) {
     console.error('[MerchantDashboard] Error state:', {
-      error: errorMessage,
-      merchantResponse,
+      error: merchantError,
       timestamp: new Date().toISOString()
     });
 
@@ -238,7 +238,7 @@ export default function MerchantDashboard() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>
-              {errorMessage}
+              {merchantError || 'Failed to load merchant data'}
             </AlertDescription>
           </Alert>
         </div>
@@ -390,3 +390,4 @@ interface ContractStats {
   completed: number;
   total: number;
 }
+import { useState } from 'react';
