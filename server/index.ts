@@ -18,7 +18,7 @@ app.use(express.urlencoded({ extended: false }));
 // Initialize authentication first
 await setupAuth(app);
 
-// Mount API routes under /api prefix
+// Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
 const startServer = async () => {
@@ -26,9 +26,10 @@ const startServer = async () => {
     // Create HTTP server
     const httpServer = createServer(app);
 
-    // Find available port
+    // Find available port, starting from 3000
     const port = await portfinder.getPortPromise({
-      port: Number(process.env.PORT) || 3000
+      port: 3000, // Start with port 3000
+      host: '0.0.0.0'
     });
 
     // Start HTTP server first
@@ -40,7 +41,7 @@ const startServer = async () => {
       });
     });
 
-    // Setup Vite after server is listening and after API routes are mounted
+    // Setup Vite AFTER server is listening and AFTER API routes are mounted
     await setupVite(app, httpServer);
 
     // Socket.IO setup
@@ -69,7 +70,7 @@ const startServer = async () => {
       });
 
       socket.on('error', (error: Error) => {
-        logger.error("Socket error:", { error, socketId: socket.id });
+        logger.error("Socket error:", { error: error.message, socketId: socket.id });
       });
 
       socket.on('disconnect', (reason) => {

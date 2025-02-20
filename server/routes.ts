@@ -380,7 +380,7 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUser, res: Response) => {
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { 
+    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", {
       userId,
       path: req.path,
       method: req.method,
@@ -401,10 +401,10 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
       .from(merchants)
       .where(eq(merchants.userId, userId));
 
-    logger.info("[Merchant Lookup] Query results:", { 
+    logger.info("[Merchant Lookup] Query results:", {
       userId,
       resultsCount: merchantResults.length,
-      results: merchantResults 
+      results: merchantResults
     });
 
     const [merchant] = merchantResults;
@@ -423,10 +423,10 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
       data: merchant
     });
   } catch (err: any) {
-    logger.error("[Merchant Lookup] Error fetching merchant:", { 
+    logger.error("[Merchant Lookup] Error fetching merchant:", {
       error: err.message,
       stack: err.stack,
-      userId: req.params.userId 
+      userId: req.params.userId
     });
     return res.status(500).json({
       status: 'error',
@@ -996,28 +996,23 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
 
     switch (type) {
       case 'down_payment':
-        totalPoints = Math.floor(Numberamount) / 10); // Basic reward for down payment        details = { basePoints: totalPoints };
+        totalPoints = Math.floor(Number(amount) / 10); // Basic reward for down payment
+        details = { basePoints: totalPoints };
         break;
-
-      case 'early_payment':
-        const monthsEarly = parseInt(req.query.monthsEarly as string) || 0;
-        const earlyPayoff = Math.floor(Number(amount) * (1+ (monthsEarly *0.1)));
-        totalPoints = earlyPayoff;
-        details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
-        break;      case 'additional_payment':
-        const additionalPoints = Math.floor(Number(amount) / 25);
-        totalPoints = additionalPoints;
-        details = { basePoints: additionalPoints };
+      case 'payment':
+        totalPoints = Math.floor(Number(amount) / 5); // Higher reward for regular payments
+        details = {
+          basePoints: totalPoints,
+          paymentAmount: Number(amount)
+        };
         break;
       default:
         return res.status(400).json({ error: 'Invalid reward type' });
     }
 
     return res.json({
-      totalPoints,
-      details,
-      type,
-      amount: Number(amount)
+      points: totalPoints,
+      details
     });
   } catch (err) {
     next(err);
@@ -1131,7 +1126,8 @@ router.post("/plaid/process-payment", asyncHandler(async (req: RequestWithUser, 
       accessToken,
       accountId: account_id,
       amount: amount.toString(),
-      description: `Contract ${contractId} Payment`,      achClass: 'ppd'
+      description: `Contract ${contractId} Payment`,
+      achClass: 'ppd'
     });
 
     // Update contract with transfer details
