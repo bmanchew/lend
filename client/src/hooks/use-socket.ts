@@ -23,6 +23,9 @@ export function useSocket(merchantId: number) {
 
   const connect = useCallback(() => {
     if (!merchantId) return;
+    
+    // Add connection monitoring
+    let healthCheck: NodeJS.Timeout;
 
     // Cleanup existing socket connection
     if (socketRef.current) {
@@ -113,6 +116,9 @@ export function useSocket(merchantId: number) {
       if (cleanup) cleanup();
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+      }
+      if (healthCheck) {
+        clearInterval(healthCheck);
       }
       if (socketRef.current) {
         socketRef.current.disconnect();

@@ -192,6 +192,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const verifyToken = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+
+    try {
+      // Check token expiration
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('token');
+        return null;
+      }
+      return token;
+    } catch (error) {
+      console.error('[Auth] Token validation error:', error);
+      localStorage.removeItem('token');
+      return null;
+    }
+  };
+
+
   return (
     <AuthContext.Provider
       value={{
