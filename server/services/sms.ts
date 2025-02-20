@@ -265,9 +265,10 @@ export const smsService = {
     merchantName: string,
     metadata: { requestId: string }
   ): Promise<{ success: boolean; error?: string }> {
+    const requestId = metadata.requestId;
     try {
       logger.info('[SMS] Preparing loan application link', {
-        requestId: metadata.requestId,
+        requestId,
         phone,
         merchantName,
         urlLength: url.length
