@@ -8,11 +8,15 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 
 const merchantSchema = z.object({
   companyName: z.string().min(1, "Company name is required"),
@@ -27,6 +31,7 @@ type FormData = z.infer<typeof merchantSchema>;
 export function CreateMerchantForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const form = useForm<FormData>({
     resolver: zodResolver(merchantSchema),
@@ -53,6 +58,9 @@ export function CreateMerchantForm() {
         throw new Error(errorData.error || "Failed to create merchant");
       }
 
+      // Invalidate merchants query to refresh the list
+      await queryClient.invalidateQueries({ queryKey: ["/api/merchants"] });
+
       toast({
         title: "Success",
         description: "Merchant account created and credentials sent",
@@ -72,7 +80,15 @@ export function CreateMerchantForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            All merchants are automatically enrolled in a 24-month, 0% APR financing program.
+            This program cannot be modified and will be applied to all contracts.
+          </AlertDescription>
+        </Alert>
+
         <FormField
           control={form.control}
           name="companyName"
@@ -86,6 +102,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="email"
@@ -95,10 +112,14 @@ export function CreateMerchantForm() {
               <FormControl>
                 <Input {...field} type="email" />
               </FormControl>
+              <FormDescription>
+                This email will be used for login credentials
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="phoneNumber"
@@ -112,6 +133,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="address"
@@ -125,6 +147,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="website"
@@ -138,6 +161,7 @@ export function CreateMerchantForm() {
             </FormItem>
           )}
         />
+
         <Button type="submit" disabled={isLoading}>
           {isLoading ? "Creating..." : "Create Merchant"}
         </Button>

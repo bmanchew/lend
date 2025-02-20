@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Phone, Mail } from "lucide-react";
 import { useState } from "react";
+import { CreateMerchantForm } from "@/components/admin/create-merchant-form";
 
 interface MerchantWithContact extends SelectMerchant {
   email?: string | null;
@@ -34,7 +35,7 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
-  // Use proper error handling and type safety for date formatting
+  // Format date with proper error handling
   const formatDate = (value: string | Date | null): string => {
     if (!value) return "N/A";
     try {
@@ -124,7 +125,10 @@ export default function AdminDashboard() {
   return (
     <PortalLayout>
       <div className="space-y-8">
-        <h1 className="text-2xl font-bold tracking-tight">Admin CRM Dashboard</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">Admin CRM Dashboard</h1>
+          <CreateMerchantForm />
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>

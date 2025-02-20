@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { db } from "@db";
 import { users, contracts, merchants, programs, webhookEvents, ContractStatus, WebhookEventStatus, PaymentStatus } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -18,8 +18,14 @@ import type { User } from "./auth";
 import { asyncHandler } from './lib/async-handler';
 
 // Updated type declarations for better type safety
-interface RequestWithUser extends Omit<Request, 'user'> {
+interface RequestWithUser extends Request {
   user?: User;
+}
+
+interface LoggerError extends Error {
+  details?: any;
+  code?: string;
+  status?: number;
 }
 
 // Enhanced error class for consistent error handling
@@ -36,14 +42,17 @@ class APIError extends Error {
 }
 
 // Middleware to ensure consistent error handling
-const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error('[Error Handler]', {
-    error: err,
+const errorHandler = (err: Error | APIError | LoggerError, req: Request, res: Response, next: NextFunction) => {
+  const errorLog = {
+    message: err.message,
+    name: err.name,
     stack: err.stack,
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString()
-  });
+  };
+
+  logger.error('[Error Handler]', errorLog);
 
   if (err instanceof APIError) {
     return res.status(err.status).json({
@@ -90,174 +99,21 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
     return next();
   }
 
-  logger.info('[Auth] Verifying JWT for path:', {
-    path,
-    timestamp: new Date().toISOString()
-  });
-
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
   if (!token) {
-    logger.error('[Auth] No token provided for path:', {
-      path,
-      timestamp: new Date().toISOString()
-    });
     return res.status(401).json({ error: 'Authentication required' });
   }
 
   const user = authService.verifyJWT(token);
   if (!user) {
-    logger.error('[Auth] JWT verification failed:', {
-      path,
-      timestamp: new Date().toISOString()
-    });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
   req.user = user;
-  logger.info('[Auth] JWT verified successfully:', {
-    userId: user.id,
-    path,
-    timestamp: new Date().toISOString()
-  });
   next();
 });
-
-// Public auth routes (NO JWT REQUIRED)
-router.post("/login", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Login attempt with:', {
-    username: req.body.username?.trim(),
-    loginType: req.body.loginType,
-    hasPassword: !!req.body.password,
-    timestamp: new Date().toISOString()
-  });
-
-  const { username, password, loginType } = req.body;
-
-  if (!username || !password) {
-    logger.error('[Auth] Missing credentials:', {
-      username: !!username,
-      password: !!password,
-      timestamp: new Date().toISOString()
-    });
-    return res.status(400).json({ error: "Username and password are required" });
-  }
-
-  try {
-    // Get user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username.trim()))
-      .limit(1);
-
-    if (!user || !user.password) {
-      logger.info('[Auth] User not found or invalid password:', {
-        username: username.trim(),
-        timestamp: new Date().toISOString()
-      });
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Verify password
-    const isValid = await authService.comparePasswords(password, user.password);
-    if (!isValid) {
-      logger.info('[Auth] Invalid password for user:', {
-        username: username.trim(),
-        timestamp: new Date().toISOString()
-      });
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Check role match if loginType is provided
-    if (loginType && user.role !== loginType) {
-      logger.info('[Auth] Invalid role for user:', {
-        username,
-        expected: loginType,
-        actual: user.role,
-        timestamp: new Date().toISOString()
-      });
-      return res.status(403).json({ error: `This login is for ${loginType} accounts only.` });
-    }
-
-    // Create user response without password
-    const userResponse = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role as UserRole,
-      name: user.name || undefined
-    };
-
-    // Generate JWT token
-    const token = await authService.generateJWT(userResponse);
-    logger.info('[Auth] Login successful:', {
-      userId: user.id,
-      role: user.role,
-      timestamp: new Date().toISOString()
-    });
-
-    return res.json({
-      token,
-      ...userResponse
-    });
-  } catch (error) {
-    logger.error('[Auth] Unexpected error during login:', {
-      error,
-      timestamp: new Date().toISOString()
-    });
-    return res.status(500).json({ error: "An unexpected error occurred" });
-  }
-}));
-
-router.post("/auth/register", asyncHandler(async (req: Request, res: Response) => {
-  logger.info('[Auth] Registration attempt:', { username: req.body.username, role: req.body.role, timestamp: new Date().toISOString() });
-  const { username, password, email, name, role } = req.body;
-
-  if (!username || !password || !email || !name || !role) {
-    return res.status(400).json({ error: "All fields are required" });
-  }
-
-  // Check if username already exists
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username))
-    .limit(1);
-
-  if (existingUser) {
-    logger.log('[Auth] Registration failed - username exists:', { username, timestamp: new Date().toISOString() });
-    return res.status(400).json({ error: "Username already exists" });
-  }
-
-  const hashedPassword = await authService.hashPassword(password);
-
-  const [user] = await db.insert(users)
-    .values({
-      username,
-      password: hashedPassword,
-      email,
-      name,
-      role
-    } as typeof users.$inferInsert)
-    .returning();
-
-  logger.info('[Auth] Registration successful:', { userId: user.id, role: user.role, timestamp: new Date().toISOString() });
-
-  // Generate JWT token for automatic login
-  const token = await authService.generateJWT(user);
-
-  return res.status(201).json({
-    token,
-    id: user.id,
-    role: user.role,
-    name: user.name,
-    email: user.email,
-    username: user.username
-  });
-}));
-
 
 // Request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
@@ -455,6 +311,7 @@ router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: Requ
   }
 }));
 
+// Add to your merchants/create endpoint handler
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   logger.info("[Merchant Creation] Received request:", {
     body: req.body,
@@ -470,65 +327,70 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
     return res.status(400).json({ error: 'Email and company name are required' });
   }
 
-  // Check for existing user first
-  logger.info("[Merchant Creation] Checking for existing user with email:", { email, timestamp: new Date().toISOString() });
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  try {
+    // Check for existing user first
+    logger.info("[Merchant Creation] Checking for existing user with email:", { email, timestamp: new Date().toISOString() });
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-  let merchantUser;
-  if (existingUser.length > 0) {
-    // Update existing user to merchant role
-    [merchantUser] = await db
-      .update(users)
-      .set({ role: 'merchant' })
-      .where(eq(users.id, existingUser[0].id))
-      .returning();
-    logger.info("[Merchant Creation] Updated existing user to merchant:", { merchantUser, timestamp: new Date().toISOString() });
-  } else {
+    let merchantUser;
+    if (existingUser.length > 0) {
+      // Update existing user to merchant role
+      [merchantUser] = await db
+        .update(users)
+        .set({ role: 'merchant' })
+        .where(eq(users.id, existingUser[0].id))
+        .returning();
+      logger.info("[Merchant Creation] Updated existing user to merchant:", { merchantUser, timestamp: new Date().toISOString() });
+    } else {
+      // Create new user
+      logger.info("[Merchant Creation] Creating new merchant user account", { timestamp: new Date().toISOString() });
+      [merchantUser] = await db
+        .insert(users)
+        .values({
+          username: email,
+          password: await authService.hashPassword(tempPassword),
+          email,
+          name: companyName,
+          role: 'merchant',
+          phoneNumber
+        } as typeof users.$inferInsert)
+        .returning();
+    }
 
-    logger.info("[Merchant Creation] Generated temporary password", { timestamp: new Date().toISOString() });
-    const hashedPassword = await authService.hashPassword(tempPassword);
-
-    logger.info("[Merchant Creation] Creating new merchant user account", { timestamp: new Date().toISOString() });
-    [merchantUser] = await db
-      .insert(users)
+    // Create merchant record with default program
+    const [merchant] = await db
+      .insert(merchants)
       .values({
-        username: email,
-        password: hashedPassword,
-        email,
-        name: companyName,
-        role: 'merchant',
-        phoneNumber
-      } as typeof users.$inferInsert)
+        userId: merchantUser.id,
+        companyName,
+        address,
+        website,
+        status: 'active',
+        reserveBalance: '0'
+      } as typeof merchants.$inferInsert)
       .returning();
+
+    // Create default 24-month 0% APR program
+    await db.insert(programs).values({
+      merchantId: merchant.id,
+      name: "Standard Financing",
+      term: 24,
+      interestRate: "0",
+      status: "active"
+    } as typeof programs.$inferInsert);
+
+    // Send login credentials via email
+    await sendMerchantCredentials(email, email, tempPassword);
+
+    return res.status(201).json({ merchant, user: merchantUser });
+  } catch (err) {
+    logger.error("[Merchant Creation] Error:", err);
+    next(err);
   }
-
-  logger.info("[Merchant Creation] Created merchant user:", {
-    id: merchantUser.id,
-    email: merchantUser.email,
-    role: merchantUser.role,
-    timestamp: new Date().toISOString()
-  });
-
-  // Create merchant record
-  const [merchant] = await db
-    .insert(merchants)
-    .values({
-      userId: merchantUser.id,
-      companyName,
-      address,
-      website,
-      status: 'active'
-    } as typeof merchants.$inferInsert)
-    .returning();
-
-  // Send login credentials via email
-  await sendMerchantCredentials(email, email, tempPassword);
-
-  return res.status(201).json({ merchant, user: merchantUser });
 }));
 
 router.get("/merchants", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {

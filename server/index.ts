@@ -21,6 +21,10 @@ await setupAuth(app);
 // Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
+interface SocketError extends Error {
+  data?: any;
+}
+
 const startServer = async () => {
   try {
     // Create HTTP server
@@ -28,23 +32,35 @@ const startServer = async () => {
 
     // Find available port, starting from 3000
     const port = await portfinder.getPortPromise({
-      port: 3000, // Start with port 3000
+      port: 3000,
       host: '0.0.0.0'
     });
 
-    // Start HTTP server first
-    await new Promise<void>((resolve) => {
-      httpServer.listen(port, "0.0.0.0", () => {
-        logger.info(`Server listening on port ${port}`);
-        process.env.PORT = port.toString();
-        resolve();
-      });
+    // Start HTTP server first and wait for it to be ready
+    await new Promise<void>((resolve, reject) => {
+      try {
+        httpServer.listen(port, "0.0.0.0", () => {
+          logger.info(`Server listening on port ${port}`);
+          process.env.PORT = port.toString();
+          resolve();
+        });
+
+        httpServer.on('error', (err) => {
+          logger.error('Server startup error:', {
+            error: err.message,
+            stack: err.stack
+          });
+          reject(err);
+        });
+      } catch (err) {
+        reject(err);
+      }
     });
 
-    // Setup Vite AFTER server is listening and AFTER API routes are mounted
+    // Setup Vite AFTER server is listening
     await setupVite(app, httpServer);
 
-    // Socket.IO setup
+    // Socket.IO setup with proper error handling
     const io = new Server(httpServer, {
       cors: { origin: "*" },
       path: '/socket.io/'
@@ -54,7 +70,6 @@ const startServer = async () => {
 
     io.on('connection', (socket) => {
       const socketContext = {
-        component: 'socket.io',
         socketId: socket.id,
         transport: socket.conn.transport.name,
         remoteAddress: socket.handshake.address,
@@ -69,8 +84,12 @@ const startServer = async () => {
         logger.info("Joined merchant room:", { merchantId, roomName, socketId: socket.id });
       });
 
-      socket.on('error', (error: Error) => {
-        logger.error("Socket error:", { error: error.message, socketId: socket.id });
+      socket.on('error', (error: SocketError) => {
+        logger.error("Socket error:", { 
+          message: error.message,
+          data: error.data,
+          socketId: socket.id 
+        });
       });
 
       socket.on('disconnect', (reason) => {
@@ -78,26 +97,52 @@ const startServer = async () => {
       });
     });
 
-  } catch (error: any) {
-    logger.error("Failed to start server:", error);
+    // Signal that the server is ready for connections
+    logger.info("Server is ready for connections");
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown server error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    logger.error("Failed to start server:", {
+      message: errorMessage,
+      stack: errorStack
+    });
+
     process.exit(1);
   }
 };
 
+// Handle startup errors
 startServer().catch((error) => {
-  logger.error("Critical server error:", error);
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  const errorStack = error instanceof Error ? error.stack : undefined;
+
+  logger.error("Critical server error:", {
+    message: errorMessage,
+    stack: errorStack
+  });
   process.exit(1);
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error("Uncaught exception:", error);
+process.on('uncaughtException', (error: Error) => {
+  logger.error("Uncaught exception:", {
+    message: error.message,
+    stack: error.stack,
+    name: error.name
+  });
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (reason) => {
-  logger.error("Unhandled rejection:", reason);
+process.on('unhandledRejection', (reason: unknown) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error("Unhandled rejection:", {
+    message: error.message,
+    stack: error.stack,
+    name: error.name
+  });
   process.exit(1);
 });
 
