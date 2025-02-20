@@ -16,6 +16,9 @@ import { useSocket } from "@/hooks/use-socket";
 import { useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiRequest } from "@/lib/queryClient";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 type ContractStats = {
   active: number;
@@ -24,7 +27,6 @@ type ContractStats = {
   total: number;
 };
 
-// Add type safety for contract amounts
 const formatAmount = (amount: string | number | null | undefined): string => {
   if (typeof amount === 'string') {
     return parseFloat(amount || '0').toFixed(2);
@@ -47,12 +49,13 @@ export default function MerchantDashboard() {
     queryKey: ['merchant', user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error('No user ID available');
-      const response = await fetch(`/api/merchants/by-user/${user.id}`);
+      const response = await apiRequest(`/api/merchants/by-user/${user.id}`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to fetch merchant');
       }
-      return response.json();
+      const result = await response.json();
+      return result.data;
     },
     enabled: !!user?.id,
     retry: 2,
@@ -69,10 +72,8 @@ export default function MerchantDashboard() {
     staleTime: 1000 * 60 // 1 minute
   });
 
-  // Connect to socket for real-time updates
   const socket = useSocket(merchant?.id ?? 0);
 
-  // Listen for real-time contract updates
   useEffect(() => {
     if (!socket || !merchant?.id) return;
 
@@ -91,7 +92,6 @@ export default function MerchantDashboard() {
     };
   }, [socket, merchant?.id, refetchContracts]);
 
-  // Memoize contract stats calculation
   const contractStats = useMemo<ContractStats>(() => {
     if (!contracts?.length) {
       return {
@@ -110,7 +110,6 @@ export default function MerchantDashboard() {
     };
   }, [contracts]);
 
-  // Memoize chart data calculation
   const chartData = useMemo(() => {
     if (!contracts?.length) return [];
 
@@ -154,8 +153,14 @@ export default function MerchantDashboard() {
   if (isMerchantError) {
     return (
       <PortalLayout>
-        <div className="p-4 text-red-500">
-          Error loading merchant data: {merchantError instanceof Error ? merchantError.message : 'Unknown error'}
+        <div className="p-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              Error loading merchant data: {merchantError instanceof Error ? merchantError.message : 'Unknown error'}
+            </AlertDescription>
+          </Alert>
         </div>
       </PortalLayout>
     );

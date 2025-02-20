@@ -379,14 +379,17 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
 }));
 
 
-router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser, res: Response, next: NextFunction) => {
+router.get("/api/merchants/by-user/:userId", async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.userId);
-    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId, timestamp: new Date().toISOString() });
+    logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId });
 
     if (!userId || isNaN(userId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
+
+    // Set JSON content type header before any response
+    res.setHeader('Content-Type', 'application/json');
 
     const merchantResults = await db
       .select()
@@ -396,11 +399,16 @@ router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser
 
     const [merchant] = merchantResults;
     if (!merchant) {
-      return res.status(404).json({ error: 'Merchant not found' });
+      return res.status(404).json({ 
+        error: 'Merchant not found',
+        status: 404
+      });
     }
 
-    res.setHeader('Content-Type', 'application/json');
-    return res.json(merchant);
+    return res.json({
+      status: 'success',
+      data: merchant
+    });
   } catch (err: any) {
     logger.error("Error fetching merchant by user:", err);
     return res.status(500).json({ 
@@ -970,8 +978,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
 
     switch (type) {
       case 'down_payment':
-        totalPoints = Math.floor(Number(amount) / 10); // Basic reward for down payment
-        details = { basePoints: totalPoints };
+        totalPoints = Math.floor(Number(amount) / 10); // Basic reward for down payment        details = { basePoints: totalPoints };
         break;
 
       case 'early_payment':
@@ -979,20 +986,17 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
         const earlyPayoff = Math.floor(Number(amount) * (1 + (monthsEarly * 0.1)));
         totalPoints = earlyPayoff;
         details = { monthsEarly, basePoints: Math.floor(Number(amount) / 20) };
-        break;
-
-      case 'additional_payment':
+        break;      case 'additional_payment':
         const additionalPoints = Math.floor(Number(amount) / 25);
         totalPoints = additionalPoints;
         details = { basePoints: additionalPoints };
         break;
-
       default:
         return res.status(400).json({ error: 'Invalid reward type' });
     }
 
     return res.json({
-totalPoints,
+      totalPoints,
       details,
       type,
       amount: Number(amount)
