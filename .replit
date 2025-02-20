@@ -7,12 +7,13 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "cloudrun"
-build = ["sh", "-c", "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=build/server"]
-run = ["sh", "-c", "node build/server/index.js"]
+build = ["sh", "-c", "cd client && npm run build"]
+run = ["sh", "-c", "npm run start"]
 
 [[ports]]
 localPort = 3000
 externalPort = 3002
+exposeLocalhost = true
 
 [[ports]]
 localPort = 3001
