@@ -15,6 +15,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Add health check endpoint
+app.get('/health', (_, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // Initialize authentication first
 await setupAuth(app);
 
@@ -45,16 +50,27 @@ const startServer = async () => {
     await new Promise<void>((resolve, reject) => {
       try {
         httpServer.listen(port, "0.0.0.0", () => {
-          logger.info(`Server listening on port ${port}`);
+          // Log both to console and logger for workflow detection
+          console.log(`Server running at http://0.0.0.0:${port}`);
+          console.log(`Health check available at http://0.0.0.0:${port}/health`);
+          logger.info(`Server listening on port ${port}`, {
+            port,
+            host: '0.0.0.0',
+            timestamp: new Date().toISOString()
+          });
           process.env.PORT = port.toString();
           resolve();
         });
 
         httpServer.on('error', (err) => {
-          logger.error('Server startup error:', {
-            error: err.message,
-            stack: err.stack
-          });
+          const errorDetails = {
+            message: err.message,
+            stack: err.stack,
+            code: err.code,
+            timestamp: new Date().toISOString()
+          };
+          logger.error('Server startup error:', errorDetails);
+          console.error('Failed to start server:', errorDetails);
           reject(err);
         });
       } catch (err) {
@@ -78,7 +94,8 @@ const startServer = async () => {
         socketId: socket.id,
         transport: socket.conn.transport.name,
         remoteAddress: socket.handshake.address,
-        userAgent: socket.handshake.headers['user-agent']
+        userAgent: socket.handshake.headers['user-agent'],
+        timestamp: new Date().toISOString()
       };
 
       logger.info("Socket connected:", socketContext);
@@ -93,17 +110,26 @@ const startServer = async () => {
         logger.error("Socket error:", { 
           message: error.message,
           data: error.data,
-          socketId: socket.id 
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
         });
       });
 
       socket.on('disconnect', (reason) => {
-        logger.info("Socket disconnected:", { reason, socketId: socket.id });
+        logger.info("Socket disconnected:", { 
+          reason, 
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
+        });
       });
     });
 
     // Signal that the server is ready for connections
-    logger.info("Server is ready for connections");
+    console.log("✨ Server is ready for connections");
+    logger.info("Server is ready for connections", {
+      port,
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown server error';
@@ -111,7 +137,8 @@ const startServer = async () => {
 
     logger.error("Failed to start server:", {
       message: errorMessage,
-      stack: errorStack
+      stack: errorStack,
+      timestamp: new Date().toISOString()
     });
 
     process.exit(1);
@@ -125,7 +152,8 @@ startServer().catch((error) => {
 
   logger.error("Critical server error:", {
     message: errorMessage,
-    stack: errorStack
+    stack: errorStack,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
@@ -135,7 +163,8 @@ process.on('uncaughtException', (error: Error) => {
   logger.error("Uncaught exception:", {
     message: error.message,
     stack: error.stack,
-    name: error.name
+    name: error.name,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
@@ -146,13 +175,16 @@ process.on('unhandledRejection', (reason: unknown) => {
   logger.error("Unhandled rejection:", {
     message: error.message,
     stack: error.stack,
-    name: error.name
+    name: error.name,
+    timestamp: new Date().toISOString()
   });
   process.exit(1);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info("Graceful shutdown initiated");
+  logger.info("Graceful shutdown initiated", {
+    timestamp: new Date().toISOString()
+  });
   process.exit(0);
 });

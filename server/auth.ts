@@ -200,7 +200,6 @@ export function setupAuth(app: Express): void {
 
   passport.deserializeUser((id: number, done) => {
     db.select()
-      .select()
       .from(users)
       .where(eq(users.id, id))
       .limit(1)
