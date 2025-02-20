@@ -255,22 +255,30 @@ export function setupAuth(app: Express): void {
         const token = await authService.generateJWT(user);
         logger.info('[Auth] Generated JWT token for user:', { userId: user.id });
 
-        // Log the user in
-        req.logIn(user, (loginErr) => {
-          if (loginErr) {
-            logger.error('[Auth] Session login error:', loginErr);
-            return next(loginErr);
-          }
+        // Use Promise to handle login sequence
+        await new Promise<void>((resolve, reject) => {
+          req.logIn(user, (loginErr) => {
+            if (loginErr) {
+              logger.error('[Auth] Session login error:', loginErr);
+              reject(loginErr);
+              return;
+            }
+            resolve();
+          });
+        });
 
-          res.json({
+        if (!res.headersSent) {
+          return res.json({
             ...user,
             token
           });
-        });
+        }
       } catch (error) {
-        logger.error('[Auth] Token generation error:', error);
+        logger.error('[Auth] Authentication error:', error);
         if (!res.headersSent) {
-          return res.status(500).json({ error: 'Failed to generate authentication token' });
+          return res.status(500).json({ 
+            error: error instanceof Error ? error.message : 'Authentication failed'
+          });
         }
       }
     })(req, res, next);
