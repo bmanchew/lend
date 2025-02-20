@@ -384,6 +384,10 @@ router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser
     const userId = parseInt(req.params.userId);
     logger.info("[Merchant Lookup] Attempting to find merchant for userId:", { userId, timestamp: new Date().toISOString() });
 
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
     const merchantResults = await db
       .select()
       .from(merchants)
@@ -395,10 +399,14 @@ router.get("/merchants/by-user/:userId", validateId, async (req: RequestWithUser
       return res.status(404).json({ error: 'Merchant not found' });
     }
 
+    res.setHeader('Content-Type', 'application/json');
     return res.json(merchant);
   } catch (err: any) {
     logger.error("Error fetching merchant by user:", err);
-    next(err);
+    return res.status(500).json({ 
+      error: 'Error fetching merchant data',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 
