@@ -9,6 +9,7 @@ import { db, dbInstance } from "@db";
 import { eq } from "drizzle-orm";
 import jwt from 'jsonwebtoken';
 import { logger } from "./lib/logger";
+import { AuthError, AUTH_ERROR_CODES } from './lib/errors';
 
 export type UserRole = "admin" | "customer" | "merchant";
 
@@ -73,21 +74,19 @@ class AuthService {
     return jwt.sign(payload, jwtSecret, { expiresIn: '30d' });
   }
 
-  async verifyJWT(token: string): Promise<Express.User | null> {
-    return new Promise((resolve, reject) => {
-      try {
-        const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
-        jwt.verify(token, jwtSecret, (err, decoded) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(decoded as Express.User);
-          }
-        });
-      } catch (error) {
-        reject(error);
+  verifyJWT(token: string): Express.User {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as Express.User;
+      return decoded;
+    } catch (err) {
+      if (err instanceof jwt.TokenExpiredError) {
+        throw new AuthError(401, 'Token expired', AUTH_ERROR_CODES.TOKEN_EXPIRED);
       }
-    });
+      if (err instanceof jwt.JsonWebTokenError) {
+        throw new AuthError(401, 'Invalid token', AUTH_ERROR_CODES.TOKEN_INVALID);
+      }
+      throw new AuthError(401, 'Token verification failed', AUTH_ERROR_CODES.UNAUTHORIZED);
+    }
   }
 }
 
@@ -130,13 +129,22 @@ export function setupAuth(app: Express): void {
     passwordField: 'password',
     passReqToCallback: true
   }, async (req, username, password, done) => {
+    const requestId = req.headers['x-request-id'] as string;
+
     try {
-      const loginType = req.body.loginType as UserRole;
-      logger.info('[Auth] Login attempt:', { username, loginType });
+      logger.info('[Auth] Attempting login', { 
+        username,
+        loginType: req.body.loginType,
+        requestId
+      });
 
       if (!username || !password) {
-        logger.error('[Auth] Missing credentials');
-        return done(null, false, { message: "Missing credentials" });
+        throw new AuthError(
+          400,
+          'Missing credentials',
+          AUTH_ERROR_CODES.MISSING_CREDENTIALS,
+          { requestId }
+        );
       }
 
       const [user] = await db
@@ -146,23 +154,30 @@ export function setupAuth(app: Express): void {
         .limit(1);
 
       if (!user || !user.password) {
-        logger.error('[Auth] User not found or invalid password');
-        return done(null, false, { message: "Invalid credentials" });
-      }
-
-      // Enhanced role validation for admin users
-      if (loginType === 'admin' && user.role !== 'admin') {
-        logger.error('[Auth] Unauthorized admin access attempt:', {
+        logger.warn('[Auth] Invalid credentials - user not found', {
           username,
-          actualRole: user.role
+          requestId
         });
-        return done(null, false, { message: "This login is for admin accounts only" });
+        throw new AuthError(
+          401,
+          'Invalid credentials',
+          AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+          { requestId }
+        );
       }
 
       const isValid = await authService.comparePasswords(password, user.password);
       if (!isValid) {
-        logger.error('[Auth] Invalid password for user:', username);
-        return done(null, false, { message: "Invalid credentials" });
+        logger.warn('[Auth] Invalid credentials - password mismatch', {
+          username,
+          requestId
+        });
+        throw new AuthError(
+          401,
+          'Invalid credentials',
+          AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+          { requestId }
+        );
       }
 
       const userResponse: Express.User = {
@@ -173,16 +188,24 @@ export function setupAuth(app: Express): void {
         name: user.name || undefined
       };
 
-      logger.info('[Auth] Login successful:', {
+      logger.info('[Auth] Login successful', {
         userId: user.id,
         role: user.role,
-        loginType
+        requestId
       });
 
       return done(null, userResponse);
     } catch (err) {
-      logger.error('[Auth] Login error:', err);
-      return done(err);
+      if (err instanceof AuthError) {
+        return done(err);
+      }
+      logger.error('[Auth] Unexpected error during authentication', {
+        error: err,
+        username,
+        requestId,
+        stack: err instanceof Error ? err.stack : undefined
+      });
+      return done(new AuthError(500, 'Authentication failed', 'AUTH_FAILED', { requestId }));
     }
   }));
 
@@ -261,15 +284,16 @@ export function setupAuth(app: Express): void {
       if (!token) {
           return res.status(401).json({ error: 'Authorization token missing' });
       }
-      const verifiedUser = await authService.verifyJWT(token);
-      if (!verifiedUser) {
-          return res.status(401).json({ error: 'Invalid token' });
-      }
+      const verifiedUser = authService.verifyJWT(token);
       logger.info('[Auth] User data retrieved:', { userId: verifiedUser.id });
       res.json(verifiedUser);
     } catch (error) {
       logger.error('[Auth] Error retrieving user data:', error);
-      res.status(500).json({ error: 'Failed to retrieve user data' });
+      if (error instanceof AuthError) {
+          res.status(error.statusCode).json({ error: error.message });
+      } else {
+          res.status(500).json({ error: 'Failed to retrieve user data' });
+      }
     }
   });
 
