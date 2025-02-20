@@ -1,0 +1,72 @@
+The logs indicate two key issues:
+
+1. **JWT Verification Failure ("Invalid token"):**  
+   The error coming from `AuthService.verifyJWT` suggests that a token is being rejected as invalid. This might be due to an expired or malformed token. One way to improve debugging here is to wrap the error from `jwt.verify` into a custom error (for example, an `AuthError`) that includes a specific status code (such as 401) and a clear error code (like `INVALID_TOKEN`). This ensures that downstream error handling and logging will be more informative.
+
+2. **RangeError – Invalid Status Code: undefined:**  
+   This error is usually thrown when you call `res.status(undefined)`. It appears that somewhere in your error-handling chain (or possibly in a middleware like express-session), an error without a defined status code is being used. A good fix is to update your global error handler to default to a 500 status code when the error doesn’t specify one. For example:
+
+   ```typescript
+   const errorHandler = (err: Error | APIError | LogError, req: Request, res: Response, next: NextFunction) => {
+     const statusCode = (err as APIError).status || 500;
+     logger.error('[Error Handler]', {
+       message: err.message,
+       name: err.name,
+       stack: err.stack,
+       path: req.path,
+       method: req.method,
+       timestamp: new Date().toISOString()
+     });
+     
+     if (err instanceof APIError) {
+       return res.status(statusCode).json({
+         error: err.message,
+         code: err.code,
+         details: err.details
+       });
+     }
+   
+     if (err.name === 'ZodError') {
+       return res.status(400).json({
+         error: 'Validation Error',
+         details: err
+       });
+     }
+   
+     return res.status(statusCode).json({
+       error: 'Internal Server Error',
+       message: process.env.NODE_ENV === 'development' ? err.message : undefined
+     });
+   };
+   ```
+
+### Recommendations
+
+- **Wrap JWT Errors:**  
+  In `AuthService.verifyJWT`, catch errors from `jwt.verify` and throw a custom error that includes a status code and error code. For example:
+  
+  ```typescript
+  async verifyJWT(token: string): Promise<Express.User | null> {
+    return new Promise((resolve, reject) => {
+      try {
+        const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+        jwt.verify(token, jwtSecret, (err, decoded) => {
+          if (err) {
+            return reject(new APIError(401, 'Invalid token', 'INVALID_TOKEN', err));
+          }
+          resolve(decoded as Express.User);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+  ```
+  
+- **Default Status Codes:**  
+  Make sure that every error you pass into your error handler has a defined status code. If not, your error handler should default to 500.
+
+- **Review Session Configurations:**  
+  Since the error occurs during session operations, verify that your session middleware (and its store configuration) isn’t inadvertently causing a misconfiguration that leads to an undefined status code. Double-check that your environment variables (e.g., for session secret) are set correctly.
+
+Implementing these improvements will lead to clearer, more consistent error messages and easier debugging in the future. Let me know if you need further details or additional assistance!
