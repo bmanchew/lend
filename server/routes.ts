@@ -29,19 +29,21 @@ interface RequestWithUser extends Request {
 interface LoggerError extends Error {
   details?: any;
   code?: string;
-  status?: number;
+  statusCode?: number;
 }
 
 // Enhanced error class for consistent error handling
 class APIError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public code?: string,
-    public details?: any
-  ) {
+  public statusCode: number;
+  public code?: string;
+  public details?: any;
+
+  constructor(code: string, message: string, statusCode: number, details?: any) {
     super(message);
     this.name = 'APIError';
+    this.code = code;
+    this.statusCode = statusCode;
+    this.details = details;
   }
 }
 
@@ -56,10 +58,13 @@ const errorHandler = (err: Error | APIError | LoggerError, req: Request, res: Re
     timestamp: new Date().toISOString()
   };
 
-  logger.error('[Error Handler]', errorLog);
+  logger.error('[Error Handler]', {
+    ...errorLog,
+    error: err instanceof Error ? { message: err.message, stack: err.stack } : 'Unknown error'
+  });
 
   if (err instanceof APIError) {
-    return res.status(err.status).json({
+    return res.status(err.statusCode).json({
       error: err.message,
       code: err.code,
       details: err.details
@@ -108,23 +113,28 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
     const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
     if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
+      throw new APIError('AUTH_REQUIRED', 'Authentication required', 401);
     }
 
     const user = await authService.verifyJWT(token);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
+      throw new APIError('INVALID_TOKEN', 'Invalid or expired token', 401);
     }
 
-    req.user = user;
+    req.user = user as User;
     next();
   } catch (error) {
-    logger.error('Auth middleware error:', error);
+    if (error instanceof APIError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    logger.error('Auth middleware error:', {
+      error: error instanceof Error ? { message: error.message, stack: error.stack } : 'Unknown error'
+    });
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Request tracking middleware
+// Enhanced request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
@@ -155,7 +165,7 @@ const cacheMiddleware = (duration: number) => {
     }
 
     const originalSend = res.send;
-    res.send = function (body: any): any {
+    res.send = function(body: any): any {
       apiCache.set(key, body, duration);
       return originalSend.call(this, body);
     };
@@ -181,7 +191,7 @@ router.use(cacheMiddleware(300));
 // Protected Routes (JWT Required)
 router.get("/auth/me", asyncHandler(async (req: RequestWithUser, res: Response) => {
   if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
+    throw new APIError('AUTH_REQUIRED', 'Authentication required', 401);
   }
   return res.json(req.user);
 }));
@@ -193,7 +203,7 @@ router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, r
 
   // Validate status
   if (!Object.values(ContractStatus).includes(status)) {
-    return res.status(400).json({ error: 'Invalid contract status' });
+    throw new APIError('INVALID_STATUS', 'Invalid contract status', 400);
   }
 
   const [contract] = await db
@@ -203,7 +213,7 @@ router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, r
     .limit(1);
 
   if (!contract) {
-    return res.status(404).json({ error: 'Contract not found' });
+    throw new APIError('NOT_FOUND', 'Contract not found', 404);
   }
 
   const updates = {
@@ -225,7 +235,7 @@ router.get("/customers/:id/contracts", asyncHandler(async (req: RequestWithUser,
   try {
     const userId = parseInt(req.params.id);
     if (isNaN(userId)) {
-      return res.status(400).json({ error: 'Invalid user ID' });
+      throw new APIError('INVALID_ID', 'Invalid user ID', 400);
     }
 
     const customerContracts = await db.select().from(contracts)
@@ -255,10 +265,7 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
 
     if (!userId || isNaN(userId)) {
       logger.error("[Merchant Lookup] Invalid user ID:", { userId });
-      return res.status(400).json({
-        status: 'error',
-        error: 'Invalid user ID'
-      });
+      throw new APIError('INVALID_ID', 'Invalid user ID', 400);
     }
 
     const merchantResults = await db
@@ -275,10 +282,7 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
     const [merchant] = merchantResults;
     if (!merchant) {
       logger.error("[Merchant Lookup] No merchant found for user:", { userId });
-      return res.status(404).json({
-        status: 'error',
-        error: 'Merchant not found'
-      });
+      throw new APIError('NOT_FOUND', 'Merchant not found', 404);
     }
 
     // Set proper content type for JSON response
@@ -293,11 +297,7 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
       stack: err.stack,
       userId: req.params.userId
     });
-    return res.status(500).json({
-      status: 'error',
-      error: 'Error fetching merchant data',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
+    next(err);
   }
 }));
 
@@ -341,12 +341,9 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
         requestId,
         timestamp: new Date().toISOString()
       });
-      return res.status(400).json({
-        error: 'Email and company name are required',
-        missingFields: {
-          email: !email,
-          companyName: !companyName
-        }
+      throw new APIError('MISSING_FIELDS', 'Email and company name are required', 400, {
+        email: !email,
+        companyName: !companyName
       });
     }
 
@@ -648,7 +645,7 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
       .limit(1);
 
     if (!merchant) {
-      throw new Error('Merchant not found');
+      throw new APIError('NOT_FOUND', 'Merchant not found', 404);
     }
 
     // Send Slack notifications
@@ -696,7 +693,7 @@ router.patch("/webhooks/:id/status", asyncHandler(async (req: RequestWithUser, r
   const { status, error } = req.body;
 
   if (!Object.values(WebhookEventStatus).includes(status)) {
-    return res.status(400).json({ error: 'Invalid webhook status' });
+    throw new APIError('INVALID_STATUS', 'Invalid webhook status', 400);
   }
 
   const [updatedEvent] = await db
@@ -732,10 +729,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
     // Enhanced phone number validation and formatting
     let phone = req.body.phone?.replace(/[^0-9+]/g, ''); // Keep + sign but remove other non-digits
     if (!phone) {
-      return res.status(400).json({
-        success: false,
-        error: 'Phone number is required'
-      });
+      throw new APIError('MISSING_PHONE', 'Phone number is required', 400);
     }
 
     debugLog('Initial phone cleaning', {
@@ -757,10 +751,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
         length: phone.length,
         requestId
       });
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid phone number format. Please provide a 10-digit US phone number.'
-      });
+      throw new APIError('INVALID_PHONE', 'Invalid phone number format. Please provide a 10-digit US phone number.', 400);
     }
 
     const formattedPhone = `+1${phone}`;
@@ -782,20 +773,14 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
         merchantId: req.params.id,
         requestId
       });
-      return res.status(404).json({
-        success: false,
-        error: 'Merchant not found'
-      });
+      throw new APIError('NOT_FOUND', 'Merchant not found', 404);
     }
 
     // Generate application URL with proper encoding
     const appUrl = process.env.APP_URL || '';
     if (!appUrl) {
       logger.error('[LoanApplication] Missing APP_URL environment variable', { timestamp: new Date().toISOString() });
-      return res.status(500).json({
-        success: false,
-        error: 'Server configuration error'
-      });
+      throw new APIError('SERVER_ERROR', 'Server configuration error', 500);
     }
 
     const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
@@ -861,11 +846,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
         userErrorMessage = 'This phone number has opted out of receiving messages. Please use a different number or contact support.';
       }
 
-      return res.status(400).json({
-        success: false,
-        error: userErrorMessage,
-        details: process.env.NODE_ENV === 'development' ? smsResult.error : undefined
-      });
+      throw new APIError('SMS_ERROR', userErrorMessage, 400, { details: process.env.NODE_ENV === 'development' ? smsResult.error : undefined });
     }
 
     // Update webhook event with success
@@ -908,7 +889,7 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
 router.get("/rewards/transactions", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!req.user?.id) {
-      return res.status(401).json({ error: 'Authentication required' });
+      throw new APIError('AUTH_REQUIRED', 'Authentication required', 401);
     }
 
     const transactions = await shifiRewardsService.getTransactionHistory(req.user.id);
@@ -923,7 +904,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
     const { type, amount } = req.query;
 
     if (!type || !amount || isNaN(Number(amount))) {
-      return res.status(400).json({ error: 'Invalid parameters' });
+      throw new APIError('INVALID_PARAMS', 'Invalid parameters', 400);
     }
 
     let totalPoints = 0;
@@ -942,7 +923,7 @@ router.get("/rewards/calculate", asyncHandler(async (req: RequestWithUser, res: 
         };
         break;
       default:
-        return res.status(400).json({ error: 'Invalid reward type' });
+        throw new APIError('INVALID_TYPE', 'Invalid reward type', 400);
     }
 
     return res.json({
@@ -960,7 +941,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
     const type = req.query.type as string;
 
     if (isNaN(amount) || amount <= 0) {
-      return res.status(400).json({ error: 'Invalid amount' });
+      throw new APIError('INVALID_AMOUNT', 'Invalid amount', 400);
     }
 
     let totalPoints = 0;
@@ -989,7 +970,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
         break;
 
       default:
-        return res.status(400).json({ error: 'Invalid reward type' });
+        throw new APIError('INVALID_TYPE', 'Invalid reward type', 400);
     }
 
     return res.json({
@@ -1099,7 +1080,7 @@ router.get("/plaid/payment-status/:transferId", asyncHandler(async (req: Request
       .limit(1);
 
     if (!contract) {
-      return res.status(404).json({ error: 'Contract not found' });
+      throw new APIError('NOT_FOUND', 'Contract not found', 404);
     }
 
     // Check if ACH verification is still pending
@@ -1134,7 +1115,7 @@ router.post("/plaid/verify-micro-deposits", asyncHandler(async (req: RequestWith
       .limit(1);
 
     if (!contract || !contract.plaid_access_token || !contract.plaid_account_id) {
-      return res.status(404).json({ error: 'Contract or Plaid details not found' });
+      throw new APIError('NOT_FOUND', 'Contract or Plaid details not found', 404);
     }
 
     // Verify micro-deposits with Plaid
@@ -1160,10 +1141,7 @@ router.post("/plaid/verify-micro-deposits", asyncHandler(async (req: RequestWith
 router.post("/plaid/ledger/start-sweeps", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Sweep access token not configured'
-      });
+      throw new APIError('MISSING_TOKEN', 'Sweep access token not configured', 400);
     }
 
     await ledgerManager.initializeSweeps();
@@ -1195,24 +1173,15 @@ router.post("/plaid/ledger/manual-sweep", asyncHandler(async (req: RequestWithUs
     const { type, amount } = req.body;
 
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Sweep access token not configured'
-      });
+      throw new APIError('MISSING_TOKEN', 'Sweep access token not configured', 400);
     }
 
     if (!['withdraw', 'deposit'].includes(type)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid sweep type. Must be either "withdraw" or "deposit".'
-      });
+      throw new APIError('INVALID_TYPE', 'Invalid sweep type. Must be either "withdraw" or "deposit".', 400);
     }
 
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Invalid amount. Must be a positive number.'
-      });
+      throw new APIError('INVALID_AMOUNT', 'Invalid amount. Must be a positive number.', 400);
     }
 
     const result = await ledgerManager.manualSweep(type, amount.toString());
@@ -1226,10 +1195,7 @@ router.post("/plaid/ledger/manual-sweep", asyncHandler(async (req: RequestWithUs
 router.get("/plaid/ledger/balance", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Sweep access token not configured'
-      });
+      throw new APIError('MISSING_TOKEN', 'Sweep access token not configured', 400);
     }
 
     const balance = await PlaidService.getLedgerBalance();
@@ -1247,7 +1213,7 @@ router.post("/plaid/create-link-token", asyncHandler(async (req: RequestWithUser
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      throw new APIError('AUTH_REQUIRED', 'Authentication required', 401);
     }
 
     logger.info('Creating Plaid link token for user:', { userId, timestamp: new Date().toISOString() });
@@ -1271,7 +1237,6 @@ async function generateVerificationToken(): Promise<string> {
 async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
   throw new Error("Function not implemented.");
 }
-
 
 async function testSendGridConnection(): Promise<boolean> {
   throw new Error("Function not implemented.");
