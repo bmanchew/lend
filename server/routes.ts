@@ -313,23 +313,60 @@ router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: Requ
 
 // Add to your merchants/create endpoint handler
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const requestId = Date.now().toString(36);
   logger.info("[Merchant Creation] Received request:", {
-    body: req.body,
+    requestId,
+    body: {
+      ...req.body,
+      password: '[REDACTED]'
+    },
     timestamp: new Date().toISOString()
   });
 
-  const { companyName, email, phoneNumber, address, website } = req.body;
-  const tempPassword = Math.random().toString(36).slice(-8);
-
-  // Validate required fields
-  if (!email || !companyName) {
-    logger.error("[Merchant Creation] Missing required fields", { timestamp: new Date().toISOString() });
-    return res.status(400).json({ error: 'Email and company name are required' });
-  }
-
   try {
+    const { companyName, email, phoneNumber, address, website } = req.body;
+
+    // Validate required fields
+    if (!email || !companyName || !phoneNumber) {
+      logger.error("[Merchant Creation] Missing required fields", {
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(400).json({ 
+        error: 'Email, company name, and phone number are required',
+        missingFields: {
+          email: !email,
+          companyName: !companyName,
+          phoneNumber: !phoneNumber
+        }
+      });
+    }
+
+    // Format phone number using smsService
+    let formattedPhone;
+    try {
+      formattedPhone = smsService.formatPhoneNumber(phoneNumber);
+    } catch (phoneError) {
+      logger.error("[Merchant Creation] Invalid phone number format", {
+        requestId,
+        phone: phoneNumber,
+        error: phoneError instanceof Error ? phoneError.message : 'Unknown error'
+      });
+      return res.status(400).json({
+        error: 'Please provide a valid 10-digit US phone number (e.g., 2025550123)'
+      });
+    }
+
+    // Generate secure temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+
     // Check for existing user first
-    logger.info("[Merchant Creation] Checking for existing user with email:", { email, timestamp: new Date().toISOString() });
+    logger.info("[Merchant Creation] Checking for existing user with email:", {
+      requestId,
+      email,
+      timestamp: new Date().toISOString()
+    });
+
     const existingUser = await db
       .select()
       .from(users)
@@ -338,16 +375,33 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
 
     let merchantUser;
     if (existingUser.length > 0) {
-      // Update existing user to merchant role
-      [merchantUser] = await db
-        .update(users)
-        .set({ role: 'merchant' })
-        .where(eq(users.id, existingUser[0].id))
-        .returning();
-      logger.info("[Merchant Creation] Updated existing user to merchant:", { merchantUser, timestamp: new Date().toISOString() });
+      // Update existing user to merchant role if not already
+      if (existingUser[0].role !== 'merchant') {
+        [merchantUser] = await db
+          .update(users)
+          .set({ 
+            role: 'merchant',
+            phoneNumber: formattedPhone,
+            password: await authService.hashPassword(tempPassword)
+          })
+          .where(eq(users.id, existingUser[0].id))
+          .returning();
+
+        logger.info("[Merchant Creation] Updated existing user to merchant:", {
+          requestId,
+          userId: merchantUser.id,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        merchantUser = existingUser[0];
+      }
     } else {
       // Create new user
-      logger.info("[Merchant Creation] Creating new merchant user account", { timestamp: new Date().toISOString() });
+      logger.info("[Merchant Creation] Creating new merchant user account", {
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+
       [merchantUser] = await db
         .insert(users)
         .values({
@@ -356,21 +410,23 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
           email,
           name: companyName,
           role: 'merchant',
-          phoneNumber
+          phoneNumber: formattedPhone,
+          kycStatus: 'pending'
         } as typeof users.$inferInsert)
         .returning();
     }
 
-    // Create merchant record with default program
+    // Create merchant record
     const [merchant] = await db
       .insert(merchants)
       .values({
         userId: merchantUser.id,
         companyName,
         address,
-        website,
+        website: website || null,
         status: 'active',
-        reserveBalance: '0'
+        reserveBalance: '0',
+        phone: formattedPhone
       } as typeof merchants.$inferInsert)
       .returning();
 
@@ -383,12 +439,55 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       status: "active"
     } as typeof programs.$inferInsert);
 
-    // Send login credentials via email
-    await sendMerchantCredentials(email, email, tempPassword);
+    // Send welcome message with credentials
+    const welcomeResult = await smsService.sendMerchantWelcome(formattedPhone, {
+      companyName,
+      loginUrl: `${process.env.APP_URL}/auth/merchant`,
+      username: email,
+      tempPassword
+    });
 
-    return res.status(201).json({ merchant, user: merchantUser });
+    if (!welcomeResult) {
+      logger.warn("[Merchant Creation] Failed to send welcome message", {
+        requestId,
+        merchantId: merchant.id,
+        phone: formattedPhone
+      });
+    }
+
+    // Try to send Slack notification, but don't fail if it errors
+    try {
+      await slackService.notifyLoanApplication({
+        merchantName: companyName,
+        customerName: email,
+        amount: 0,
+        phone: formattedPhone
+      });
+    } catch (slackError) {
+      logger.warn("[Merchant Creation] Failed to send Slack notification", {
+        error: slackError instanceof Error ? slackError.message : 'Unknown error',
+        requestId
+      });
+    }
+
+    logger.info("[Merchant Creation] Successfully created merchant:", {
+      requestId,
+      merchantId: merchant.id,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.status(201).json({
+      merchant,
+      user: merchantUser,
+      credentialsSent: welcomeResult
+    });
+
   } catch (err) {
-    logger.error("[Merchant Creation] Error:", err);
+    logger.error("[Merchant Creation] Error:", {
+      requestId,
+      error: err instanceof Error ? err.message : 'Unknown error',
+      stack: err instanceof Error ? err.stack : undefined
+    });
     next(err);
   }
 }));
@@ -908,7 +1007,7 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
         details.multiplier = 1 + (monthsEarly * 0.1);
         break;
 
-      case 'additional_payment':
+      case 'additionalpayment':
         const additionalPoints = Math.floor(amount / 25) * 2;
         totalPoints = additionalPoints;
         details.basePoints = Math.floor(amount / 25);

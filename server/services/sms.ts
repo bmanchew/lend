@@ -44,16 +44,19 @@ export const smsService = {
       throw new Error('Phone number is required');
     }
 
-    // Remove all non-numeric characters
+    // Remove all non-numeric characters first
     const cleanNumber = phone.replace(/\D/g, '');
 
-    // Enforce 10-digit US numbers only
-    if (cleanNumber.length !== 10) {
-      throw new Error('Phone number must be exactly 10 digits');
+    // Handle numbers that might start with 1
+    const baseNumber = cleanNumber.startsWith('1') ? cleanNumber.slice(1) : cleanNumber;
+
+    // Check if we have a valid 10-digit number after cleaning
+    if (baseNumber.length !== 10) {
+      throw new Error('Phone number must be exactly 10 digits after removing country code');
     }
 
     // Format as +1XXXXXXXXXX
-    return `+1${cleanNumber}`;
+    return `+1${baseNumber}`;
   },
 
   async tryUrlShortening(url: string, retries = 3): Promise<string> {
@@ -324,6 +327,53 @@ export const smsService = {
       });
 
       return { success: false, error: errorMessage };
+    }
+  },
+  async sendMerchantWelcome(
+    phone: string,
+    { companyName, loginUrl, username, tempPassword }: {
+      companyName: string;
+      loginUrl: string;
+      username: string;
+      tempPassword: string;
+    }
+  ): Promise<boolean> {
+    try {
+      logger.info('[SMS] Preparing merchant welcome message', {
+        phone,
+        companyName,
+        username
+      });
+
+      const message = [
+        `Welcome to ShiFi Loans, ${companyName}!`,
+        '',
+        'Your login credentials:',
+        `Username: ${username}`,
+        `Temporary Password: ${tempPassword}`,
+        '',
+        `Login here: ${loginUrl}`,
+        '',
+        'Please change your password after first login.'
+      ].join('\n');
+
+      const sent = await this.sendSMS(phone, message);
+
+      if (!sent) {
+        logger.error('[SMS] Failed to send merchant welcome message', {
+          phone,
+          companyName
+        });
+      }
+
+      return sent;
+    } catch (error) {
+      logger.error('[SMS] Error sending merchant welcome message:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        phone,
+        companyName
+      });
+      return false;
     }
   }
 };
