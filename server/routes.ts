@@ -1,27 +1,35 @@
 import { Router } from 'express';
-import type { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from 'express';
 import { db } from "@db";
-import { users, contracts, merchants, programs, webhookEvents, ContractStatus, WebhookEventStatus, PaymentStatus } from "@db/schema";
+import { users, contracts, merchants, programs, webhookEvents, ContractStatus, WebhookEventStatus, PaymentStatus, rewardsBalances } from "@db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import express from 'express';
 import NodeCache from 'node-cache';
+import { Server as SocketIOServer } from 'socket.io';
 import { smsService } from "./services/sms";
 import { calculateMonthlyPayment, calculateTotalInterest } from "./services/loan-calculator";
 import { logger } from "./lib/logger";
 import { slackService } from "./services/slack";
+import { PlaidService } from './services/plaid';
+import { shifiRewardsService } from './services/shifi-rewards';
+import jwt from 'jsonwebtoken';
 import { authService } from "./auth";
 import type { User } from "./auth";
 import { asyncHandler } from './lib/async-handler';
+import { sendMerchantCredentials } from './services/email';
+import { LedgerManager } from './services/ledger-manager';
+import rewardsRoutes from './routes/rewards';
+import plaidRoutes from './routes/plaid';
 
 // Updated type declarations for better type safety
 interface RequestWithUser extends Request {
   user?: User;
 }
 
-interface LogError extends Error {
+interface LoggerError extends Error {
+  details?: any;
   code?: string;
   status?: number;
-  details?: unknown;
 }
 
 // Enhanced error class for consistent error handling
@@ -30,7 +38,7 @@ class APIError extends Error {
     public status: number,
     message: string,
     public code?: string,
-    public details?: unknown
+    public details?: any
   ) {
     super(message);
     this.name = 'APIError';
@@ -38,7 +46,7 @@ class APIError extends Error {
 }
 
 // Middleware to ensure consistent error handling
-const errorHandler = (err: Error | APIError | LogError, req: Request, res: Response, next: NextFunction) => {
+const errorHandler = (err: Error | APIError | LoggerError, req: Request, res: Response, next: NextFunction) => {
   const errorLog = {
     message: err.message,
     name: err.name,
@@ -72,7 +80,7 @@ const errorHandler = (err: Error | APIError | LogError, req: Request, res: Respo
   });
 };
 
-const router = Router();
+const router = express.Router();
 
 // Define public routes that don't require JWT verification
 const PUBLIC_ROUTES = [
@@ -307,7 +315,7 @@ router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: Requ
   }
 }));
 
-// Updated merchant creation endpoint
+// Add to your merchants/create endpoint handler
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
   logger.info("[Merchant Creation] Received request:", {
@@ -337,9 +345,10 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       });
     }
 
-    // Generate temporary password (will be changed on first login)
+    // Generate secure temporary password
     const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
 
+    // Check for existing user first
     logger.info("[Merchant Creation] Checking for existing user with email:", {
       requestId,
       email,
@@ -418,6 +427,21 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
       status: "active"
     } as typeof programs.$inferInsert);
 
+    // Send welcome email with credentials
+    const emailSent = await sendMerchantCredentials(
+      email,
+      email, // username is same as email
+      tempPassword
+    );
+
+    if (!emailSent) {
+      logger.warn("[Merchant Creation] Failed to send welcome email", {
+        requestId,
+        merchantId: merchant.id,
+        email
+      });
+    }
+
     // Try to send Slack notification, but don't fail if it errors
     try {
       await slackService.notifyLoanApplication({
@@ -441,7 +465,8 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
 
     return res.status(201).json({
       merchant,
-      user: merchantUser
+      user: merchantUser,
+      credentialsSent: emailSent
     });
 
   } catch (err) {
@@ -682,27 +707,9 @@ router.patch("/webhooks/:id/status", asyncHandler(async (req: RequestWithUser, r
   return res.json(updatedEvent);
 }));
 
-router.get("/rewards/balance", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  try {
-    if (!req.user?.id) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+router.use('/rewards', rewardsRoutes);
+router.use('/plaid', plaidRoutes);
 
-    const balance = await shifiRewardsService.getBalance(req.user.id);
-    const [balanceData] = await db
-      .select()
-      .from(rewardsBalances)
-      .where(eq(rewardsBalances.userId, req.user.id))
-      .limit(1);
-
-    return res.json({
-      balance: balance,
-      lifetimeEarned: balanceData?.lifetimeEarned || 0
-    });
-  } catch (err) {
-    next(err);
-  }
-}));
 
 router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   const requestId = Date.now().toString(36);
@@ -991,62 +998,28 @@ router.get("/rewards/potential", asyncHandler(async (req: RequestWithUser, res: 
   }
 }));
 
-// Fix the contract updates section
 router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
   try {
     const contractId = parseInt(req.params.id);
-    if (isNaN(contractId)) {
-      return res.status(400).json({ error: 'Invalid contract ID' });
-    }
-
-    const updates: Partial<typeof contracts.$inferInsert> = {};
+    const updates: Partial<typeof contracts.$inferInsert>> = {};
 
     // Map the updates with proper typing
-    if (req.body.status) {
-      if (!Object.values(ContractStatus).includes(req.body.status)) {
-        return res.status(400).json({ error: 'Invalid contract status' });
-      }
-      updates.status = req.body.status;
-    }
-
-    if (req.body.underwritingStatus) updates.underwritingStatus = req.body.underwritingStatus;
-    if (req.body.notes) updates.notes = req.body.notes;
-    if (req.body.active !== undefined) updates.active = req.body.active;
-    if (req.body.monthlyPayment) updates.monthlyPayment = req.body.monthlyPayment;
-    if (req.body.lastPaymentId) updates.lastPaymentId = req.body.lastPaymentId;
-    if (req.body.lastPaymentStatus) {
-      if (!Object.values(PaymentStatus).includes(req.body.lastPaymentStatus)) {
-        return res.status(400).json({ error: 'Invalid payment status' });
-      }
-      updates.lastPaymentStatus = req.body.lastPaymentStatus;
-    }
-
-    // Log update attempt
-    logger.info('[Contract Update] Attempting to update contract:', {
-      contractId,
-      updates,
-      requestId: Date.now().toString(36)
-    });
+    if (req.body.status) updates.status = req.body.status;
+    if ('plaid_access_token' in req.body) updates.plaidAccessToken = req.body.plaid_access_token;
+    if ('plaid_account_id' in req.body) updates.plaidAccountId = req.body.plaid_account_id;
+    if ('ach_verification_status' in req.body) updates.achVerificationStatus = req.body.ach_verification_status;
+    if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
+    if ('last_payment_status' in req.body) updates.lastPaymentStatus = reqbody.last_payment_status;
 
     const [updatedContract] = await db
-      .update(contracts)
+            .update(contracts)
       .set(updates)
       .where(eq(contracts.id, contractId))
       .returning();
 
-    if (!updatedContract) {
-      return res.status(404).json({ error: 'Contract not found' });
-    }
-
     return res.json(updatedContract);
-
-  } catch (error) {
-    logger.error('[Contract Update] Error updating contract:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      contractId: req.params.id
-    });
-    next(error);
+  } catch (err) {
+    next(err);
   }
 }));
 
@@ -1293,6 +1266,7 @@ async function generateVerificationToken(): Promise<string> {
 async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
   throw new Error("Function not implemented.");
 }
+
 
 async function testSendGridConnection(): Promise<boolean> {
   throw new Error("Function not implemented.");

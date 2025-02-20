@@ -73,15 +73,21 @@ class AuthService {
     return jwt.sign(payload, jwtSecret, { expiresIn: '30d' });
   }
 
-  verifyJWT(token: string): Express.User | null {
-    try {
-      const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
-      const decoded = jwt.verify(token, jwtSecret) as Express.User;
-      return decoded;
-    } catch (error) {
-      logger.error("[Auth] JWT verification failed:", error);
-      return null;
-    }
+  async verifyJWT(token: string): Promise<Express.User | null> {
+    return new Promise((resolve, reject) => {
+      try {
+        const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+        jwt.verify(token, jwtSecret, (err, decoded) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(decoded as Express.User);
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }
 
@@ -245,13 +251,26 @@ export function setupAuth(app: Express): void {
     })(req, res, next);
   });
 
-  app.get("/api/user", (req, res) => {
-    if (!req.user) {
-      logger.info('[Auth] Unauthorized access to /api/user');
-      return res.status(401).json({ error: "Authentication required" });
+  app.get("/api/user", async (req, res) => {
+    try {
+      if (!req.user) {
+        logger.info('[Auth] Unauthorized access to /api/user');
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+          return res.status(401).json({ error: 'Authorization token missing' });
+      }
+      const verifiedUser = await authService.verifyJWT(token);
+      if (!verifiedUser) {
+          return res.status(401).json({ error: 'Invalid token' });
+      }
+      logger.info('[Auth] User data retrieved:', { userId: verifiedUser.id });
+      res.json(verifiedUser);
+    } catch (error) {
+      logger.error('[Auth] Error retrieving user data:', error);
+      res.status(500).json({ error: 'Failed to retrieve user data' });
     }
-    logger.info('[Auth] User data retrieved:', { userId: req.user.id });
-    res.json(req.user);
   });
 
   app.post("/api/logout", (req, res) => {
