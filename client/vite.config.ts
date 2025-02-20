@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 3001,
+    port: process.env.PORT ? parseInt(process.env.PORT) : 3001,
     hmr: {
       protocol: 'ws',
       host: '0.0.0.0',
-      port: 3001,
-      clientPort: 3001,
+      port: process.env.PORT ? parseInt(process.env.PORT) : 3001,
+      clientPort: process.env.PORT ? parseInt(process.env.PORT) : 3001,
       timeout: 5000,
       overlay: true
     },

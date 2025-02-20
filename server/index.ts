@@ -37,7 +37,7 @@ const startServer = async () => {
 
     // Find available port, starting from 3000
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-    const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+    const host = '0.0.0.0';
 
     // Set default timeout
     httpServer.timeout = 120000; // 2 minutes
