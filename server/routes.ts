@@ -789,16 +789,8 @@ router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: Req
     }
 
     // Generate application URL with proper encoding
-    const appUrl = process.env.APP_URL || '';
-    if (!appUrl) {
-      logger.error('[LoanApplication] Missing APP_URL environment variable', { timestamp: new Date().toISOString() });
-      return res.status(500).json({
-        success: false,
-        error: 'Server configuration error'
-      });
-    }
-
-    const baseUrl = appUrl.replace(/\/$/, ''); // Remove trailing slash if present
+    const productionUrl = 'https://shifi.replit.app';
+    const baseUrl = productionUrl.replace(/\/$/, ''); // Remove trailing slash if present
     const applicationUrl = `${baseUrl}/apply/${formattedPhone.substring(1)}`; // Remove + and don't encode
 
     debugLog('Generated application URL', {
