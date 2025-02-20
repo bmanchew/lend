@@ -3,8 +3,8 @@ import { shifiRewardsService } from './shifi-rewards';
 
 export function calculateMonthlyPayment(
   amount: number,
-  annualInterestRate: number = 0, // Default to 0% for 24-month contracts
-  termMonths: number = 24 // Default to 24 months
+  annualInterestRate: number = 0, // Fixed at 0% interest
+  termMonths: number = 24 // Fixed at 24 months
 ): number {
   // Calculate loan amount after 5% down payment
   const downPayment = amount * 0.05;

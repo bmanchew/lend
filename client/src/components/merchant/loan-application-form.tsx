@@ -76,8 +76,8 @@ export function LoanApplicationForm({ merchantId, onSuccess }: { merchantId: num
             phone: cleanPhone
           },
           amount,
-          term: 12, // Default term
-          interestRate: 24.99, // Fixed interest rate
+          term: 24, // Fixed 24-month term
+          interestRate: 0, // 0% interest rate
         }),
       });
 
