@@ -21,6 +21,11 @@ await setupAuth(app);
 // Mount API routes under /api prefix BEFORE Vite setup
 app.use("/api", apiRouter);
 
+// Add health check route
+app.get('/', (_req, res) => {
+  res.sendStatus(200);
+});
+
 interface SocketError extends Error {
   data?: any;
 }
