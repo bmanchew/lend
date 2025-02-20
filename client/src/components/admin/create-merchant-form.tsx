@@ -56,7 +56,7 @@ export function CreateMerchantForm() {
 
       toast({
         title: "Success",
-        description: "Merchant account created and credentials sent",
+        description: "Merchant account created successfully with 24-month term at 0% APR",
       });
       form.reset();
     } catch (error) {
@@ -74,9 +74,12 @@ export function CreateMerchantForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormDescription className="text-sm text-muted-foreground mb-4">
-          All merchants are automatically enrolled in a 24-month term contract at 0% APR.
-        </FormDescription>
+        <div className="bg-muted/50 p-4 rounded-lg mb-6">
+          <FormDescription className="text-sm font-medium">
+            All merchants are automatically enrolled in a 24-month term contract at 0% APR.
+            This program is fixed and cannot be modified.
+          </FormDescription>
+        </div>
 
         <FormField
           control={form.control}

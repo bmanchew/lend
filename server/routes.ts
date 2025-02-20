@@ -233,15 +233,17 @@ router.post("/auth/register", asyncHandler(async (req: Request, res: Response) =
 
   const hashedPassword = await authService.hashPassword(password);
 
-  const [user] = await db.insert(users)
+  await db.insert(users)
     .values({
       username,
       password: hashedPassword,
       email,
       name,
       role
-    } as typeof users.$inferInsert)
-    .returning();
+    } as typeof users.$inferInsert);
+
+  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+
 
   logger.info('[Auth] Registration successful:', { userId: user.id, role: user.role, timestamp: new Date().toISOString() });
 
@@ -347,11 +349,16 @@ router.post("/contracts/:id/status", asyncHandler(async (req: RequestWithUser, r
     lastPaymentStatus: req.body.lastPaymentStatus as PaymentStatus || null
   };
 
-  const [updatedContract] = await db
+  await db
     .update(contracts)
     .set(updates)
+    .where(eq(contracts.id, parseInt(id)));
+
+  const [updatedContract] = await db
+    .select()
+    .from(contracts)
     .where(eq(contracts.id, parseInt(id)))
-    .returning();
+    .limit(1);
 
   return res.json(updatedContract);
 }));
@@ -462,28 +469,36 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
   try {
     // Validate required fields
     if (!email || !companyName) {
-      return res.status(400).json({ error: 'Email and company name are required' });
+      return res.status(400).json({ 
+        status: 'error',
+        error: 'Email and company name are required' 
+      });
     }
 
     // Check for existing user first
-    const existingUser = await db
+    const [existingUser] = await db
       .select()
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
 
     let merchantUser;
-    if (existingUser.length > 0) {
-      // Update existing user to merchant role
-      [merchantUser] = await db
+    if (existingUser) {
+      // Update existing user to merchant role if found
+      await db
         .update(users)
-        .set({ role: 'merchant' })
-        .where(eq(users.id, existingUser[0].id))
-        .returning();
+        .set({ 
+          role: 'merchant',
+          phoneNumber
+        })
+        .where(eq(users.id, existingUser.id));
+
+      merchantUser = existingUser;
     } else {
+      // Create new user if not found
       const hashedPassword = await authService.hashPassword(tempPassword);
 
-      [merchantUser] = await db
+      await db
         .insert(users)
         .values({
           username: email,
@@ -492,12 +507,22 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
           name: companyName,
           role: 'merchant',
           phoneNumber
-        })
-        .returning();
+        });
+
+      // Get the created user
+      [merchantUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+    }
+
+    if (!merchantUser) {
+      throw new Error('Failed to create or update user');
     }
 
     // Create merchant record with fixed program settings
-    const [merchant] = await db
+    await db
       .insert(merchants)
       .values({
         userId: merchantUser.id,
@@ -505,27 +530,51 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
         address,
         website,
         status: 'active',
-        reserveBalance: '0' // Store as string to match schema
-      })
-      .returning();
+        reserveBalance: '0'
+      });
 
-    // Create default program with fixed terms
-    const [program] = await db
+    // Get the created merchant
+    const [merchant] = await db
+      .select()
+      .from(merchants)
+      .where(eq(merchants.userId, merchantUser.id))
+      .limit(1);
+
+    if (!merchant) {
+      throw new Error('Failed to create merchant record');
+    }
+
+    // Create default program with fixed terms (24 months, 0% APR)
+    await db
       .insert(programs)
       .values({
         merchantId: merchant.id,
         name: 'Standard Program',
-        term: 24, // 24 months
-        interestRate: '0', // 0% APR
+        term: 24,
+        interestRate: '0',
         active: true
-      })
-      .returning();
+      });
 
-    // Send login credentials via email (assume this function exists)
-    if (typeof sendMerchantCredentials === 'function') {
-      await sendMerchantCredentials(email, email, tempPassword);
+    // Get the created program
+    const [program] = await db
+      .select()
+      .from(programs)
+      .where(eq(programs.merchantId, merchant.id))
+      .limit(1);
+
+    if (!program) {
+      throw new Error('Failed to create program');
     }
 
+    // Log success
+    logger.info("[Merchant Creation] Successfully created merchant:", {
+      merchantId: merchant.id,
+      userId: merchantUser.id,
+      programId: program.id,
+      timestamp: new Date().toISOString()
+    });
+
+    // Send the response
     return res.status(201).json({
       status: 'success',
       data: {
@@ -541,7 +590,9 @@ router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: 
     });
   } catch (error) {
     logger.error("[Merchant Creation] Error:", {
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString()
     });
     return res.status(500).json({
       status: 'error',
@@ -591,12 +642,14 @@ router.post("/merchants/:id/programs", asyncHandler(async (req: RequestWithUser,
   const { name, term, interestRate } = req.body;
   const merchantId = parseInt(req.params.id);
 
-  const [program] = await db.insert(programs).values({
+  await db.insert(programs).values({
     merchantId,
     name,
     term,
     interestRate,
-  } as typeof programs.$inferInsert).returning();
+  } as typeof programs.$inferInsert);
+
+  const [program] = await db.select().from(programs).where(eq(programs.merchantId, merchantId)).orderBy(desc(programs.createdAt)).limit(1);
 
   return res.json(program);
 }));
@@ -667,7 +720,7 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
     } = req.body;
 
     // Create customer user record with proper types
-    const [customer] = await db.insert(users).values({
+    await db.insert(users).values({
       username: customerDetails.email,
       password: Math.random().toString(36).slice(-8),
       email: customerDetails.email,
@@ -679,14 +732,16 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
       lastOtpCode: null,
       otpExpiry: null,
       faceIdHash: null
-    } as typeof users.$inferInsert).returning();
+    } as typeof users.$inferInsert);
+
+    const [customer] = await db.select().from(users).where(eq(users.email, customerDetails.email)).limit(1);
 
     const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
     const totalInterest = calculateTotalInterest(monthlyPayment, amount, term);
     const contractNumber = `LN${Date.now()}`;
 
     // Insert contract with proper types
-    const [newContract] = await db.insert(contracts).values({
+    await db.insert(contracts).values({
       merchantId: merchantId,
       customerId: customer.id,
       contractNumber: contractNumber,
@@ -704,7 +759,10 @@ router.post("/contracts", asyncHandler(async (req: RequestWithUser, res: Respons
       active: true,
       lastPaymentId: null,
       lastPaymentStatus: null
-    } as typeof contracts.$inferInsert).returning();
+    } as typeof contracts.$inferInsert);
+
+    const [newContract] = await db.select().from(contracts).where(eq(contracts.contractNumber, contractNumber)).limit(1);
+
 
     // Get merchant details for notifications
     const [merchant] = await db
@@ -764,15 +822,20 @@ router.patch("/webhooks/:id/status", asyncHandler(async (req: RequestWithUser, r
     return res.status(400).json({ error: 'Invalid webhook status' });
   }
 
-  const [updatedEvent] = await db
+  await db
     .update(webhookEvents)
     .set({
       status,
       error: error || null,
       processedAt: status === WebhookEventStatus.COMPLETED ? new Date() : null
     })
+    .where(eq(webhookEvents.id, parseInt(id)));
+
+  const [updatedEvent] = await db
+    .select()
+    .from(webhookEvents)
     .where(eq(webhookEvents.id, parseInt(id)))
-    .returning();
+    .limit(1);
 
   return res.json(updatedEvent);
 }));
@@ -1099,11 +1162,16 @@ router.patch("/contracts/:id", asyncHandler(async (req: RequestWithUser, res: Re
     if ('last_payment_id' in req.body) updates.lastPaymentId = req.body.last_payment_id;
     if ('last_payment_status' in req.body) updates.lastPaymentStatus = req.body.last_payment_status;
 
-    const [updatedContract] = await db
+    await db
             .update(contracts)
       .set(updates)
+      .where(eq(contracts.id, contractId));
+
+    const [updatedContract] = await db
+      .select()
+      .from(contracts)
       .where(eq(contracts.id, contractId))
-      .returning();
+      .limit(1);
 
     return res.json(updatedContract);
   } catch (err) {

@@ -12,13 +12,20 @@ import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Phone, Mail } from "lucide-react";
 import { useState } from "react";
+import {FormDescription} from "@/components/ui/form";
+
 
 interface MerchantWithContact extends SelectMerchant {
   email?: string | null;
   phone?: string | null;
+  programs?: {
+    term: number;
+    interestRate: string;
+    name: string;
+    active: boolean;
+  }[];
 }
 
-// Add type safety for contract amounts
 const formatAmount = (value: string | number | null | undefined): string => {
   if (typeof value === 'string') {
     return `$${(parseFloat(value) || 0).toFixed(2)}`;
@@ -34,7 +41,6 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
 
-  // Use proper error handling and type safety for date formatting
   const formatDate = (value: string | Date | null): string => {
     if (!value) return "N/A";
     try {
@@ -216,15 +222,19 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Merchant Management</CardTitle>
+                <FormDescription>
+                  All merchants are enrolled in a 24-month term contract at 0% APR
+                </FormDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {merchants.map((merchant) => (
                     <Collapsible key={merchant.id}>
-                      <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg">
+                      <CollapsibleTrigger className="flex items-center justify-between w-full p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{merchant.companyName}</span>
                           <Badge>{merchant.status}</Badge>
+                          <Badge variant="outline">24m @ 0% APR</Badge>
                         </div>
                         <ChevronDown className="h-4 w-4" />
                       </CollapsibleTrigger>
@@ -244,7 +254,7 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                           <div>
-                            <h4 className="font-medium mb-2">Performance</h4>
+                            <h4 className="font-medium mb-2">Performance & Program</h4>
                             <div className="space-y-2">
                               <div>Total Contracts: {
                                 contracts.filter(c => c.merchantId === merchant.id).length
@@ -252,6 +262,13 @@ export default function AdminDashboard() {
                               <div>Active Contracts: {
                                 contracts.filter(c => c.merchantId === merchant.id && c.status === "active").length
                               }</div>
+                              <div className="mt-4 p-2 bg-muted rounded-md">
+                                <p className="text-sm font-medium">Fixed Program Terms:</p>
+                                <ul className="text-sm mt-1">
+                                  <li>• Term Length: 24 months</li>
+                                  <li>• Interest Rate: 0% APR</li>
+                                </ul>
+                              </div>
                             </div>
                           </div>
                         </div>
