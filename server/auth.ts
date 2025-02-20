@@ -158,12 +158,12 @@ export function setupAuth(app: Express): void {
           username,
           requestId
         });
-        throw new AuthError(
+        return done(new AuthError(
           401,
           'Invalid credentials',
           AUTH_ERROR_CODES.INVALID_CREDENTIALS,
           { requestId }
-        );
+        ));
       }
 
       const isValid = await authService.comparePasswords(password, user.password);
@@ -172,12 +172,12 @@ export function setupAuth(app: Express): void {
           username,
           requestId
         });
-        throw new AuthError(
+        return done(new AuthError(
           401,
           'Invalid credentials',
           AUTH_ERROR_CODES.INVALID_CREDENTIALS,
           { requestId }
-        );
+        ));
       }
 
       const userResponse: Express.User = {

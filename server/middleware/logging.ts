@@ -200,3 +200,48 @@ export const performanceLoggingMiddleware = (
 
   next();
 };
+
+
+export const errorHandler = (err: Error | APIError | LogError, req: Request, res: Response, next: NextFunction) => {
+  const statusCode = (err as APIError).status || 500;
+
+  logger.error('[Error Handler]', {
+    message: err.message,
+    name: err.name,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+
+  if (err instanceof APIError) {
+    return res.status(statusCode).json({
+      error: err.message,
+      code: err.code,
+      details: err.details
+    });
+  }
+
+  if (err.name === 'ZodError') {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: err
+    });
+  }
+
+  return res.status(statusCode).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+};
+
+interface APIError extends Error {
+  status: number;
+  code: string;
+  details: any;
+}
+
+interface LogError extends Error {
+  level: string;
+  message: string;
+}
