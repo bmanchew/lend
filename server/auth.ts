@@ -213,32 +213,31 @@ export function setupAuth(app: Express): void {
     done(null, user.id);
   });
 
-  passport.deserializeUser(async (id: number, done) => {
-    try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, id))
-        .limit(1);
+  passport.deserializeUser((id: number, done) => {
+    db.select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+      .then(([user]) => {
+        if (!user) {
+          logger.warn('[Auth] User not found during deserialization', { userId: id });
+          return done(null, false);
+        }
 
-      if (!user) {
-        logger.warn('[Auth] User not found during deserialization', { userId: id });
-        return done(null, false);
-      }
+        const userResponse: Express.User = {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role as UserRole,
+          name: user.name || undefined
+        };
 
-      const userResponse: Express.User = {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role as UserRole,
-        name: user.name || undefined
-      };
-
-      return done(null, userResponse);
-    } catch (err) {
-      logger.error('[Auth] Error during user deserialization:', err);
-      return done(new AuthError(500, 'Session error', AUTH_ERROR_CODES.SESSION_EXPIRED));
-    }
+        done(null, userResponse);
+      })
+      .catch(err => {
+        logger.error('[Auth] Error during user deserialization:', err);
+        done(new AuthError(500, 'Session error', AUTH_ERROR_CODES.SESSION_EXPIRED));
+      });
   });
 
   app.post("/api/login", async (req, res, next) => {
