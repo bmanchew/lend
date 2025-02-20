@@ -32,11 +32,12 @@ export const createAuthLogger = () => {
         eventId,
         success: (userId?: string, sessionId?: string) => {
           const duration = logger.endTimer(startTime);
+          const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
 
           const context: AuthLogContext = {
             sessionId,
             userId: userId?.toString(),
-            ip: req.ip,
+            ip: ipAddress,
             userAgent: req.get('user-agent') ?? 'unknown',
             action,
             outcome: 'success',
@@ -64,9 +65,10 @@ export const createAuthLogger = () => {
         },
         failure: (reason: string) => {
           const duration = logger.endTimer(startTime);
+          const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
 
           const context: AuthLogContext = {
-            ip: req.ip,
+            ip: ipAddress,
             userAgent: req.get('user-agent') ?? 'unknown',
             action,
             outcome: 'failure',
@@ -121,7 +123,7 @@ export const authLoggingMiddleware = (
       method: req.method,
       query: req.query,
       userAgent: req.get('user-agent') ?? 'unknown',
-      ip: req.ip
+      ip: req.ip || req.socket.remoteAddress || 'unknown'
     });
 
     // Capture the response

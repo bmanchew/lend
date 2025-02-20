@@ -53,7 +53,7 @@ class AuthService {
       }
       return bcrypt.compare(supplied, stored);
     } catch (error) {
-      logger.error("[Auth] Password comparison error:", error);
+      logger.error("[Auth] Password comparison error:", error instanceof Error ? error : new Error('Unknown error'));
       return false;
     }
   }
@@ -81,12 +81,12 @@ class AuthService {
       return decoded;
     } catch (err) {
       if (err instanceof jwt.TokenExpiredError) {
-        throw new AuthError(401, 'Token expired', AUTH_ERROR_CODES.TOKEN_EXPIRED);
+        throw new AuthError('TOKEN_EXPIRED', 'Token expired', 401);
       }
       if (err instanceof jwt.JsonWebTokenError) {
-        throw new AuthError(401, 'Invalid token', AUTH_ERROR_CODES.TOKEN_INVALID);
+        throw new AuthError('TOKEN_INVALID', 'Invalid token', 401);
       }
-      throw new AuthError(401, 'Token verification failed', AUTH_ERROR_CODES.UNAUTHORIZED);
+      throw new AuthError('UNAUTHORIZED', 'Token verification failed', 401);
     }
   }
 }
@@ -140,12 +140,7 @@ export function setupAuth(app: Express): void {
       });
 
       if (!username || !password) {
-        throw new AuthError(
-          400,
-          'Missing credentials',
-          AUTH_ERROR_CODES.MISSING_CREDENTIALS,
-          { requestId }
-        );
+        throw new AuthError('MISSING_CREDENTIALS', 'Missing credentials', 400);
       }
 
       const [user] = await db
@@ -159,12 +154,7 @@ export function setupAuth(app: Express): void {
           username,
           requestId
         });
-        return done(new AuthError(
-          401,
-          'Invalid credentials',
-          AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-          { requestId }
-        ));
+        return done(new AuthError('INVALID_CREDENTIALS', 'Invalid credentials', 401));
       }
 
       const isValid = await authService.comparePasswords(password, user.password);
@@ -173,12 +163,7 @@ export function setupAuth(app: Express): void {
           username,
           requestId
         });
-        return done(new AuthError(
-          401,
-          'Invalid credentials',
-          AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-          { requestId }
-        ));
+        return done(new AuthError('INVALID_CREDENTIALS', 'Invalid credentials', 401));
       }
 
       const userResponse: Express.User = {
@@ -190,7 +175,7 @@ export function setupAuth(app: Express): void {
       };
 
       logger.info('[Auth] Login successful', {
-        userId: user.id,
+        userId: user.id.toString(),
         role: user.role,
         requestId
       });
@@ -201,12 +186,11 @@ export function setupAuth(app: Express): void {
         return done(err);
       }
       logger.error('[Auth] Unexpected error during authentication', {
-        error: err,
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : 'Unknown error',
         username,
-        requestId,
-        stack: err instanceof Error ? err.stack : undefined
+        requestId
       });
-      return done(new AuthError(500, 'Authentication failed', 'AUTH_FAILED', { requestId }));
+      return done(new AuthError('AUTH_FAILED', 'Authentication failed', 500));
     }
   }));
 
@@ -216,12 +200,13 @@ export function setupAuth(app: Express): void {
 
   passport.deserializeUser((id: number, done) => {
     db.select()
+      .select()
       .from(users)
       .where(eq(users.id, id))
       .limit(1)
       .then(([user]) => {
         if (!user) {
-          logger.warn('[Auth] User not found during deserialization', { userId: id });
+          logger.warn('[Auth] User not found during deserialization', { userId: id.toString() });
           return done(null, false);
         }
 
@@ -236,15 +221,15 @@ export function setupAuth(app: Express): void {
         done(null, userResponse);
       })
       .catch(err => {
-        logger.error('[Auth] Error during user deserialization:', err);
-        done(new AuthError(500, 'Session error', AUTH_ERROR_CODES.SESSION_EXPIRED));
+        logger.error('[Auth] Error during user deserialization:', err instanceof Error ? err : new Error('Unknown error'));
+        done(new AuthError('SESSION_EXPIRED', 'Session error', 500));
       });
   });
 
   app.post("/api/login", async (req, res, next) => {
     passport.authenticate('local', async (err: any, user: Express.User | false, info: any) => {
       if (err) {
-        logger.error('[Auth] Login error:', err);
+        logger.error('[Auth] Login error:', err instanceof Error ? err : new Error('Unknown error'));
         return next(err);
       }
 
@@ -255,13 +240,13 @@ export function setupAuth(app: Express): void {
 
       try {
         const token = await authService.generateJWT(user);
-        logger.info('[Auth] Generated JWT token for user:', { userId: user.id });
+        logger.info('[Auth] Generated JWT token for user:', { userId: user.id.toString() });
 
         // Use Promise to handle login sequence
         await new Promise<void>((resolve, reject) => {
           req.logIn(user, (loginErr) => {
             if (loginErr) {
-              logger.error('[Auth] Session login error:', loginErr);
+              logger.error('[Auth] Session login error:', loginErr instanceof Error ? loginErr : new Error('Unknown error'));
               reject(loginErr);
               return;
             }
@@ -276,7 +261,7 @@ export function setupAuth(app: Express): void {
           });
         }
       } catch (error) {
-        logger.error('[Auth] Authentication error:', error);
+        logger.error('[Auth] Authentication error:', error instanceof Error ? error : new Error('Unknown error'));
         if (!res.headersSent) {
           return res.status(500).json({ 
             error: error instanceof Error ? error.message : 'Authentication failed'
@@ -297,12 +282,12 @@ export function setupAuth(app: Express): void {
           return res.status(401).json({ error: 'Authorization token missing' });
       }
       const verifiedUser = authService.verifyJWT(token);
-      logger.info('[Auth] User data retrieved:', { userId: verifiedUser.id });
+      logger.info('[Auth] User data retrieved:', { userId: verifiedUser.id.toString() });
       res.json(verifiedUser);
     } catch (error) {
-      logger.error('[Auth] Error retrieving user data:', error);
+      logger.error('[Auth] Error retrieving user data:', error instanceof Error ? error : new Error('Unknown error'));
       if (error instanceof AuthError) {
-          res.status(error.statusCode).json({ error: error.message });
+          res.status(error.statusCode || 500).json({ error: error.message });
       } else {
           res.status(500).json({ error: 'Failed to retrieve user data' });
       }
@@ -312,7 +297,7 @@ export function setupAuth(app: Express): void {
   app.post("/api/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
-        logger.error('[Auth] Logout error:', err);
+        logger.error('[Auth] Logout error:', err instanceof Error ? err : new Error('Unknown error'));
         return res.status(500).json({ error: 'Failed to logout' });
       }
       res.sendStatus(200);
