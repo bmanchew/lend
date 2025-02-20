@@ -25,21 +25,27 @@ export default function MerchantLogin() {
   // Check for existing token and valid auth state before redirecting
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token && !window.location.pathname.includes('/merchant/dashboard') && !loginMutation.isPending) {
-      try {
-        // Verify token is valid JWT
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        if (payload.exp * 1000 > Date.now() && payload.role === 'merchant') {
-          console.log('[MerchantLogin] Valid token found, redirecting to dashboard');
-          setLocation('/merchant/dashboard');
-        } else {
-          console.log('[MerchantLogin] Invalid or expired token found, clearing');
-          localStorage.removeItem('token');
-        }
-      } catch (error) {
-        console.error('[MerchantLogin] Token validation error:', error);
+    if (!token || loginMutation.isPending) return;
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const isTokenExpired = payload.exp * 1000 <= Date.now();
+      const isInvalidRole = payload.role !== 'merchant';
+      
+      if (isTokenExpired || isInvalidRole) {
+        console.log('[MerchantLogin] Invalid or expired token found, clearing');
         localStorage.removeItem('token');
+        return;
       }
+
+      // Only redirect if we're on the login page
+      if (window.location.pathname === '/auth/merchant') {
+        console.log('[MerchantLogin] Valid token found, redirecting to dashboard');
+        setLocation('/merchant/dashboard');
+      }
+    } catch (error) {
+      console.error('[MerchantLogin] Token validation error:', error);
+      localStorage.removeItem('token');
     }
   }, [setLocation, loginMutation.isPending]);
 
