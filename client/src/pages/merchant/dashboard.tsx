@@ -1,3 +1,6 @@
+
+import { useEffect, useMemo, useCallback } from "react";
+
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,9 +92,24 @@ export default function MerchantDashboard() {
   });
 
   const socket = useSocket(merchant?.id ?? 0);
+  
+  const healthCheck = useCallback(() => {
+    if (!socket) return;
+    socket.emit('health_check', { merchantId: merchant?.id });
+  }, [socket, merchant?.id]);
 
   useEffect(() => {
     if (!socket || !merchant?.id) return;
+    
+    // Initial health check
+    healthCheck();
+    
+    // Set up interval for periodic health checks
+    const interval = setInterval(healthCheck, 30000); // Every 30 seconds
+    
+    return () => {
+      clearInterval(interval);
+    };
 
     const handleContractUpdate = (data: any) => {
       if (data.merchantId === merchant.id) {
