@@ -1,7 +1,7 @@
 import * as React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Router } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth.tsx";
 import { ProtectedRoute } from "./lib/protected-route";
@@ -76,12 +76,14 @@ function AppRouter() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppRouter />
-        <Toaster />
-      </AuthProvider>
-    </QueryClientProvider>
+    <Router>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </Router>
   );
 }
 
