@@ -328,17 +328,7 @@ router.get("/merchants/by-user/:userId", asyncHandler(async (req: RequestWithUse
     // Then get merchant details with retry
     const merchant = await withRetry(async () => {
       const merchantResults = await db
-        .select({
-          id: merchants.id,
-          userId: merchants.userId,
-          companyName: merchants.companyName,
-          status: merchants.status,
-          reserveBalance: merchants.reserveBalance,
-          address: merchants.address,
-          website: merchants.website,
-          phone: merchants.phone,
-          createdAt: merchants.createdAt
-        })
+        .select()
         .from(merchants)
         .where(eq(merchants.userId, userId));
 
