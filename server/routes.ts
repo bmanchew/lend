@@ -121,7 +121,7 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
 
 // Request tracking middleware
 const requestTrackingMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = Buffer.from(Math.random().toString() + Date.now().toString()).toString('base64').substring(0, 12);
+  const requestId = Date.now().toString(36);
   req.headers['x-request-id'] = requestId;
 
   logger.info(`[API] ${req.method} ${req.path}`, {
@@ -317,7 +317,7 @@ router.get("/merchants/:id/contracts", validateId, asyncHandler(async (req: Requ
 
 // Add to your merchants/create endpoint handler
 router.post("/merchants/create", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const requestId = Buffer.from(Math.random().toString() + Date.now().toString()).toString('base64').substring(0, 12);
+  const requestId = Date.now().toString(36);
   logger.info("[Merchant Creation] Received request:", {
     requestId,
     body: {
@@ -712,7 +712,7 @@ router.use('/plaid', plaidRoutes);
 
 
 router.post("/merchants/:id/send-loan-application", asyncHandler(async (req: RequestWithUser, res: Response, next: NextFunction) => {
-  const requestId = Buffer.from(Math.random().toString() + Date.now().toString()).toString('base64').substring(0, 12);
+  const requestId = Date.now().toString(36);
   const debugLog = (message: string, data?: any) => {
     logger.info(`[LoanApplication][${requestId}] ${message}`, data || "");
   };
