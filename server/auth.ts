@@ -76,7 +76,8 @@ class AuthService {
 
   verifyJWT(token: string): Express.User {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as Express.User;
+      const jwtSecret = process.env.JWT_SECRET || process.env.REPL_ID || 'development-secret';
+      const decoded = jwt.verify(token, jwtSecret) as Express.User;
       return decoded;
     } catch (err) {
       if (err instanceof jwt.TokenExpiredError) {
