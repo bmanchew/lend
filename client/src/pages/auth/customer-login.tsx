@@ -23,9 +23,9 @@ type LoginFormData = z.infer<typeof loginFormSchema>;
 export default function CustomerLogin() {
   const { loginMutation } = useAuth();
   const [isOtpSent, setIsOtpSent] = useState(false);
-  const [user, setUser] = useState<{ id: string; role: string; phoneNumber: string } | null>(null);
   const { toast } = useToast();
   const [location] = useLocation();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginFormSchema),
@@ -37,13 +37,24 @@ export default function CustomerLogin() {
     mode: "onChange"
   });
 
-  // Phone formatting is handled server-side
-  const sanitizePhone = (phone: string): string => {
-    return phone.trim();
-  };
+  // Handle phone from URL params
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.split('?')[1]);
+      const phone = params.get('phone');
+      if (phone) {
+        console.log('[CustomerLogin] Phone from URL:', phone);
+        form.setValue('phoneNumber', phone);
+        handleSendOTP();
+      }
+    } catch (error) {
+      console.error('[CustomerLogin] Error parsing URL params:', error);
+    }
+  }, [location]);
 
   const handleSendOTP = async () => {
     try {
+      setIsLoading(true);
       const rawPhone = form.getValues("phoneNumber");
       if (!rawPhone) {
         toast({
@@ -54,19 +65,10 @@ export default function CustomerLogin() {
         return;
       }
 
-      const phoneNumber = sanitizePhone(rawPhone);
-
-      console.log('[CustomerLogin] Formatted phone:', {
-        original: form.getValues("phoneNumber"),
-        formatted: phoneNumber
-      });
-      console.log('[CustomerLogin] Attempting to send OTP:', {
-        formattedPhone: phoneNumber,
-        timestamp: new Date().toISOString()
-      });
+      const phoneNumber = rawPhone.replace(/\D/g, '');
+      console.log('[CustomerLogin] Sending OTP to:', phoneNumber);
 
       const response = await axios.post("/api/sendOTP", { phoneNumber });
-      console.log('[CustomerLogin] OTP Response:', response.data);
 
       if (response.data?.message === 'OTP sent successfully') {
         setIsOtpSent(true);
@@ -78,27 +80,16 @@ export default function CustomerLogin() {
         throw new Error('Failed to send verification code');
       }
     } catch (error: any) {
-      console.error('[CustomerLogin] OTP send error:', {
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-      setIsOtpSent(false);
+      console.error('[CustomerLogin] OTP send error:', error);
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to send code",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.split('?')[1]);
-    const phone = params.get('phone');
-    if (phone) {
-      form.setValue('phoneNumber', phone);
-      handleSendOTP();
-    }
-  }, [location]);
 
   const handleVerifyAndContinue = async (data: LoginFormData) => {
     try {
@@ -111,115 +102,19 @@ export default function CustomerLogin() {
         return;
       }
 
-      const phoneNumber = data.phoneNumber;
       console.log('[CustomerLogin] Verifying OTP:', { 
-        phoneNumber: phoneNumber,
+        phoneNumber: data.phoneNumber,
         code: data.code
       });
 
-      // Format phone number consistently 
-      const formatPhoneNumber = (phone: string): string => {
-        const cleaned = phone.replace(/\D/g, '');
-        const normalized = cleaned.replace(/^1/, '');
-        if (normalized.length !== 10) {
-          throw new Error('Phone number must be 10 digits');
-        }
-        return `+1${normalized}`;
-      };
-
-      // Validate OTP format
-      const otp = data.code.trim();
-      if (!otp || !/^\d{6}$/.test(otp)) {
-        toast({ title: "Error", description: "Please enter a valid 6-digit code", variant: "destructive" });
-        return;
-      }
-
-      const formattedPhone = formatPhoneNumber(phoneNumber);
-
-      console.log('[CustomerLogin] Attempting login with:', {
-        phone: phoneNumber,
-        formattedPhone,
-        timestamp: new Date().toISOString()
-      });
-
-      const response = await axios.post("/api/login", {
-        username: formattedPhone,
-        password: otp,
+      await loginMutation.mutateAsync({
+        username: data.phoneNumber,
+        password: data.code,
         loginType: 'customer'
       });
 
-      const userData = response.data;
-      console.log("[CustomerLogin] Login response:", {
-        ...userData,
-        timestamp: new Date().toISOString()
-      });
-
-      if (!userData?.id) {
-        console.error('[CustomerLogin] Missing user ID in response:', userData);
-        throw new Error('Invalid login response - missing user ID');
-      }
-
-      // Strict user validation
-      const userId = userData.id.toString();
-      if (!userId || userId === 'undefined' || userId === 'null') {
-        console.error('[CustomerLogin] Invalid user ID:', userId);
-        toast({ 
-          title: "Error", 
-          description: "Invalid user ID received", 
-          variant: "destructive" 
-        });
-        return;
-      }
-
-      // Strict role validation
-      if (userData.role !== 'customer') {
-        console.error('[CustomerLogin] Invalid role:', {
-          userId,
-          role: userData.role
-        });
-        toast({ 
-          title: "Error", 
-          description: "Invalid account type", 
-          variant: "destructive" 
-        });
-        return;
-      }
-
-      try {
-        // Ensure user ID is valid and properly formatted
-        const normalizedUserId = userId.toString().trim();
-        if (!normalizedUserId || isNaN(Number(normalizedUserId))) {
-          throw new Error('Invalid user ID format');
-        }
-
-        // Set storage with validation
-        localStorage.setItem('temp_user_id', normalizedUserId);
-        sessionStorage.setItem('current_user_id', normalizedUserId);
-        setUser(userData);
-
-        // Verify storage was set correctly
-        const storedTempId = localStorage.getItem('temp_user_id');
-        const storedCurrentId = sessionStorage.getItem('current_user_id');
-
-        if (storedTempId !== userId || storedCurrentId !== userId) {
-          throw new Error('Storage validation failed');
-        }
-
-        // Use timeout to ensure storage is committed
-        setTimeout(() => {
-          window.location.href = `/apply/${userId}?verification=true&from=login`;
-        }, 100);
-
-      } catch (error) {
-        console.error('[CustomerLogin] Storage error:', error);
-        toast({
-          title: "Error",
-          description: "Failed to save session data",
-          variant: "destructive"
-        });
-      }
     } catch (error: any) {
-      console.error("[CustomerLogin] Error:", error);
+      console.error("[CustomerLogin] Verification error:", error);
       toast({ 
         title: "Error", 
         description: error.response?.data?.message || "Invalid verification code", 
@@ -227,6 +122,14 @@ export default function CustomerLogin() {
       });
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="container flex min-h-screen items-center justify-center">
@@ -285,6 +188,7 @@ export default function CustomerLogin() {
                           variant="link"
                           className="text-sm text-muted-foreground"
                           onClick={handleSendOTP}
+                          disabled={isLoading}
                         >
                           Resend Code
                         </Button>
@@ -299,12 +203,13 @@ export default function CustomerLogin() {
                 type="button"
                 onClick={handleSendOTP}
                 className="w-full"
+                disabled={isLoading}
               >
                 Send Code
               </Button>
             )}
             {isOtpSent && (
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={isLoading}>
                 Verify & Continue
               </Button>
             )}
