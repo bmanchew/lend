@@ -31,11 +31,7 @@ const startServer = async () => {
     const httpServer = createServer(app);
 
     // Find available port, starting from 3000
-    const port = await portfinder.getPortPromise({
-      port: 3000,
-      host: '0.0.0.0',
-      stopPort: 9000
-    });
+    const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
     // Set default timeout
     httpServer.timeout = 120000; // 2 minutes
