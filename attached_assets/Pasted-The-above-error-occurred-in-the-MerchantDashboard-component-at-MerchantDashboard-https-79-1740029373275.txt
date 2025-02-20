@@ -1,0 +1,33 @@
+The above error occurred in the <MerchantDashboard> component:
+
+    at MerchantDashboard (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/pages/merchant/dashboard.tsx?t=1740029178480:49:20)
+    at ProtectedRoute (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/lib/protected-route.tsx?t=1740029178480:23:45)
+    at component
+    at Route (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:323:16)
+    at Switch (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:379:17)
+    at AppRouter (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/App.tsx?t=1740029178480&v=asfXMsUDw8AeHxVzNAX9t:36:35)
+    at AuthProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/hooks/use-auth.tsx?t=1740029178480:28:32)
+    at QueryClientProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=1c01e9fc:2805:3)
+    at Router (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:291:17)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+healthCheck is not defined
+healthCheck is not defined
+The above error occurred in the <MerchantDashboard> component:
+
+    at MerchantDashboard (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/pages/merchant/dashboard.tsx?t=1740029178480:49:20)
+    at ProtectedRoute (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/lib/protected-route.tsx?t=1740029178480:23:45)
+    at component
+    at Route (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:323:16)
+    at Switch (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:379:17)
+    at AppRouter (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/App.tsx?t=1740029178480&v=asfXMsUDw8AeHxVzNAX9t:36:35)
+    at AuthProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/src/hooks/use-auth.tsx?t=1740029178480:28:32)
+    at QueryClientProvider (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=1c01e9fc:2805:3)
+    at Router (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co:3002/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=1c01e9fc:291:17)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+healthCheck is not defined
