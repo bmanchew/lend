@@ -11,6 +11,13 @@ export interface LoginResponse {
   name: string | null;
   email: string;
   username: string;
+  phoneNumber: string | null;
+  kycStatus: string | null;
+  plaidAccessToken: string | null;
+  createdAt: string | null;
+  lastOtpCode: string | null;
+  otpExpiry: string | null;
+  faceIdHash: string | null;
 }
 
 export interface User {

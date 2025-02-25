@@ -248,7 +248,32 @@ export const rewardsRedemptionsRelations = relations(
   }),
 );
 
-// Type exports
+// Verification sessions schema
+export const verificationSessions = pgTable("verification_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  sessionId: varchar("session_id", { length: 255 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  features: text("features"),
+  documentData: json("document_data"),
+  returnUrl: text("return_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+// Verification sessions relations
+export const verificationSessionsRelations = relations(
+  verificationSessions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [verificationSessions.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+// Type exports for all schemas
 export type SelectUser = typeof users.$inferSelect;
 export type SelectMerchant = typeof merchants.$inferSelect;
 export type SelectContract = typeof contracts.$inferSelect;
@@ -257,15 +282,4 @@ export type SelectWebhookEvent = typeof webhookEvents.$inferSelect;
 export type SelectRewardsBalance = typeof rewardsBalances.$inferSelect;
 export type SelectRewardsTransaction = typeof rewardsTransactions.$inferSelect;
 export type SelectRewardsRedemption = typeof rewardsRedemptions.$inferSelect;
-export type SelectVerificationSession =
-  typeof verificationSessions.$inferSelect;
-
-export const verificationSessions = pgTable("verification_sessions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id),
-  sessionId: varchar("session_id", { length: 255 }).notNull(),
-  status: varchar("status", { length: 50 }),
-  features: text("features"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export type SelectVerificationSession = typeof verificationSessions.$inferSelect;
