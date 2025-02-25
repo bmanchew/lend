@@ -1,6 +1,32 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransferType, TransferNetwork, ACHClass, LinkTokenCreateRequest, TransferAuthorizationCreateRequest, TransferCreateRequest, SandboxItemSetVerificationStatusRequest, DepositoryAccountSubtype, SandboxItemSetVerificationStatusRequestVerificationStatusEnum } from 'plaid';
 import { logger } from '../lib/logger';
 
+interface PlaidError {
+  error_type: string;
+  error_code: string;
+  error_message: string;
+  display_message?: string;
+}
+
+interface LedgerBalance {
+  available: number;
+  pending: number;
+}
+
+class PlaidErrorHandler extends Error {
+  type: string;
+  code: string;
+  displayMessage?: string;
+
+  constructor(error: PlaidError) {
+    super(error.error_message);
+    this.name = 'PlaidError';
+    this.type = error.error_type;
+    this.code = error.error_code;
+    this.displayMessage = error.display_message;
+  }
+}
+
 const configuration = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
   baseOptions: {
@@ -151,34 +177,8 @@ export class PlaidService {
     }
   }
 
-  static async getLedgerBalance() {
+  static async getLedgerBalance(): Promise<LedgerBalance> {
     try {
-
-async function handleACHVerification(accountId: string): Promise<boolean> {
-  try {
-    const microDeposits = await plaidClient.sandboxItemPublicTokenCreate({
-      institution_id: 'ins_109508',
-      initial_products: ['auth']
-    });
-
-    if (!microDeposits) {
-      logger.error('Failed to initiate micro-deposits');
-      return false;
-    }
-
-    // Wait for micro-deposits to be processed (2-3 business days in production)
-    const verificationResult = await plaidClient.itemMicrodepositsVerify({
-      account_id: accountId,
-      amounts: [0.01, 0.02] // Example amounts
-    });
-
-    return verificationResult !== null;
-  } catch (error) {
-    logger.error('ACH verification failed:', error);
-    return false;
-  }
-}
-
       logger.info('Getting Plaid ledger balance');
       await this.validateSandboxSetup();
 
@@ -663,6 +663,57 @@ async function handleACHVerification(accountId: string): Promise<boolean> {
         error: error?.response?.data || error.message,
         plaidError: error?.response?.data?.error_code,
         stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  static async getTransactions(accessToken: string) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 60); // Get 60 days of transactions
+
+      logger.info('Fetching transactions:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      const request = {
+        access_token: accessToken,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        options: {
+          include_personal_finance_category: true
+        }
+      };
+
+      const response = await plaidClient.transactionsGet(request);
+
+      logger.info('Retrieved transactions:', {
+        count: response.data.transactions.length,
+        accounts: response.data.accounts.map(a => ({
+          id: a.account_id,
+          type: a.type,
+          subtype: a.subtype
+        }))
+      });
+
+      return response.data.transactions;
+    } catch (error: any) {
+      const plaidError = error?.response?.data;
+      if (plaidError?.error_type) {
+        logger.error('Plaid error fetching transactions:', {
+          type: plaidError.error_type,
+          code: plaidError.error_code,
+          message: plaidError.error_message
+        });
+        throw new PlaidErrorHandler(plaidError);
+      }
+
+      logger.error('Error fetching transactions:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
     }

@@ -33,6 +33,7 @@ import { sendMerchantCredentials } from "./services/email";
 import { LedgerManager } from "./services/ledger-manager";
 import rewardsRoutes from "./routes/rewards";
 import plaidRoutes from "./routes/plaid";
+import underwritingRoutes from "./routes/underwriting";
 import { diditService } from "./services/didit";
 import bodyParser from "body-parser";
 
@@ -1197,6 +1198,7 @@ router.patch(
 
 router.use("/rewards", rewardsRoutes);
 router.use("/plaid", plaidRoutes);
+router.use('/underwriting', underwritingRoutes);
 
 router.post(
   "/merchants/:id/send-loan-application",
