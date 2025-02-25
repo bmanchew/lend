@@ -42,10 +42,6 @@ interface UnderwritingMetrics {
 class BankAnalysisService {
   static async analyzeIncome(accessToken: string): Promise<IncomeAnalysis> {
     try {
-      logger.info("Starting income analysis for token:", { 
-        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token'
-      });
-
       const transactions = await PlaidService.getTransactions(accessToken);
       const income = transactions.filter((t: Transaction) => t.amount > 0);
 
@@ -63,16 +59,10 @@ class BankAnalysisService {
 
       const result = {
         averageMonthlyIncome: this.calculateAverageMonthly(income),
-        incomeStability: this.calculateStability(income),
+        incomeStability: this.calculateStability(income.map(t => t.amount)),
         lastPaymentDate: new Date(income[0]?.date || Date.now()),
         incomeSources: stableIncomeSources
       };
-
-      logger.info("Completed income analysis:", {
-        averageMonthly: result.averageMonthlyIncome,
-        stability: result.incomeStability,
-        sourceCount: result.incomeSources.length
-      });
 
       return result;
     } catch (error) {
@@ -83,10 +73,6 @@ class BankAnalysisService {
 
   static async analyzeExpenses(accessToken: string): Promise<ExpenseAnalysis> {
     try {
-      logger.info("Starting expense analysis for token:", {
-        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token'
-      });
-
       const transactions = await PlaidService.getTransactions(accessToken);
       const expenses = transactions.filter((t: Transaction) => t.amount < 0);
 
@@ -103,12 +89,6 @@ class BankAnalysisService {
         debtObligations: Math.abs(this.calculateAverageMonthly(debtPayments))
       };
 
-      logger.info("Completed expense analysis:", {
-        averageMonthly: result.averageMonthlyExpenses,
-        debtObligations: result.debtObligations,
-        largestCategory: result.largestExpenseCategory
-      });
-
       return result;
     } catch (error) {
       logger.error("Error analyzing expenses:", { error: error instanceof Error ? error.message : String(error) });
@@ -118,8 +98,6 @@ class BankAnalysisService {
 
   static async analyzeAssets(accessToken: string): Promise<AssetMetrics> {
     try {
-      logger.info("Starting asset analysis for token");
-
       const reportData = await PlaidService.createAssetReport(accessToken);
       const report = await PlaidService.getAssetReport(reportData.asset_report_token);
 
@@ -141,35 +119,20 @@ class BankAnalysisService {
       const lowestBalance = Math.min(...balances);
       const balanceStability = this.calculateStability(balances);
 
-      const metrics = {
+      return {
         totalAssets,
         averageBalance,
         lowestBalance,
         balanceStability
       };
-
-      logger.info("Completed asset analysis:", {
-        totalAssets,
-        averageBalance,
-        stability: balanceStability
-      });
-
-      return metrics;
     } catch (error) {
-      logger.error("Error analyzing assets:", { 
-        error: error instanceof Error ? error.message : String(error) 
-      });
+      logger.error("Error analyzing assets:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
   static async calculateUnderwritingMetrics(accessToken: string, proposedPayment: number): Promise<UnderwritingMetrics> {
     try {
-      logger.info("Starting underwriting calculation:", {
-        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
-        proposedPayment
-      });
-
       const [income, expenses, assets] = await Promise.all([
         this.analyzeIncome(accessToken),
         this.analyzeExpenses(accessToken),
@@ -188,6 +151,7 @@ class BankAnalysisService {
       if (!hasStableIncome) riskFactors.push('Unstable income');
       if (disposableIncome < proposedPayment * 1.5) riskFactors.push('Insufficient disposable income');
 
+      // Asset-based risk factors
       if (assets.totalAssets < proposedPayment * 3) {
         riskFactors.push('Insufficient asset reserves');
       }
@@ -198,12 +162,13 @@ class BankAnalysisService {
         riskFactors.push('Low balance history');
       }
 
+      // Calculate recommended max payment based on both income and assets
       const recommendedMaxPayment = Math.min(
-        (monthlyIncome * 0.28) - expenses.debtObligations,
-        assets.totalAssets * 0.1 
+        (monthlyIncome * 0.28) - expenses.debtObligations, // Traditional DTI-based limit
+        assets.totalAssets * 0.1 // Asset-based limit (10% of total assets)
       );
 
-      const result = {
+      return {
         debtToIncomeRatio: parseFloat(dti.toFixed(2)),
         disposableIncome: parseFloat(disposableIncome.toFixed(2)),
         hasStableIncome,
@@ -211,19 +176,8 @@ class BankAnalysisService {
         recommendedMaxPayment: Math.max(0, parseFloat(recommendedMaxPayment.toFixed(2))),
         assetMetrics: assets
       };
-
-      logger.info("Completed underwriting calculation:", {
-        dti: result.debtToIncomeRatio,
-        hasStableIncome: result.hasStableIncome,
-        riskFactorCount: result.riskFactors.length,
-        totalAssets: assets.totalAssets
-      });
-
-      return result;
     } catch (error) {
-      logger.error("Error calculating underwriting metrics:", { 
-        error: error instanceof Error ? error.message : String(error) 
-      });
+      logger.error("Error calculating underwriting metrics:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
@@ -237,9 +191,8 @@ class BankAnalysisService {
     return (sum / Math.max(days, 1)) * 30;
   }
 
-  private static calculateStability(transactions: number[]): number {
-    if (!transactions.length) return 0;
-    const amounts = transactions;
+  private static calculateStability(amounts: number[]): number {
+    if (!amounts.length) return 0;
     const std = this.standardDeviation(amounts);
     const mean = amounts.reduce((a, b) => a + b) / amounts.length;
     return Math.min(100, Math.max(0, (1 - (std / Math.abs(mean))) * 100));

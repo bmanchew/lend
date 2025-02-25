@@ -1,0 +1,48 @@
+1. Annual Income (1–5)
+Source/Rationale: Moody’s (2022) notes lower default rates above $35k–$50k+
+5 points: $100k+ annual income
+4 points: $75k–$99,999
+3 points: $50k–$74,999
+2 points: $35k–$49,999
+1 point: $35k (just at threshold) – $39,999, or borderline stable income
+(Any income below $35k is an immediate disqualifier, so not scored.)
+2. Employment (Status & Tenure) (1–5)
+Source/Rationale: Federal Reserve research shows longer‐tenure, stable employment reduces default risk
+5 points: Employed 5+ years (same employer) or 10+ years in the same field
+4 points: Employed 2–4 years (same employer)
+3 points: Employed 1–2 years (same employer)
+2 points: Employed 6–12 months
+1 point: Newly employed (under 6 months) or unstable job history
+3. Credit Score (1–5)
+Source/Rationale: S&P/FICO guidelines—below 600 is higher risk, 720+ “prime,” 800+ “super‐prime”
+5 points: 800+ (super‐prime)
+4 points: 720–799 (prime)
+3 points: 650–719 (moderate risk)
+2 points: 600–649 (elevated risk)
+1 point: <600 (high risk)
+4. Debt‐to‐Income (DTI) Ratio (1–5)
+Source/Rationale: Fed/CFPB data—DTI over 45% is high risk; under 15% is very low risk
+5 points: <15% DTI (very low risk)
+4 points: 15–20%
+3 points: 21–35%
+2 points: 36–45%
+1 point: >45% (high risk)
+5. Housing Status (1–5)
+Source/Rationale: Fitch/CoreLogic note that higher equity/homeownership correlates with lower default
+5 points: Owns Home (No Mortgage)
+4 points: Owns Home (With Mortgage)
+3 points: Renting
+2 points: Living with friends or family
+1 point: Other / Uncertain
+6. Delinquency History (1–5)
+Source/Rationale: Equifax/FICO research—recent major late payments or bankruptcies raise risk vs. a clean record
+5 points: No delinquencies in past 5+ years (spotless record)
+4 points: No major delinquencies in past 2–4 years
+3 points: One or two late payments in past 2 years, but all resolved
+2 points: Multiple late payments in past 1–2 years or one major delinquency
+1 point: Recent major lates (<12 months) or a prior bankruptcy (over 1 year ago but still on record)
+Tier Mapping by Total Score
+Tier 1 (25–30): Lowest Risk
+Tier 2 (18–24): Moderate‐Low Risk
+Tier 3 (12–17): Moderate‐Low to Moderate Risk
+Tier 4 (<12): Highest Risk
