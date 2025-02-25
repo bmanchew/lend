@@ -44,9 +44,19 @@ export default function CustomerDashboard() {
     }
   }, [user]);
 
-  const { data: contracts } = useQuery<SelectContract[]>({
+  // Custom refetch function for contracts
+  const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
     queryKey: [`/api/customers/${user?.id}/contracts`],
+    enabled: !!user?.id, // Only run if user ID exists
   });
+  
+  // Refetch contracts when KYC status changes to verified
+  useEffect(() => {
+    if (user?.kycStatus === KycStatus.VERIFIED) {
+      console.log("[CustomerDashboard] KYC verified, refetching contracts");
+      refetchContracts();
+    }
+  }, [user?.kycStatus, refetchContracts]);
 
   const hasActiveContract = contracts?.some((c) => c.status === "active");
 
@@ -109,19 +119,19 @@ export default function CustomerDashboard() {
                         <p className="text-sm text-muted-foreground">
                           Term Length
                         </p>
-                        <p className="text-2xl font-bold">36 Months</p>
+                        <p className="text-2xl font-bold">{contracts?.[0]?.term || 36} Months</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">
                           Interest Rate
                         </p>
-                        <p className="text-2xl font-bold">24.99% APR</p>
+                        <p className="text-2xl font-bold">{contracts?.[0]?.interestRate || "24.99"}% APR</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">
                           Down Payment
                         </p>
-                        <p className="text-2xl font-bold">5%</p>
+                        <p className="text-2xl font-bold">${contracts?.[0]?.downPayment || "0.00"}</p>
                       </div>
                     </div>
                     <Button
