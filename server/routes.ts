@@ -36,6 +36,7 @@ import plaidRoutes from "./routes/plaid";
 import underwritingRoutes from "./routes/underwriting";
 import { diditService } from "./services/didit";
 import bodyParser from "body-parser";
+import underwritingApi from './routes/api/underwriting';
 
 // Updated type declarations for better type safety
 interface RequestWithUser extends Request {
@@ -208,6 +209,9 @@ const validateId = (req: Request, res: Response, next: NextFunction) => {
 router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
+// Mount the API routes before any UI routes
+router.use('/api/underwriting', underwritingApi);
+
 // Protected Routes (JWT Required)
 router.get(
   "/auth/me",
@@ -218,8 +222,6 @@ router.get(
     return res.json(req.user);
   }),
 );
-
-// Add this to your routes file
 
 router.post(
   "/sendOTP",

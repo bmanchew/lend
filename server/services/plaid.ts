@@ -8,9 +8,12 @@ interface PlaidError {
   display_message?: string;
 }
 
-interface LedgerBalance {
-  available: number;
-  pending: number;
+interface Transaction {
+  amount: number;
+  date: string;
+  merchant_name?: string;
+  name?: string;
+  category?: string[];
 }
 
 class PlaidErrorHandler extends Error {
@@ -40,8 +43,183 @@ const configuration = new Configuration({
 const plaidClient = new PlaidApi(configuration);
 
 export class PlaidService {
-  private static sweepAccountId: string | null = null;
   private static isSandbox = process.env.PLAID_ENV === 'sandbox';
+
+  static async getTransactions(accessToken: string): Promise<Transaction[]> {
+    try {
+      // Log incoming token for debugging
+      logger.info('Processing transaction request:', { 
+        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
+        environment: this.isSandbox ? 'sandbox' : 'development',
+        tokenLength: accessToken.length
+      });
+
+      // Handle test_token case before any validation
+      if (accessToken.trim().toLowerCase() === 'test_token') {
+        logger.info('Using mock transaction data for test token');
+        const mockData = this.getMockTransactions();
+        logger.info('Generated mock transactions:', {
+          count: mockData.length,
+          totalIncome: mockData.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0),
+          totalExpenses: mockData.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0)
+        });
+        return mockData;
+      }
+
+      // Validate access token format for real Plaid calls
+      if (!accessToken.startsWith('access-')) {
+        throw new PlaidErrorHandler({
+          error_type: 'INVALID_ACCESS_TOKEN',
+          error_code: 'INVALID_FORMAT',
+          error_message: 'Invalid access token format',
+          display_message: 'Please provide a valid access token'
+        });
+      }
+
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 60); // Get 60 days of transactions
+
+      logger.info('Fetching transactions:', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      const request = {
+        access_token: accessToken,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        options: {
+          include_personal_finance_category: true
+        }
+      };
+
+      const response = await plaidClient.transactionsGet(request);
+
+      logger.info('Retrieved transactions:', {
+        count: response.data.transactions.length,
+        accounts: response.data.accounts.map(a => ({
+          id: a.account_id,
+          type: a.type,
+          subtype: a.subtype
+        }))
+      });
+
+      return response.data.transactions;
+    } catch (error: any) {
+      if (error instanceof PlaidErrorHandler) {
+        throw error;
+      }
+
+      const plaidError = error?.response?.data;
+      if (plaidError?.error_type) {
+        logger.error('Plaid error fetching transactions:', {
+          type: plaidError.error_type,
+          code: plaidError.error_code,
+          message: plaidError.error_message
+        });
+        throw new PlaidErrorHandler(plaidError);
+      }
+
+      logger.error('Error fetching transactions:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
+  }
+
+  private static getMockTransactions(): Transaction[] {
+    const today = new Date();
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(today.getMonth() - 2);
+
+    // Generate dates between two months ago and today
+    const getDaysBetween = (start: Date, end: Date): string[] => {
+      const dates: string[] = [];
+      const current = new Date(start);
+      while (current <= end) {
+        dates.push(current.toISOString().split('T')[0]);
+        current.setDate(current.getDate() + 1);
+      }
+      return dates;
+    };
+
+    const dates = getDaysBetween(twoMonthsAgo, today);
+
+    // Mock income transactions (bi-weekly payroll deposits)
+    const incomeTransactions: Transaction[] = [];
+    let currentDate = new Date(twoMonthsAgo);
+    while (currentDate <= today) {
+      incomeTransactions.push({
+        amount: 5000, // Bi-weekly salary ($10,000/month)
+        date: currentDate.toISOString().split('T')[0],
+        merchant_name: 'COMPANY PAYROLL',
+        category: ['INCOME', 'PAYROLL']
+      });
+      currentDate.setDate(currentDate.getDate() + 14); // Bi-weekly
+    }
+
+    // Mock expense transactions
+    const expenseTransactions: Transaction[] = [
+      // Monthly mortgage/rent
+      ...dates.filter(d => d.endsWith('01')).map(date => ({
+        amount: -2500,
+        date,
+        merchant_name: 'MORTGAGE CO',
+        category: ['MORTGAGE', 'RENT']
+      })),
+      // Car loan
+      ...dates.filter(d => d.endsWith('15')).map(date => ({
+        amount: -450,
+        date,
+        merchant_name: 'AUTO LOAN',
+        category: ['LOAN_PAYMENTS', 'AUTO']
+      })),
+      // Credit card payments
+      ...dates.filter(d => d.endsWith('20')).map(date => ({
+        amount: -1000,
+        date,
+        merchant_name: 'CREDIT CARD PAYMENT',
+        category: ['CREDIT_CARD', 'PAYMENT']
+      })),
+      // Student loan
+      ...dates.filter(d => d.endsWith('10')).map(date => ({
+        amount: -350,
+        date,
+        merchant_name: 'STUDENT LOAN',
+        category: ['LOAN_PAYMENTS', 'STUDENT']
+      })),
+      // Utilities
+      ...dates.filter(d => d.endsWith('05')).map(date => ({
+        amount: -200,
+        date,
+        merchant_name: 'UTILITY CO',
+        category: ['UTILITIES']
+      })),
+      // Groceries (weekly)
+      ...dates.filter(d => new Date(d).getDay() === 0).map(date => ({
+        amount: -250,
+        date,
+        merchant_name: 'GROCERY STORE',
+        category: ['FOOD_AND_DRINK', 'GROCERIES']
+      })),
+      // Entertainment (weekly)
+      ...dates.filter(d => new Date(d).getDay() === 6).map(date => ({
+        amount: -100,
+        date,
+        merchant_name: 'ENTERTAINMENT',
+        category: ['ENTERTAINMENT']
+      }))
+    ];
+
+    const transactions = [...incomeTransactions, ...expenseTransactions].sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    return transactions;
+  }
+  private static sweepAccountId: string | null = null;
 
   private static async validateSandboxSetup() {
     if (!process.env.PLAID_SWEEP_ACCESS_TOKEN) {
@@ -667,55 +845,9 @@ export class PlaidService {
       throw error;
     }
   }
+}
 
-  static async getTransactions(accessToken: string) {
-    try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 60); // Get 60 days of transactions
-
-      logger.info('Fetching transactions:', {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-      });
-
-      const request = {
-        access_token: accessToken,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        options: {
-          include_personal_finance_category: true
-        }
-      };
-
-      const response = await plaidClient.transactionsGet(request);
-
-      logger.info('Retrieved transactions:', {
-        count: response.data.transactions.length,
-        accounts: response.data.accounts.map(a => ({
-          id: a.account_id,
-          type: a.type,
-          subtype: a.subtype
-        }))
-      });
-
-      return response.data.transactions;
-    } catch (error: any) {
-      const plaidError = error?.response?.data;
-      if (plaidError?.error_type) {
-        logger.error('Plaid error fetching transactions:', {
-          type: plaidError.error_type,
-          code: plaidError.error_code,
-          message: plaidError.error_message
-        });
-        throw new PlaidErrorHandler(plaidError);
-      }
-
-      logger.error('Error fetching transactions:', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      throw error;
-    }
-  }
+interface LedgerBalance {
+  available: number;
+  pending: number;
 }
