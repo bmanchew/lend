@@ -23,12 +23,20 @@ interface ExpenseAnalysis {
   debtObligations: number;
 }
 
+interface AssetMetrics {
+  totalAssets: number;
+  averageBalance: number;
+  lowestBalance: number;
+  balanceStability: number;
+}
+
 interface UnderwritingMetrics {
   debtToIncomeRatio: number;
   disposableIncome: number;
   hasStableIncome: boolean;
   riskFactors: string[];
   recommendedMaxPayment: number;
+  assetMetrics?: AssetMetrics;
 }
 
 class BankAnalysisService {
@@ -108,6 +116,53 @@ class BankAnalysisService {
     }
   }
 
+  static async analyzeAssets(accessToken: string): Promise<AssetMetrics> {
+    try {
+      logger.info("Starting asset analysis for token");
+
+      const reportData = await PlaidService.createAssetReport(accessToken);
+      const report = await PlaidService.getAssetReport(reportData.asset_report_token);
+
+      let totalAssets = 0;
+      let balances: number[] = [];
+
+      report.items.forEach(item => {
+        item.accounts.forEach(account => {
+          if (account.type === 'depository') {
+            totalAssets += account.balances.current || 0;
+            account.historical_balances?.forEach(balance => {
+              balances.push(balance.current);
+            });
+          }
+        });
+      });
+
+      const averageBalance = balances.reduce((sum, bal) => sum + bal, 0) / balances.length;
+      const lowestBalance = Math.min(...balances);
+      const balanceStability = this.calculateStability(balances);
+
+      const metrics = {
+        totalAssets,
+        averageBalance,
+        lowestBalance,
+        balanceStability
+      };
+
+      logger.info("Completed asset analysis:", {
+        totalAssets,
+        averageBalance,
+        stability: balanceStability
+      });
+
+      return metrics;
+    } catch (error) {
+      logger.error("Error analyzing assets:", { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      throw error;
+    }
+  }
+
   static async calculateUnderwritingMetrics(accessToken: string, proposedPayment: number): Promise<UnderwritingMetrics> {
     try {
       logger.info("Starting underwriting calculation:", {
@@ -115,9 +170,10 @@ class BankAnalysisService {
         proposedPayment
       });
 
-      const [income, expenses] = await Promise.all([
+      const [income, expenses, assets] = await Promise.all([
         this.analyzeIncome(accessToken),
-        this.analyzeExpenses(accessToken)
+        this.analyzeExpenses(accessToken),
+        this.analyzeAssets(accessToken)
       ]);
 
       const monthlyIncome = income.averageMonthlyIncome;
@@ -127,32 +183,47 @@ class BankAnalysisService {
       const disposableIncome = monthlyIncome - expenses.averageMonthlyExpenses;
       const hasStableIncome = income.incomeStability > 75 && income.incomeSources.length > 0;
 
-      // Risk analysis
       const riskFactors = [];
       if (dti > 43) riskFactors.push('DTI ratio too high');
       if (!hasStableIncome) riskFactors.push('Unstable income');
       if (disposableIncome < proposedPayment * 1.5) riskFactors.push('Insufficient disposable income');
 
-      // Conservative max payment recommendation (28% front-end DTI)
-      const recommendedMaxPayment = (monthlyIncome * 0.28) - expenses.debtObligations;
+      if (assets.totalAssets < proposedPayment * 3) {
+        riskFactors.push('Insufficient asset reserves');
+      }
+      if (assets.balanceStability < 60) {
+        riskFactors.push('Unstable account balances');
+      }
+      if (assets.lowestBalance < proposedPayment) {
+        riskFactors.push('Low balance history');
+      }
+
+      const recommendedMaxPayment = Math.min(
+        (monthlyIncome * 0.28) - expenses.debtObligations,
+        assets.totalAssets * 0.1 
+      );
 
       const result = {
         debtToIncomeRatio: parseFloat(dti.toFixed(2)),
         disposableIncome: parseFloat(disposableIncome.toFixed(2)),
         hasStableIncome,
         riskFactors,
-        recommendedMaxPayment: Math.max(0, parseFloat(recommendedMaxPayment.toFixed(2)))
+        recommendedMaxPayment: Math.max(0, parseFloat(recommendedMaxPayment.toFixed(2))),
+        assetMetrics: assets
       };
 
       logger.info("Completed underwriting calculation:", {
         dti: result.debtToIncomeRatio,
         hasStableIncome: result.hasStableIncome,
-        riskFactorCount: result.riskFactors.length
+        riskFactorCount: result.riskFactors.length,
+        totalAssets: assets.totalAssets
       });
 
       return result;
     } catch (error) {
-      logger.error("Error calculating underwriting metrics:", { error: error instanceof Error ? error.message : String(error) });
+      logger.error("Error calculating underwriting metrics:", { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
       throw error;
     }
   }
@@ -166,9 +237,9 @@ class BankAnalysisService {
     return (sum / Math.max(days, 1)) * 30;
   }
 
-  private static calculateStability(transactions: Transaction[]): number {
+  private static calculateStability(transactions: number[]): number {
     if (!transactions.length) return 0;
-    const amounts = transactions.map(t => t.amount);
+    const amounts = transactions;
     const std = this.standardDeviation(amounts);
     const mean = amounts.reduce((a, b) => a + b) / amounts.length;
     return Math.min(100, Math.max(0, (1 - (std / Math.abs(mean))) * 100));

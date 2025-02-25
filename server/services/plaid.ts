@@ -1,4 +1,17 @@
-import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import { 
+  Configuration, 
+  PlaidApi, 
+  PlaidEnvironments,
+  Products,
+  CountryCode,
+  TransferType,
+  TransferNetwork,
+  ACHClass,
+  DepositoryAccountSubtype,
+  SandboxItemSetVerificationStatusRequestVerificationStatusEnum,
+  AssetReportCreateRequest,
+  AssetReportGetRequest
+} from 'plaid';
 import { logger } from '../lib/logger';
 
 interface PlaidError {
@@ -31,47 +44,66 @@ class PlaidErrorHandler extends Error {
 }
 
 export class PlaidService {
-  private static isSandbox = process.env.PLAID_ENV === 'sandbox';
+  private static isSandbox = process.env.PLAID_ENV?.toLowerCase() === 'sandbox';
+  private static plaidClient = new PlaidApi(new Configuration({
+    basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+    baseOptions: {
+      headers: {
+        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+        'PLAID-SECRET': process.env.PLAID_SECRET,
+      },
+    },
+  }));
+
+  private static validateAccessToken(accessToken: string) {
+    logger.info('Validating access token:', { 
+      tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
+      environment: this.isSandbox ? 'sandbox' : 'development',
+      envVar: process.env.PLAID_ENV,
+      isSandbox: this.isSandbox,
+      tokenPattern: accessToken.startsWith('access-') ? 'valid' : 'invalid'
+    });
+
+    // Allow any token format in sandbox mode
+    if (this.isSandbox || accessToken.trim().toLowerCase() === 'test_token') {
+      logger.info('Sandbox mode or test token detected, bypassing validation');
+      return true;
+    }
+
+    // Only validate token format in non-sandbox environments
+    if (!accessToken.startsWith('access-')) {
+      logger.warn('Invalid token format detected:', {
+        tokenStart: accessToken.substring(0, 7),
+        environment: process.env.PLAID_ENV
+      });
+
+      throw new PlaidErrorHandler({
+        error_type: 'INVALID_ACCESS_TOKEN',
+        error_code: 'INVALID_FORMAT',
+        error_message: 'Invalid access token format',
+        display_message: 'Please provide a valid access token'
+      });
+    }
+
+    return true;
+  }
 
   static async getTransactions(accessToken: string): Promise<Transaction[]> {
     try {
-      // Log incoming token for debugging
       logger.info('Processing transaction request:', { 
         tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
-        environment: this.isSandbox ? 'sandbox' : 'development',
-        tokenLength: accessToken.length
+        environment: this.isSandbox ? 'sandbox' : 'development'
       });
 
-      // Handle test_token case before any validation
-      if (accessToken.trim().toLowerCase() === 'test_token') {
-        logger.info('Using mock transaction data for test token');
-        const mockData = this.getMockTransactions();
-        logger.info('Generated mock transactions:', {
-          count: mockData.length,
-          totalIncome: mockData.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0),
-          totalExpenses: mockData.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0)
-        });
-        return mockData;
-      }
+      this.validateAccessToken(accessToken);
 
-      // Skip access token validation in sandbox mode
-      if (!this.isSandbox && !accessToken.startsWith('access-')) {
-        throw new PlaidErrorHandler({
-          error_type: 'INVALID_ACCESS_TOKEN',
-          error_code: 'INVALID_FORMAT',
-          error_message: 'Invalid access token format',
-          display_message: 'Please provide a valid access token'
-        });
+      if (accessToken.trim().toLowerCase() === 'test_token') {
+        return this.getMockTransactions();
       }
 
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 60); // Get 60 days of transactions
-
-      logger.info('Fetching transactions:', {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-      });
 
       const request = {
         access_token: accessToken,
@@ -82,17 +114,7 @@ export class PlaidService {
         }
       };
 
-      const response = await plaidClient.transactionsGet(request);
-
-      logger.info('Retrieved transactions:', {
-        count: response.data.transactions.length,
-        accounts: response.data.accounts.map(a => ({
-          id: a.account_id,
-          type: a.type,
-          subtype: a.subtype
-        }))
-      });
-
+      const response = await this.plaidClient.transactionsGet(request);
       return response.data.transactions;
     } catch (error: any) {
       if (error instanceof PlaidErrorHandler) {
@@ -101,20 +123,137 @@ export class PlaidService {
 
       const plaidError = error?.response?.data;
       if (plaidError?.error_type) {
-        logger.error('Plaid error fetching transactions:', {
-          type: plaidError.error_type,
-          code: plaidError.error_code,
-          message: plaidError.error_message
-        });
+        logger.error('Plaid error:', plaidError);
         throw new PlaidErrorHandler(plaidError);
       }
 
-      logger.error('Error fetching transactions:', {
+      logger.error('Error in Plaid request:', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       });
       throw error;
     }
+  }
+
+  static async createAssetReport(accessToken: string) {
+    try {
+      logger.info('Creating asset report:', {
+        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
+        environment: this.isSandbox ? 'sandbox' : 'development'
+      });
+
+      this.validateAccessToken(accessToken);
+
+      if (accessToken.trim().toLowerCase() === 'test_token') {
+        return this.getMockAssetReport();
+      }
+
+      const request: AssetReportCreateRequest = {
+        access_tokens: [accessToken],
+        days_requested: 90,
+        options: {
+          client_report_id: `report-${Date.now()}`,
+          webhook: process.env.PLAID_WEBHOOK_URL,
+          include_insights: true
+        }
+      };
+
+      const response = await this.plaidClient.assetReportCreate(request);
+
+      logger.info('Asset report created:', {
+        reportToken: response.data.asset_report_token,
+        requestId: response.data.request_id
+      });
+
+      return response.data;
+    } catch (error: any) {
+      if (error instanceof PlaidErrorHandler) {
+        throw error;
+      }
+
+      const plaidError = error?.response?.data;
+      if (plaidError?.error_type) {
+        logger.error('Plaid error:', plaidError);
+        throw new PlaidErrorHandler(plaidError);
+      }
+
+      logger.error('Error in Plaid request:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
+  }
+
+  static async getAssetReport(reportToken: string) {
+    try {
+      logger.info('Retrieving asset report:', { reportToken });
+
+      if (reportToken === 'mock_report_token') {
+        return this.getMockAssetReport().report;
+      }
+
+      const request: AssetReportGetRequest = {
+        asset_report_token: reportToken,
+        include_insights: true
+      };
+
+      const response = await this.plaidClient.assetReportGet(request);
+
+      logger.info('Retrieved asset report:', {
+        accounts: response.data.report.items.map(item => ({
+          institution: item.institution_name,
+          accounts: item.accounts.length
+        }))
+      });
+
+      return response.data.report;
+    } catch (error: any) {
+      if (error instanceof PlaidErrorHandler) {
+        throw error;
+      }
+
+      const plaidError = error?.response?.data;
+      if (plaidError?.error_type) {
+        logger.error('Plaid error:', plaidError);
+        throw new PlaidErrorHandler(plaidError);
+      }
+
+      logger.error('Error in Plaid request:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
+  }
+
+  private static getMockAssetReport() {
+    const currentDate = new Date().toISOString().split('T')[0];
+
+    return {
+      asset_report_token: 'mock_report_token',
+      request_id: 'mock_request_id',
+      report: {
+        items: [{
+          institution_name: 'Mock Bank',
+          accounts: [{
+            balances: {
+              available: 25000,
+              current: 25000,
+              limit: null
+            },
+            days_available: 90,
+            name: 'Checking Account',
+            type: 'depository',
+            subtype: 'checking',
+            historical_balances: Array.from({ length: 90 }, (_, i) => ({
+              date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              current: 25000 + (Math.random() * 2000 - 1000)
+            }))
+          }]
+        }]
+      }
+    };
   }
 
   private static getMockTransactions(): Transaction[] {
@@ -205,6 +344,16 @@ export class PlaidService {
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
+    logger.info('Generated mock transactions:', {
+      count: transactions.length,
+      totalIncome: incomeTransactions.reduce((sum, t) => sum + t.amount, 0),
+      totalExpenses: expenseTransactions.reduce((sum, t) => sum + t.amount, 0),
+      dateRange: {
+        start: transactions[transactions.length - 1].date,
+        end: transactions[0].date
+      }
+    });
+
     return transactions;
   }
   private static sweepAccountId: string | null = null;
@@ -278,7 +427,7 @@ export class PlaidService {
         filters: configs.account_filters
       });
 
-      const response = await plaidClient.linkTokenCreate(configs);
+      const response = await this.plaidClient.linkTokenCreate(configs);
       logger.info('Created Plaid link token successfully');
       return response.data;
     } catch (error: any) {
@@ -297,7 +446,7 @@ export class PlaidService {
     }
 
     try {
-      const response = await plaidClient.itemPublicTokenExchange({
+      const response = await this.plaidClient.itemPublicTokenExchange({
         public_token: publicToken,
       });
 
@@ -318,7 +467,7 @@ export class PlaidService {
 
   static async getAuthData(accessToken: string) {
     try {
-      const response = await plaidClient.authGet({
+      const response = await this.plaidClient.authGet({
         access_token: accessToken,
       });
 
@@ -348,7 +497,7 @@ export class PlaidService {
       logger.info('Getting Plaid ledger balance');
       await this.validateSandboxSetup();
 
-      const response = await plaidClient.transferBalanceGet({});
+      const response = await this.plaidClient.transferBalanceGet({});
       logger.info('Plaid balance response:', {
         raw: JSON.stringify(response.data),
         balance: response.data.balance,
@@ -405,7 +554,7 @@ export class PlaidService {
         requestBody: JSON.stringify(authRequest)
       });
 
-      const authResponse = await plaidClient.transferAuthorizationCreate(authRequest);
+      const authResponse = await this.plaidClient.transferAuthorizationCreate(authRequest);
 
       logger.info('Transfer authorization response:', {
         id: authResponse.data.authorization.id,
@@ -455,7 +604,7 @@ export class PlaidService {
         }
       };
 
-      const authorizationResponse = await plaidClient.transferAuthorizationCreate(authRequest);
+      const authorizationResponse = await this.plaidClient.transferAuthorizationCreate(authRequest);
 
       if (authorizationResponse.data.authorization.decision !== 'approved') {
         const error = new Error(`Transfer authorization failed: ${authorizationResponse.data.authorization.decision_rationale?.description}`);
@@ -480,7 +629,7 @@ export class PlaidService {
         }
       };
 
-      const transferResponse = await plaidClient.transferCreate(transferRequest);
+      const transferResponse = await this.plaidClient.transferCreate(transferRequest);
 
       return {
         transferId: transferResponse.data.transfer.id,
@@ -532,7 +681,7 @@ export class PlaidService {
         environment: this.isSandbox ? 'sandbox' : 'production'
       });
 
-      const response = await plaidClient.transferCreate(transferRequest);
+      const response = await this.plaidClient.transferCreate(transferRequest);
 
       logger.info('Successfully created withdrawal transfer:', {
         id: response.data.transfer.id,
@@ -585,7 +734,7 @@ export class PlaidService {
         environment: this.isSandbox ? 'sandbox' : 'production'
       });
 
-      const response = await plaidClient.transferCreate(transferRequest);
+      const response = await this.plaidClient.transferCreate(transferRequest);
 
       logger.info('Successfully created deposit transfer:', {
         id: response.data.transfer.id,
@@ -610,7 +759,7 @@ export class PlaidService {
 
   static async getTransferStatus(transferId: string) {
     try {
-      const response = await plaidClient.transferGet({
+      const response = await this.plaidClient.transferGet({
         transfer_id: transferId
       });
       return response.data.transfer;
@@ -630,7 +779,7 @@ export class PlaidService {
 
   static async syncTransferEvents(afterId?: number) {
     try {
-      const response = await plaidClient.transferEventSync({
+      const response = await this.plaidClient.transferEventSync({
         after_id: afterId ?? 0
       });
 
@@ -699,7 +848,7 @@ export class PlaidService {
         verification_status: SandboxItemSetVerificationStatusRequestVerificationStatusEnum.VerificationExpired
       };
 
-      const response = await plaidClient.sandboxItemSetVerificationStatus(request);
+      const response = await this.plaidClient.sandboxItemSetVerificationStatus(request);
 
       logger.info('ACH verification initiated:', {
         accountId,
@@ -730,12 +879,12 @@ export class PlaidService {
           account_id: accountId,
           verification_status: SandboxItemSetVerificationStatusRequestVerificationStatusEnum.AutomaticallyVerified
         };
-        await plaidClient.sandboxItemSetVerificationStatus(request);
+        await this.plaidClient.sandboxItemSetVerificationStatus(request);
         return { verified: true };
       }
 
       // For production, use verify endpoint
-      const response = await plaidClient.itemVerify({
+      const response = await this.plaidClient.itemVerify({
         access_token: accessToken,
         account_id: accountId,
         amounts: amounts.map(amount => amount.toFixed(2))
@@ -792,7 +941,7 @@ export class PlaidService {
         }
       };
 
-      const response = await plaidClient.transferCreate(transferRequest);
+      const response = await this.plaidClient.transferCreate(transferRequest);
 
       logger.info('Transfer created:', {
         transferId: response.data.transfer.id,
@@ -814,7 +963,7 @@ export class PlaidService {
     try {
       logger.info('Getting transfer status:', { transferId });
 
-      const response = await plaidClient.transferGet({
+      const response = await this.plaidClient.transferGet({
         transfer_id: transferId
       });
 
@@ -838,4 +987,40 @@ export class PlaidService {
 interface LedgerBalance {
   available: number;
   pending: number;
+}
+
+interface LinkTokenCreateRequest {
+  user: { client_user_id: string; };
+  client_name: string;
+  products: Products[];
+  country_codes: CountryCode[];
+  language: string;
+  account_filters?: { depository?: { account_subtypes?: DepositoryAccountSubtype[]; }; };
+}
+interface TransferAuthorizationCreateRequest {
+  access_token: string;
+  account_id: string;
+  type: TransferType;
+  network: TransferNetwork;
+  amount: string;
+  ach_class: ACHClass;
+  user: { legal_name: string; };
+}
+interface TransferCreateRequest {
+  authorization_id: string;
+  access_token: string;
+  account_id: string;
+  description: string;
+  network: TransferNetwork;
+  amount: string;
+  ach_class: ACHClass;
+  user: { legal_name: string; };
+}
+interface SandboxItemSetVerificationStatusRequest {
+  access_token: string;account_id: string;
+  verification_status: SandboxItemSetVerificationStatusRequestVerificationStatusEnum;
+}
+enum SandboxItemSetVerificationStatusRequestVerificationStatusEnum {
+  VerificationExpired,
+  AutomaticallyVerified
 }

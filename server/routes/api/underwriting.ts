@@ -68,7 +68,7 @@ router.post('/analyze', async (req, res) => {
   }
 });
 
-// Pre-qualification endpoint
+// Pre-qualification endpoint with asset verification
 router.post('/prequalify', async (req, res) => {
   try {
     const { accessToken, proposedPayment, loanAmount, loanTerm, merchantId } = 
@@ -82,7 +82,7 @@ router.post('/prequalify', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    // Get underwriting metrics
+    // Get underwriting metrics with asset analysis
     const metrics = await bankAnalysisService.calculateUnderwritingMetrics(
       accessToken, 
       proposedPayment
@@ -93,7 +93,7 @@ router.post('/prequalify', async (req, res) => {
     if (loanAmount > metrics.disposableIncome * 12) {
       additionalRiskFactors.push('Loan amount exceeds annual disposable income');
     }
-    
+
     if (loanTerm > 60) {
       additionalRiskFactors.push('Loan term exceeds maximum allowed period');
     }
