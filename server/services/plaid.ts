@@ -1,4 +1,4 @@
-import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransferType, TransferNetwork, ACHClass, LinkTokenCreateRequest, TransferAuthorizationCreateRequest, TransferCreateRequest, SandboxItemSetVerificationStatusRequest, DepositoryAccountSubtype, SandboxItemSetVerificationStatusRequestVerificationStatusEnum } from 'plaid';
+import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 import { logger } from '../lib/logger';
 
 interface PlaidError {
@@ -30,18 +30,6 @@ class PlaidErrorHandler extends Error {
   }
 }
 
-const configuration = new Configuration({
-  basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
-  baseOptions: {
-    headers: {
-      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-      'PLAID-SECRET': process.env.PLAID_SECRET,
-    },
-  },
-});
-
-const plaidClient = new PlaidApi(configuration);
-
 export class PlaidService {
   private static isSandbox = process.env.PLAID_ENV === 'sandbox';
 
@@ -66,8 +54,8 @@ export class PlaidService {
         return mockData;
       }
 
-      // Validate access token format for real Plaid calls
-      if (!accessToken.startsWith('access-')) {
+      // Skip access token validation in sandbox mode
+      if (!this.isSandbox && !accessToken.startsWith('access-')) {
         throw new PlaidErrorHandler({
           error_type: 'INVALID_ACCESS_TOKEN',
           error_code: 'INVALID_FORMAT',

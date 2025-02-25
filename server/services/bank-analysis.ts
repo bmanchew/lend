@@ -34,6 +34,10 @@ interface UnderwritingMetrics {
 class BankAnalysisService {
   static async analyzeIncome(accessToken: string): Promise<IncomeAnalysis> {
     try {
+      logger.info("Starting income analysis for token:", { 
+        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token'
+      });
+
       const transactions = await PlaidService.getTransactions(accessToken);
       const income = transactions.filter((t: Transaction) => t.amount > 0);
 
@@ -49,12 +53,20 @@ class BankAnalysisService {
         .filter(([_, amounts]) => amounts.length >= 2) // At least 2 payments
         .map(([source]) => source);
 
-      return {
+      const result = {
         averageMonthlyIncome: this.calculateAverageMonthly(income),
         incomeStability: this.calculateStability(income),
         lastPaymentDate: new Date(income[0]?.date || Date.now()),
         incomeSources: stableIncomeSources
       };
+
+      logger.info("Completed income analysis:", {
+        averageMonthly: result.averageMonthlyIncome,
+        stability: result.incomeStability,
+        sourceCount: result.incomeSources.length
+      });
+
+      return result;
     } catch (error) {
       logger.error("Error analyzing income:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -63,6 +75,10 @@ class BankAnalysisService {
 
   static async analyzeExpenses(accessToken: string): Promise<ExpenseAnalysis> {
     try {
+      logger.info("Starting expense analysis for token:", {
+        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token'
+      });
+
       const transactions = await PlaidService.getTransactions(accessToken);
       const expenses = transactions.filter((t: Transaction) => t.amount < 0);
 
@@ -72,12 +88,20 @@ class BankAnalysisService {
         )
       );
 
-      return {
+      const result = {
         averageMonthlyExpenses: this.calculateAverageMonthly(expenses),
         largestExpenseCategory: this.findLargestCategory(expenses),
         recurringExpenses: this.identifyRecurring(expenses),
         debtObligations: Math.abs(this.calculateAverageMonthly(debtPayments))
       };
+
+      logger.info("Completed expense analysis:", {
+        averageMonthly: result.averageMonthlyExpenses,
+        debtObligations: result.debtObligations,
+        largestCategory: result.largestExpenseCategory
+      });
+
+      return result;
     } catch (error) {
       logger.error("Error analyzing expenses:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -86,8 +110,15 @@ class BankAnalysisService {
 
   static async calculateUnderwritingMetrics(accessToken: string, proposedPayment: number): Promise<UnderwritingMetrics> {
     try {
-      const income = await this.analyzeIncome(accessToken);
-      const expenses = await this.analyzeExpenses(accessToken);
+      logger.info("Starting underwriting calculation:", {
+        tokenType: accessToken.trim().toLowerCase() === 'test_token' ? 'test_token' : 'plaid_token',
+        proposedPayment
+      });
+
+      const [income, expenses] = await Promise.all([
+        this.analyzeIncome(accessToken),
+        this.analyzeExpenses(accessToken)
+      ]);
 
       const monthlyIncome = income.averageMonthlyIncome;
       const totalDebtObligations = expenses.debtObligations + proposedPayment;
@@ -105,13 +136,21 @@ class BankAnalysisService {
       // Conservative max payment recommendation (28% front-end DTI)
       const recommendedMaxPayment = (monthlyIncome * 0.28) - expenses.debtObligations;
 
-      return {
+      const result = {
         debtToIncomeRatio: parseFloat(dti.toFixed(2)),
         disposableIncome: parseFloat(disposableIncome.toFixed(2)),
         hasStableIncome,
         riskFactors,
         recommendedMaxPayment: Math.max(0, parseFloat(recommendedMaxPayment.toFixed(2)))
       };
+
+      logger.info("Completed underwriting calculation:", {
+        dti: result.debtToIncomeRatio,
+        hasStableIncome: result.hasStableIncome,
+        riskFactorCount: result.riskFactors.length
+      });
+
+      return result;
     } catch (error) {
       logger.error("Error calculating underwriting metrics:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
