@@ -68,6 +68,15 @@ export default function AuthPage() {
     },
   });
 
+  const onRegisterSubmit = (data: RegisterData) => {
+    // Ensure all required fields are present before submission
+    const formData = {
+      ...data,
+      phoneNumber: data.phoneNumber || undefined // Only include if not empty
+    };
+    registerMutation.mutate(formData);
+  };
+
   if (user) {
     // Enhanced logging for device detection
     console.log('[Auth] User authenticated, detailed device info:', {
@@ -206,7 +215,7 @@ export default function AuthPage() {
             <TabsContent value="register">
               <Form {...registerForm}>
                 <form 
-                  onSubmit={registerForm.handleSubmit((data) => registerMutation.mutate(data))}
+                  onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
                   className="space-y-4"
                 >
                   <FormField

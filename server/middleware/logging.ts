@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../lib/logger';
 import { randomUUID } from 'crypto';
+import { APIError, AuthError } from '../lib/errors';
 
 // Enhanced request context interface with rate limiting
 export interface RequestWithContext extends Request {
@@ -131,39 +132,57 @@ export const requestLoggingMiddleware = (
   next();
 };
 
-// Error logging middleware with enhanced context
-export const errorLoggingMiddleware = (
-  err: Error,
-  req: RequestWithContext,
+// Enhanced error handling middleware with proper typing
+export const errorHandler = (
+  err: Error | APIError | AuthError,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const requestId = req.context?.requestId || randomUUID();
-  const requestLogger = logger.createRequestLogger(requestId);
+  const statusCode = err instanceof APIError ? err.status : 500;
+  const requestId = (req as RequestWithContext).context?.requestId || randomUUID();
 
   // Enhanced error logging context
   const errorContext = {
-    method: req.method,
-    url: req.url,
+    name: err.name,
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    cause: err instanceof Error ? err.cause : undefined,
+    code: err instanceof APIError ? err.code : undefined,
+    details: err instanceof APIError ? err.details : undefined,
+    statusCode,
+    requestId,
     path: req.path,
-    statusCode: res.statusCode || 500,
-    ip: req.ip,
-    userAgent: req.get('user-agent') ?? 'unknown',
-    component: 'http',
-    action: 'request_error',
-    performance: {
-      memory: process.memoryUsage(),
-      cpu: process.cpuUsage()
-    },
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    method: req.method,
+    timestamp: new Date().toISOString()
   };
 
-  requestLogger.error('Unhandled error', err, errorContext);
+  logger.error('[Error Handler]', errorContext);
 
-  next(err);
+  // Handle specific error types
+  if (err instanceof APIError) {
+    return res.status(statusCode).json({
+      error: err.message,
+      code: err.code,
+      details: err.details
+    });
+  }
+
+  if (err.name === 'ZodError') {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: err
+    });
+  }
+
+  // Generic error response
+  return res.status(statusCode).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 };
 
-// Performance logging middleware with enhanced metrics
+// Performance logging middleware
 export const performanceLoggingMiddleware = (
   req: RequestWithContext,
   res: Response,
@@ -200,48 +219,3 @@ export const performanceLoggingMiddleware = (
 
   next();
 };
-
-
-export const errorHandler = (err: Error | APIError | LogError, req: Request, res: Response, next: NextFunction) => {
-  const statusCode = (err as APIError).status || 500;
-
-  logger.error('[Error Handler]', {
-    message: err.message,
-    name: err.name,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-    timestamp: new Date().toISOString()
-  });
-
-  if (err instanceof APIError) {
-    return res.status(statusCode).json({
-      error: err.message,
-      code: err.code,
-      details: err.details
-    });
-  }
-
-  if (err.name === 'ZodError') {
-    return res.status(400).json({
-      error: 'Validation Error',
-      details: err
-    });
-  }
-
-  return res.status(statusCode).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-};
-
-interface APIError extends Error {
-  status: number;
-  code: string;
-  details: any;
-}
-
-interface LogError extends Error {
-  level: string;
-  message: string;
-}

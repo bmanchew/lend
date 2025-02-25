@@ -130,19 +130,22 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
       : null;
 
     if (!token) {
-      return res.status(401).json({ error: "Authentication required" });
+      throw new APIError(401, "Authentication required");
     }
 
     const user = await authService.verifyJWT(token);
     if (!user) {
-      return res.status(401).json({ error: "Invalid or expired token" });
+      throw new APIError(401, "Invalid or expired token");
     }
 
     req.user = user;
     next();
   } catch (error) {
-    logger.error("Auth middleware error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    logger.error("Auth middleware error:", { 
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    next(error);
   }
 });
 
@@ -219,99 +222,62 @@ router.get(
 
 router.post(
   "/sendOTP",
-  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    logger.info("Received OTP request:", {
-      phoneNumber: req.body.phoneNumber,
-      headers: req.headers,
-      timestamp: new Date().toISOString(),
-    });
+  asyncHandler(async (req: Request, res: Response) => {
     try {
       const { phoneNumber } = req.body;
 
       if (!phoneNumber) {
-        return res.status(400).json({
-          success: false,
-          message: "Phone number is required",
-        });
+        throw new APIError(400, "Phone number is required");
       }
 
-      // Format the phone number consistently
       let formattedPhone = phoneNumber.replace(/\D/g, "");
       if (formattedPhone.length === 10) {
         formattedPhone = `+1${formattedPhone}`;
-      } else if (
-        formattedPhone.length === 11 &&
-        formattedPhone.startsWith("1")
-      ) {
+      } else if (formattedPhone.length === 11 && formattedPhone.startsWith("1")) {
         formattedPhone = `+${formattedPhone}`;
       }
 
       if (!formattedPhone.startsWith("+") || formattedPhone.length < 11) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid phone number format",
-        });
+        throw new APIError(400, "Invalid phone number format");
       }
 
-      // Look up the user
       const [user] = await db
         .select()
         .from(users)
         .where(eq(users.phoneNumber, formattedPhone))
         .limit(1);
 
-      if (!user) {
-        // Create a temporary user if they don't exist
-        logger.info(
-          `[OTP] Creating temporary user for phone ${formattedPhone}`,
-        );
-        // You may want to implement this differently based on your requirements
-      }
-
-      // Generate a 6-digit OTP
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-      logger.info(`[OTP] Generated OTP for ${formattedPhone}: ${otpCode}`);
-
-      // Store OTP in the database
       if (user) {
         await db
           .update(users)
           .set({
-            lastOtpCode: otpCode,
-            otpExpiry,
+            otp_code: otpCode,
+            otp_expiry: otpExpiry,
           })
           .where(eq(users.phoneNumber, formattedPhone));
       } else {
-        // Create a new user with this phone number and OTP
         await db.insert(users).values({
           username: formattedPhone,
-          password: await authService.hashPassword(otpCode), // Temporary password is the OTP
-          email: `${formattedPhone.substring(1)}@temp.example.com`, // Temporary email
+          password: await authService.hashPassword(otpCode),
+          email: `${formattedPhone.substring(1)}@temp.example.com`,
           role: "customer",
           phoneNumber: formattedPhone,
-          lastOtpCode: otpCode,
-          otpExpiry,
-          kycStatus: "pending",
-        } as typeof users.$inferInsert);
+          otp_code: otpCode,
+          otp_expiry: otpExpiry,
+          kyc_status: "pending",
+        });
       }
 
-      // Send the OTP via SMS
       const smsResult = await smsService.sendSMS(
         formattedPhone,
-        `Your verification code is: ${otpCode}. It will expire in 10 minutes.`,
+        `Your verification code is: ${otpCode}. It will expire in 10 minutes.`
       );
 
       if (!smsResult.success) {
-        logger.error(
-          `[OTP] Failed to send SMS to ${formattedPhone}:`,
-          smsResult.error,
-        );
-        return res.status(500).json({
-          success: false,
-          message: "Failed to send verification code",
-        });
+        throw new APIError(500, "Failed to send verification code");
       }
 
       return res.json({
@@ -319,10 +285,13 @@ router.post(
         message: "OTP sent successfully",
       });
     } catch (error) {
-      logger.error("[OTP] Error sending OTP:", error);
+      logger.error("[OTP] Error sending OTP:", { 
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined
+      });
       next(error);
     }
-  }),
+  })
 );
 
 // Updated contract status route with proper type handling
@@ -332,9 +301,8 @@ router.post(
     const { id } = req.params;
     const { status } = req.body;
 
-    // Validate status
     if (!Object.values(ContractStatus).includes(status)) {
-      return res.status(400).json({ error: "Invalid contract status" });
+      throw new APIError(400, "Invalid contract status");
     }
 
     const [contract] = await db
@@ -344,23 +312,21 @@ router.post(
       .limit(1);
 
     if (!contract) {
-      return res.status(404).json({ error: "Contract not found" });
+      throw new APIError(404, "Contract not found");
     }
-
-    const updates = {
-      status,
-      lastPaymentId: req.body.lastPaymentId || null,
-      lastPaymentStatus: (req.body.lastPaymentStatus as PaymentStatus) || null,
-    };
 
     const [updatedContract] = await db
       .update(contracts)
-      .set(updates)
+      .set({
+        status,
+        payment_id: req.body.lastPaymentId || null,
+        payment_status: req.body.lastPaymentStatus || null,
+      })
       .where(eq(contracts.id, parseInt(id)))
       .returning();
 
     return res.json(updatedContract);
-  }),
+  })
 );
 
 router.get(
@@ -671,7 +637,7 @@ router.post(
               name: companyName,
               role: "merchant",
               phoneNumber,
-              kycStatus: "pending",
+              kyc_status: "pending",
             } as typeof users.$inferInsert)
             .returning();
         }
@@ -898,71 +864,56 @@ router.get(
 // Endpoint to check KYC status
 router.get(
   "/kyc/status",
-  asyncHandler(
-    async (req: RequestWithUser, res: Response, next: NextFunction) => {
-      try {
-        const { userId } = req.query;
+  asyncHandler(async (req: RequestWithUser, res: Response) => {
+    try {
+      const { userId } = req.query;
 
-        if (!userId) {
-          return res.status(400).json({
-            success: false,
-            message: "User ID is required",
-          });
-        }
-
-        const userIdNum = parseInt(userId as string);
-        if (isNaN(userIdNum)) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid user ID format",
-          });
-        }
-
-        // Look up the user's KYC status
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, userIdNum))
-          .limit(1);
-
-        if (!user) {
-          return res.status(404).json({
-            success: false,
-            message: "User not found",
-          });
-        }
-
-        // Get status from Didit service
-        try {
-          const status = await diditService.checkVerificationStatus(userIdNum);
-          console.log("KYC status:", status);
-          return res.json({
-            success: true,
-            status: status || user.kycStatus || "pending",
-            verified: (status || user.kycStatus) === "verified",
-          });
-        } catch (error) {
-          // Fallback to database status if service call fails
-          logger.warn(
-            "[KYC] Error checking remote status, falling back to database status",
-            {
-              userId: userIdNum,
-              error,
-            },
-          );
-
-          return res.json({
-            success: true,
-            status: user.kycStatus || "pending",
-            verified: user.kycStatus === "verified",
-          });
-        }
-      } catch (error) {
-        logger.error("[KYC] Error checking status:", error);
-        next(error);
+      if (!userId) {
+        throw new APIError(400, "User ID is required");
       }
-    },
-  ),
+
+      const userIdNum = parseInt(userId as string);
+      if (isNaN(userIdNum)) {
+        throw new APIError(400, "Invalid user ID format");
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userIdNum))
+        .limit(1);
+
+      if (!user) {
+        throw new APIError(404, "User not found");
+      }
+
+      try {
+        const status = await diditService.checkVerificationStatus(userIdNum);
+        return res.json({
+          success: true,
+          status: status || user.kyc_status || "pending",
+          verified: (status || user.kyc_status) === "verified",
+        });
+      } catch (error) {
+        logger.warn("[KYC] Error checking remote status, falling back to database status", {
+          userId: userIdNum.toString(),
+          error: error instanceof Error ? error.message : "Unknown error"
+        });
+
+        return res.json({
+          success: true,
+          status: user.kyc_status || "pending",
+          verified: user.kyc_status === "verified",
+        });
+      }
+    } catch (error) {
+      logger.error("[KYC] Error checking status:", { 
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      next(error);
+    }
+  })
 );
 
 // Endpoint to start KYC verification
@@ -1120,9 +1071,9 @@ router.post(
             role: "customer",
             phoneNumber: customerDetails.phone,
             plaidAccessToken: null,
-            kycStatus: "pending",
-            lastOtpCode: null,
-            otpExpiry: null,
+            kyc_status: "pending",
+            otp_code: null,
+            otp_expiry: null,
             faceIdHash: null,
           } as typeof users.$inferInsert)
           .returning();
@@ -1158,8 +1109,8 @@ router.post(
             borrowerEmail: customerDetails.email,
             borrowerPhone: customerDetails.phone,
             active: true,
-            lastPaymentId: null,
-            lastPaymentStatus: null,
+            payment_id: null,
+            payment_status: null,
           } as typeof contracts.$inferInsert)
           .returning();
 
@@ -1573,9 +1524,9 @@ router.patch(
         if ("ach_verification_status" in req.body)
           updates.achVerificationStatus = req.body.ach_verification_status;
         if ("last_payment_id" in req.body)
-          updates.lastPaymentId = req.body.last_payment_id;
+          updates.payment_id = req.body.last_payment_id;
         if ("last_payment_status" in req.body)
-          updates.lastPaymentStatus = req.body.last_payment_status;
+          updates.payment_status = req.body.last_payment_status;
 
         const [updatedContract] = await db
           .update(contracts)
@@ -1644,8 +1595,8 @@ router.post(
           .update(contracts)
           .set({
             status: "payment_processing",
-            lastPaymentId: transfer.id,
-            lastPaymentStatus: transfer.status,
+            payment_id: transfer.id,
+            payment_status: transfer.status,
           })
           .where(eq(contracts.id, contractId));
 
@@ -1675,7 +1626,7 @@ router.get(
         const [contract] = await db
           .select()
           .from(contracts)
-          .where(eq(contracts.lastPaymentId, transferId))
+          .where(eq(contracts.payment_id, transferId))
           .limit(1);
 
         if (!contract) {
@@ -1690,7 +1641,7 @@ router.get(
         // Update contract with latest status
         await db
           .update(contracts)
-          .set({ lastPaymentStatus: transfer.status })
+          .set({ payment_status: transfer.status })
           .where(eq(contracts.id, contract.id));
 
         return res.json({

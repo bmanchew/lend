@@ -30,6 +30,9 @@ interface BaseUser {
 // Our custom User interface
 export interface User extends BaseUser {
   password?: string;
+  phoneNumber?: string;
+  lastOtpCode?: string | null;
+  otpExpiry?: Date | null;
 }
 
 // Extend Express.User
@@ -64,7 +67,7 @@ class AuthService {
 
   async generateJWT(user: Express.User): Promise<string> {
     const payload = {
-      id: user.id,
+      id: user.id.toString(), // Convert to string for JWT
       role: user.role,
       email: user.email,
       name: user.name,
@@ -86,20 +89,20 @@ class AuthService {
         throw new AuthError(
           401,
           "Token expired",
-          AUTH_ERROR_CODES.TOKEN_EXPIRED,
+          AUTH_ERROR_CODES.TOKEN_EXPIRED
         );
       }
       if (err instanceof jwt.JsonWebTokenError) {
         throw new AuthError(
           401,
           "Invalid token",
-          AUTH_ERROR_CODES.TOKEN_INVALID,
+          AUTH_ERROR_CODES.TOKEN_INVALID
         );
       }
       throw new AuthError(
         401,
         "Token verification failed",
-        AUTH_ERROR_CODES.UNAUTHORIZED,
+        AUTH_ERROR_CODES.UNAUTHORIZED
       );
     }
   }
@@ -135,7 +138,7 @@ export function setupAuth(app: Express): void {
         sameSite: "none",
       },
       proxy: true,
-    }),
+    })
   );
 
   app.use(passport.initialize());
@@ -164,7 +167,7 @@ export function setupAuth(app: Express): void {
               400,
               "Missing credentials",
               AUTH_ERROR_CODES.MISSING_CREDENTIALS,
-              { requestId },
+              { requestId }
             );
           }
 
@@ -204,8 +207,8 @@ export function setupAuth(app: Express): void {
                   401,
                   "Invalid credentials",
                   AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-                  { requestId },
-                ),
+                  { requestId }
+                )
               );
             }
 
@@ -235,8 +238,8 @@ export function setupAuth(app: Express): void {
                   401,
                   "Invalid or expired verification code",
                   AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-                  { requestId },
-                ),
+                  { requestId }
+                )
               );
             }
 
@@ -258,7 +261,7 @@ export function setupAuth(app: Express): void {
             };
 
             logger.info("[Auth] OTP login successful", {
-              userId: user.id,
+              userId: user.id.toString(),
               role: user.role,
               requestId,
             });
@@ -283,14 +286,14 @@ export function setupAuth(app: Express): void {
                 401,
                 "Invalid credentials",
                 AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-                { requestId },
-              ),
+                { requestId }
+              )
             );
           }
 
           const isValid = await authService.comparePasswords(
             password,
-            user.password,
+            user.password
           );
           if (!isValid) {
             logger.warn("[Auth] Invalid credentials - password mismatch", {
@@ -302,8 +305,8 @@ export function setupAuth(app: Express): void {
                 401,
                 "Invalid credentials",
                 AUTH_ERROR_CODES.INVALID_CREDENTIALS,
-                { requestId },
-              ),
+                { requestId }
+              )
             );
           }
 
@@ -316,7 +319,7 @@ export function setupAuth(app: Express): void {
           };
 
           logger.info("[Auth] Login successful", {
-            userId: user.id,
+            userId: user.id.toString(),
             role: user.role,
             requestId,
           });
@@ -335,11 +338,11 @@ export function setupAuth(app: Express): void {
           return done(
             new AuthError(500, "Authentication failed", "AUTH_FAILED", {
               requestId,
-            }),
+            })
           );
         }
-      },
-    ),
+      }
+    )
   );
 
   passport.serializeUser((user: Express.User, done) => {
@@ -354,7 +357,7 @@ export function setupAuth(app: Express): void {
       .then(([user]) => {
         if (!user) {
           logger.warn("[Auth] User not found during deserialization", {
-            userId: id,
+            userId: id.toString(),
           });
           return done(null, false);
         }
@@ -372,7 +375,7 @@ export function setupAuth(app: Express): void {
       .catch((err) => {
         logger.error("[Auth] Error during user deserialization:", err);
         done(
-          new AuthError(500, "Session error", AUTH_ERROR_CODES.SESSION_EXPIRED),
+          new AuthError(500, "Session error", AUTH_ERROR_CODES.SESSION_EXPIRED)
         );
       });
   });
@@ -396,7 +399,7 @@ export function setupAuth(app: Express): void {
         try {
           const token = await authService.generateJWT(user);
           logger.info("[Auth] Generated JWT token for user:", {
-            userId: user.id,
+            userId: user.id.toString(),
           });
 
           // Use Promise to handle login sequence
@@ -428,7 +431,7 @@ export function setupAuth(app: Express): void {
             });
           }
         }
-      },
+      }
     )(req, res, next);
   });
 
@@ -443,7 +446,9 @@ export function setupAuth(app: Express): void {
         return res.status(401).json({ error: "Authorization token missing" });
       }
       const verifiedUser = authService.verifyJWT(token);
-      logger.info("[Auth] User data retrieved:", { userId: verifiedUser.id });
+      logger.info("[Auth] User data retrieved:", {
+        userId: verifiedUser.id.toString(),
+      });
       res.json(verifiedUser);
     } catch (error) {
       logger.error("[Auth] Error retrieving user data:", error);
