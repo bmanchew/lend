@@ -22,6 +22,15 @@ export const insertUserSchema = z.object({
   phoneNumber: z.string().optional(),
 });
 
+export const KycStatus = {
+  INITIAL: "initial",
+  PENDING: "pending",
+  VERIFIED: "verified",
+  FAILED: "failed",
+} as const;
+
+export type KycStatus = (typeof KycStatus)[keyof typeof KycStatus];
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: varchar("username", { length: 255 }).notNull(),
@@ -31,7 +40,7 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   plaidAccessToken: varchar("plaid_access_token", { length: 255 }),
-  kyc_status: varchar("kyc_status", { length: 50 }),
+  kycStatus: varchar("kyc_status", { length: 50 }),
   phoneNumber: varchar("phone_number", { length: 12 }).unique(),
   lastOtpCode: varchar("last_otp_code", { length: 6 }),
   otpExpiry: timestamp("otp_expiry"),

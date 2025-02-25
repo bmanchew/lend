@@ -33,7 +33,7 @@ import { sendMerchantCredentials } from "./services/email";
 import { LedgerManager } from "./services/ledger-manager";
 import rewardsRoutes from "./routes/rewards";
 import plaidRoutes from "./routes/plaid";
-import underwritingApi from './routes/api/underwriting';
+import underwritingApi from "./routes/api/underwriting";
 import { diditService } from "./services/didit";
 import bodyParser from "body-parser";
 
@@ -142,9 +142,9 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
     req.user = user;
     next();
   } catch (error) {
-    logger.error("Auth middleware error:", { 
+    logger.error("Auth middleware error:", {
       error: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
     });
     next(error);
   }
@@ -209,7 +209,7 @@ router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
 // Mount the API routes before any UI routes
-router.use('/api/underwriting', underwritingApi);
+router.use("/api/underwriting", underwritingApi);
 
 // Protected Routes (JWT Required)
 router.get(
@@ -235,7 +235,10 @@ router.post(
       let formattedPhone = phoneNumber.replace(/\D/g, "");
       if (formattedPhone.length === 10) {
         formattedPhone = `+1${formattedPhone}`;
-      } else if (formattedPhone.length === 11 && formattedPhone.startsWith("1")) {
+      } else if (
+        formattedPhone.length === 11 &&
+        formattedPhone.startsWith("1")
+      ) {
         formattedPhone = `+${formattedPhone}`;
       }
 
@@ -256,8 +259,8 @@ router.post(
         await db
           .update(users)
           .set({
-            otp_code: otpCode,
-            otp_expiry: otpExpiry,
+            lastOtpCode: otpCode,
+            otpExpiry: otpExpiry,
           })
           .where(eq(users.phoneNumber, formattedPhone));
       } else {
@@ -267,15 +270,15 @@ router.post(
           email: `${formattedPhone.substring(1)}@temp.example.com`,
           role: "customer",
           phoneNumber: formattedPhone,
-          otp_code: otpCode,
-          otp_expiry: otpExpiry,
+          lastOtpCode: otpCode,
+          otpExpiry: otpExpiry,
           kyc_status: "pending",
         });
       }
 
       const smsResult = await smsService.sendSMS(
         formattedPhone,
-        `Your verification code is: ${otpCode}. It will expire in 10 minutes.`
+        `Your verification code is: ${otpCode}. It will expire in 10 minutes.`,
       );
 
       if (!smsResult.success) {
@@ -287,13 +290,25 @@ router.post(
         message: "OTP sent successfully",
       });
     } catch (error) {
-      logger.error("[OTP] Error sending OTP:", { 
+      logger.error("[OTP] Error sending OTP:", {
         error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
       });
-      next(error);
+
+      // Handle the error directly
+      if (error instanceof APIError) {
+        return res.status(error.status).json({
+          success: false,
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "An unexpected error occurred",
+      });
     }
-  })
+  }),
 );
 
 // Updated contract status route with proper type handling
@@ -328,7 +343,7 @@ router.post(
       .returning();
 
     return res.json(updatedContract);
-  })
+  }),
 );
 
 router.get(
@@ -897,10 +912,13 @@ router.get(
           verified: (status || user.kyc_status) === "verified",
         });
       } catch (error) {
-        logger.warn("[KYC] Error checking remote status, falling back to database status", {
-          userId: userIdNum.toString(),
-          error: error instanceof Error ? error.message : "Unknown error"
-        });
+        logger.warn(
+          "[KYC] Error checking remote status, falling back to database status",
+          {
+            userId: userIdNum.toString(),
+            error: error instanceof Error ? error.message : "Unknown error",
+          },
+        );
 
         return res.json({
           success: true,
@@ -909,30 +927,59 @@ router.get(
         });
       }
     } catch (error) {
-      logger.error("[KYC] Error checking status:", { 
+      logger.error("[KYC] Error checking status:", {
         error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
       });
       next(error);
     }
-  })
+  }),
 );
 
 // Endpoint to start KYC verification
+// Route handler for starting verification (/api/kyc/start)
 router.post(
   "/kyc/start",
   asyncHandler(
     async (req: RequestWithUser, res: Response, next: NextFunction) => {
       try {
-        if (!req.user?.id) {
+        const userId = req.user?.id || req.body.userId;
+        if (!userId) {
           return res.status(401).json({
             success: false,
             message: "Authentication required",
           });
         }
 
-        const userId = req.user.id;
         const { platform = "web", redirectUrl } = req.body;
+
+        // Check current status first
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        // If already verified or pending, don't start a new session
+        if (
+          user &&
+          (user.kycStatus === "verified" || user.kycStatus === "pending")
+        ) {
+          logger.info(
+            "[KYC] Skipping verification - user already has status:",
+            {
+              userId,
+              currentStatus: user.kycStatus,
+            },
+          );
+
+          return res.json({
+            success: true,
+            message: `User already has status: ${user.kycStatus}`,
+            alreadyVerified: user.kycStatus === "verified",
+            currentStatus: user.kycStatus,
+          });
+        }
 
         logger.info("[KYC] Starting verification process", {
           userId,
@@ -961,6 +1008,28 @@ router.post(
   ),
 );
 
+// Add verification sessions endpoint for admin dashboard
+router.get(
+  "/api/kyc/sessions",
+  asyncHandler(async (req: RequestWithUser, res: Response) => {
+    try {
+      if (!req.user || req.user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const sessions = await db
+        .select()
+        .from(verificationSessions)
+        .orderBy(desc(verificationSessions.createdAt));
+
+      return res.json(sessions);
+    } catch (error) {
+      logger.error("[KYC] Error fetching sessions:", error);
+      return res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  }),
+);
+
 router.use(
   "/api/kyc/webhook",
   bodyParser.json({
@@ -977,71 +1046,74 @@ router.use(
 router.use(bodyParser.json());
 
 // Webhook endpoint to receive updates from Didit
-router.post("/kyc/webhook", asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    // Use the correct header names that Didit is actually sending
-    const signature = req.headers["x-signature"] as string;
-    const timestamp = req.headers["x-timestamp"] as string;
-    const requestBody = JSON.stringify(req.body);
+router.post(
+  "/kyc/webhook",
+  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Use the correct header names that Didit is actually sending
+      const signature = req.headers["x-signature"] as string;
+      const timestamp = req.headers["x-timestamp"] as string;
+      const requestBody = JSON.stringify(req.body);
 
-    logger.info("[KYC] Received webhook", {
-      hasSignature: !!signature,
-      hasTimestamp: !!timestamp,
-      sessionId: req.body.session_id,
-      status: req.body.status
-    });
-
-    if (!signature || !timestamp) {
-      logger.error('[KYC] Missing webhook headers or body', {
-        headers: req.headers,
-        bodyLength: Object.keys(req.body).length
+      logger.info("[KYC] Received webhook", {
+        hasSignature: !!signature,
+        hasTimestamp: !!timestamp,
+        sessionId: req.body.session_id,
+        status: req.body.status,
       });
-      return res.status(200).json({ 
-        received: true,
-        error: 'Missing required headers'
-      });
-    }
 
-    // Verify webhook signature - you may need to update this function as well
-    // to use the correct header names
-    const isValidSignature = diditService.verifyWebhookSignature(
-      requestBody, 
-      signature, 
-      timestamp
-    );
+      if (!signature || !timestamp) {
+        logger.error("[KYC] Missing webhook headers or body", {
+          headers: req.headers,
+          bodyLength: Object.keys(req.body).length,
+        });
+        return res.status(200).json({
+          received: true,
+          error: "Missing required headers",
+        });
+      }
 
-    if (!isValidSignature) {
-      logger.error("[KYC] Invalid webhook signature", {
+      // Verify webhook signature - you may need to update this function as well
+      // to use the correct header names
+      const isValidSignature = diditService.verifyWebhookSignature(
+        requestBody,
         signature,
         timestamp,
-        body: req.body
+      );
+
+      if (!isValidSignature) {
+        logger.error("[KYC] Invalid webhook signature", {
+          signature,
+          timestamp,
+          body: req.body,
+        });
+        // Still return 200 to acknowledge receipt
+        return res.status(200).json({
+          received: true,
+          error: "Invalid signature",
+        });
+      }
+
+      logger.info("[KYC] Received valid webhook", {
+        sessionId: req.body.session_id,
+        status: req.body.status,
       });
-      // Still return 200 to acknowledge receipt
-      return res.status(200).json({ 
+
+      // Process the webhook asynchronously
+      await diditService.processWebhook(req.body);
+
+      // Return 200 immediately to acknowledge receipt
+      return res.status(200).json({ received: true });
+    } catch (error) {
+      logger.error("[KYC] Error processing webhook:", error);
+      // Still return 200 to avoid webhook retries (we handle retries ourselves)
+      return res.status(200).json({
         received: true,
-        error: 'Invalid signature'
+        error: "Error processing webhook",
       });
     }
-
-    logger.info("[KYC] Received valid webhook", {
-      sessionId: req.body.session_id,
-      status: req.body.status
-    });
-
-    // Process the webhook asynchronously
-    await diditService.processWebhook(req.body);
-
-    // Return 200 immediately to acknowledge receipt
-    return res.status(200).json({ received: true });
-  } catch (error) {
-    logger.error('[KYC] Error processing webhook:', error);
-    // Still return 200 to avoid webhook retries (we handle retries ourselves)
-    return res.status(200).json({ 
-      received: true,
-      error: 'Error processing webhook'
-    });
-  }
-}));
+  }),
+);
 
 router.get("/kyc/test", (req, res) => {
   res.json({ message: "KYC endpoint is working!" });
@@ -1103,7 +1175,8 @@ router.post(
             term: term,
             interestRate: interestRate.toString(),
             downPayment: downPayment.toString(),
-            monthlyPayment: monthlyPayment.toString(),totalInterest: totalInterest.toString(),
+            monthlyPayment: monthlyPayment.toString(),
+            totalInterest: totalInterest.toString(),
             status: "pending_review",
             notes: notes,
             underwritingStatus: "pending",

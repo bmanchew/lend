@@ -7,9 +7,14 @@ import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import type { SelectContract } from "@db/schema";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DebitCardForm } from '@/components/payment/debit-card-form';
+import { SelectContract, KycStatus } from "@db/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DebitCardForm } from "@/components/payment/debit-card-form";
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
@@ -19,11 +24,19 @@ export default function CustomerDashboard() {
 
   // Check if KYC is needed on first load
   useEffect(() => {
-    if (user && user.role === 'customer') {
-      const needsKyc = !user.kycStatus || 
-                      user.kycStatus === 'initial' || 
-                      user.kycStatus === 'failed' ||
-                      user.kycStatus === 'pending';
+    if (user && user.role === "customer") {
+      console.log("[CustomerDashboard] User KYC status:", user.kycStatus);
+
+      // Only show verification if:
+      // - No status exists
+      // - Status is initial or failed
+      // - Don't include pending as this will create a loop for users waiting for verification
+      const needsKyc =
+        !user.kycStatus ||
+        user.kycStatus === KycStatus.INITIAL ||
+        user.kycStatus === KycStatus.FAILED;
+
+      console.log("[CustomerDashboard] Needs KYC verification:", needsKyc);
 
       if (needsKyc) {
         setShowKycModal(true);
@@ -35,33 +48,43 @@ export default function CustomerDashboard() {
     queryKey: [`/api/customers/${user?.id}/contracts`],
   });
 
-  const hasActiveContract = contracts?.some(c => c.status === "active");
+  const hasActiveContract = contracts?.some((c) => c.status === "active");
 
   return (
     <PortalLayout>
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight">Welcome back, {user?.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Welcome back, {user?.name}
+        </h1>
 
-        <KycVerificationModal 
-          isOpen={showKycModal} 
+        <KycVerificationModal
+          isOpen={showKycModal}
           onClose={() => setShowKycModal(false)}
-          onVerificationComplete={() => setShowKycModal(false)}
+          onVerificationComplete={() => {
+            setShowKycModal(false);
+            // If you've added refetchUser to your auth context
+            // you can refresh user data here
+            // refetchUser?.();
+          }}
         />
 
-        {user?.kycStatus === 'pending' && (
+        {user?.kycStatus === KycStatus.PENDING && (
           <Card className="bg-yellow-50 border-yellow-200">
             <CardHeader>
-              <CardTitle className="text-yellow-800">Verification in Progress</CardTitle>
+              <CardTitle className="text-yellow-800">
+                Verification in Progress
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-yellow-700">
-                Your identity verification is being processed. This usually takes 1-2 business days.
+                Your identity verification is being processed. This usually
+                takes 1-2 business days.
               </p>
             </CardContent>
           </Card>
         )}
 
-        {!hasActiveContract && user?.kycStatus === 'verified' && (
+        {!hasActiveContract && user?.kycStatus === KycStatus.VERIFIED && (
           <Card>
             <CardHeader>
               <CardTitle>Loan Offer</CardTitle>
@@ -75,24 +98,34 @@ export default function CustomerDashboard() {
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Loan Amount</p>
-                        <p className="text-2xl font-bold">${contracts?.[0]?.amount?.toString() || "0.00"}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Loan Amount
+                        </p>
+                        <p className="text-2xl font-bold">
+                          ${contracts?.[0]?.amount?.toString() || "0.00"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Term Length</p>
+                        <p className="text-sm text-muted-foreground">
+                          Term Length
+                        </p>
                         <p className="text-2xl font-bold">36 Months</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Interest Rate</p>
+                        <p className="text-sm text-muted-foreground">
+                          Interest Rate
+                        </p>
                         <p className="text-2xl font-bold">24.99% APR</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Down Payment</p>
+                        <p className="text-sm text-muted-foreground">
+                          Down Payment
+                        </p>
                         <p className="text-2xl font-bold">5%</p>
                       </div>
                     </div>
-                    <Button 
-                      className="w-full mt-6" 
+                    <Button
+                      className="w-full mt-6"
                       onClick={() => {
                         if (contracts?.[0]?.id) {
                           setShowBankLink(true);
@@ -109,7 +142,8 @@ export default function CustomerDashboard() {
                       onSuccess={() => {
                         toast({
                           title: "Success",
-                          description: "Bank account linked and payment processed successfully"
+                          description:
+                            "Bank account linked and payment processed successfully",
                         });
                         window.location.reload();
                       }}
@@ -130,7 +164,8 @@ export default function CustomerDashboard() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold">
-                    {contracts?.filter(c => c.status === "active").length ?? 0}
+                    {contracts?.filter((c) => c.status === "active").length ??
+                      0}
                   </p>
                 </CardContent>
               </Card>
@@ -160,8 +195,11 @@ export default function CustomerDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {contracts?.map(contract => (
-                    <div key={contract.id} className="flex items-center justify-between p-2 border rounded">
+                  {contracts?.map((contract) => (
+                    <div
+                      key={contract.id}
+                      className="flex items-center justify-between p-2 border rounded"
+                    >
                       <div>
                         <p className="font-medium">Loan #{contract.id}</p>
                         <p className="text-sm text-muted-foreground">

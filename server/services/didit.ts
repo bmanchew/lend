@@ -1,4 +1,9 @@
-import { users, verificationSessions, webhookEvents } from "@db/schema";
+import {
+  users,
+  verificationSessions,
+  webhookEvents,
+  KycStatus,
+} from "@db/schema";
 import { db } from "@db";
 import { eq, and, lt, desc } from "drizzle-orm";
 import axios from "axios";
@@ -320,8 +325,10 @@ class DiditService {
   //   }
   // }
 
+  // In diditService.ts - Update processWebhook function
+
   async processWebhook(payload: DiditWebhookPayload): Promise<void> {
-    const { session_id, status, vendor_data, decision } = payload;
+    const { session_id, status, vendor_data } = payload;
 
     console.log("[DiditService] Processing webhook", {
       sessionId: session_id,
@@ -332,9 +339,8 @@ class DiditService {
     try {
       // Store the webhook event
       await db.insert(webhookEvents).values({
-        id: undefined,
-        sessionId: session_id,
         eventType: status,
+        sessionId: session_id,
         status: "pending",
         payload: JSON.stringify(payload),
         createdAt: new Date(),
@@ -357,22 +363,12 @@ class DiditService {
         });
       }
 
-      // Normalize status for case-insensitive comparison
-      const normStatus = status.toLowerCase();
-      console.log("[DiditService] Normalized status", {
-        original: status,
-        normalized: normStatus,
-      });
-
       // Update verification session
       await db
         .update(verificationSessions)
         .set({
           status,
           updatedAt: new Date(),
-          documentData: decision?.kyc?.document_data
-            ? JSON.stringify(decision.kyc.document_data)
-            : null,
         })
         .where(eq(verificationSessions.sessionId, session_id));
 
@@ -381,77 +377,28 @@ class DiditService {
         status,
       });
 
-      // Update user KYC status if final status received - IMPORTANT: case-insensitive comparison
-      if (normStatus === "approved" || normStatus === "declined") {
+      // Update user KYC status if final status received
+      if (status === "Approved" || status === "Declined") {
         if (userId && !isNaN(userId)) {
+          // Map Didit status to our internal status
           const newKycStatus =
-            normStatus === "approved" ? "verified" : "failed";
+            status === "Approved" ? KycStatus.VERIFIED : KycStatus.FAILED;
 
           console.log("[DiditService] Updating user KYC status", {
             userId,
             newStatus: newKycStatus,
           });
 
-          // DIRECT USER UPDATE (KEY CHANGE)
-          try {
-            const [user] = await db
-              .select()
-              .from(users)
-              .where(eq(users.id, userId))
-              .limit(1);
+          await db
+            .update(users)
+            .set({ kycStatus: newKycStatus })
+            .where(eq(users.id, userId));
 
-            if (user) {
-              console.log("[DiditService] Found user for KYC status update", {
-                userId,
-                currentStatus: user.kycStatus,
-                newStatus: newKycStatus,
-              });
-
-              const [updatedUser] = await db
-                .update(users)
-                .set({
-                  kycStatus: newKycStatus,
-                })
-                .where(eq(users.id, userId))
-                .returning();
-
-              console.log(
-                "[DiditService] User KYC status updated successfully",
-                {
-                  userId,
-                  oldStatus: user.kycStatus,
-                  newStatus: updatedUser.kycStatus,
-                },
-              );
-            } else {
-              console.error(
-                "[DiditService] User not found for KYC status update",
-                {
-                  userId,
-                },
-              );
-            }
-          } catch (userUpdateError) {
-            console.error("[DiditService] Failed to update user KYC status", {
-              userId,
-              error: userUpdateError,
-            });
-          }
-        } else {
-          console.error(
-            "[DiditService] Missing or invalid userId in vendor_data",
-            {
-              vendorData: vendor_data,
-            },
-          );
+          console.log("[DiditService] User KYC status updated successfully", {
+            userId,
+            newStatus: newKycStatus,
+          });
         }
-      } else {
-        console.log(
-          "[DiditService] Not updating user KYC status - status is not final",
-          {
-            status: normStatus,
-          },
-        );
       }
 
       // Mark webhook as processed
@@ -467,11 +414,7 @@ class DiditService {
         sessionId: session_id,
       });
     } catch (error) {
-      console.error("[DiditService] Error processing webhook:", {
-        error,
-        sessionId: session_id,
-      });
-      await this.scheduleWebhookRetry(session_id);
+      console.error("[DiditService] Error processing webhook:", error);
       throw error;
     }
   }

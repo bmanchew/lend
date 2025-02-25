@@ -15,7 +15,7 @@ interface VerificationSession {
   id: number;
   userId: number;
   sessionId: string;
-  status: string;
+  status: string; 
   features: string;
   createdAt: string;
   updatedAt: string;

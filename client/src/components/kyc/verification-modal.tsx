@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMobile } from "@/hooks/use-mobile";
+import { KycStatus } from "@db/schema";
 
 interface VerificationModalProps {
   isOpen: boolean;
@@ -26,18 +27,14 @@ export function KycVerificationModal({
   const { user } = useAuth();
   const userId = user?.id;
   const isMobile = useMobile();
-
-  // Log user info for debugging
-  console.log("[KYC Modal] User info:", { userId, user });
   const [verificationStarted, setVerificationStarted] = useState(false);
 
   // Platform detection
   const platform = isMobile ? "mobile" : "web";
-  console.log("[KYC Modal] Platform detection:", {
-    isMobile,
-    platform,
-    userAgent: navigator.userAgent,
-    vendor: navigator.vendor,
+  console.log("[KYC Modal] User info:", {
+    userId,
+    user,
+    kycStatus: user?.kycStatus,
   });
 
   const { data: kycData, refetch: refetchStatus } = useQuery({
@@ -67,6 +64,12 @@ export function KycVerificationModal({
         throw new Error("User ID is required");
       }
 
+      // Don't start verification if user is already verified or pending
+      if (user?.kycStatus === "verified" || user?.kycStatus === "pending") {
+        console.log("[KYC Modal] User already has status:", user.kycStatus);
+        return null;
+      }
+
       try {
         // Add redirectUrl to direct users back to the dashboard after verification
         const redirectUrl = window.location.origin + "/customer/dashboard";
@@ -81,7 +84,7 @@ export function KycVerificationModal({
             userId,
             platform,
             userAgent: navigator.userAgent,
-            redirectUrl, // Add this parameter
+            redirectUrl,
           }),
         });
 
@@ -91,7 +94,19 @@ export function KycVerificationModal({
         }
 
         const data = await response.json();
-        console.log("[KYC Modal] Received verification URL:", data);
+        console.log("[KYC Modal] Received verification response:", data);
+
+        // If user is already verified, just return success without redirecting
+        if (
+          data.alreadyVerified ||
+          data.currentStatus === "verified" ||
+          data.currentStatus === "pending"
+        ) {
+          console.log(
+            "[KYC Modal] User already verified or pending, no redirect needed",
+          );
+          return null;
+        }
 
         if (!data.verificationUrl) {
           throw new Error("No verification URL provided");
@@ -109,56 +124,78 @@ export function KycVerificationModal({
       }
     },
     onSuccess: (verificationUrl) => {
-      console.log("[KYC Modal] Redirecting to:", verificationUrl);
-      window.location.href = verificationUrl;
+      if (verificationUrl) {
+        console.log("[KYC Modal] Redirecting to:", verificationUrl);
+        window.location.href = verificationUrl;
+      } else {
+        console.log(
+          "[KYC Modal] No redirect needed - user already verified or pending",
+        );
+        // User is already verified or pending
+        if (user?.kycStatus === "verified") {
+          toast({
+            title: "Verification Complete",
+            description: "Your identity has been verified successfully.",
+          });
+        } else if (user?.kycStatus === "pending") {
+          toast({
+            title: "Verification in Progress",
+            description: "Your verification is already in progress.",
+          });
+        }
+        onVerificationComplete?.();
+      }
     },
   });
 
-  // Update the useEffect to handle the verification flow
+  // Streamlined verification flow
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !userId) return;
 
-    console.log("[KYC Modal] Modal opened:", {
-      isMobile,
-      platform,
-      status: kycData?.status,
-      userId,
-      verificationStarted,
-    });
+    console.log("[KYC Modal] Modal opened - current status:", user?.kycStatus);
 
-    if (!userId) {
-      console.error("[KYC Modal] No user ID available");
+    // Handle already verified or pending users
+    if (user?.kycStatus === "verified") {
+      console.log("[KYC Modal] User already verified - closing modal");
       toast({
-        title: "Verification Error",
-        description: "User ID not found. Please try logging in again.",
-        variant: "destructive",
+        title: "Verification Complete",
+        description: "Your identity has been verified successfully.",
       });
+      onVerificationComplete?.();
       return;
     }
 
-    const initializeVerification = async () => {
-      if (verificationStarted) return;
+    if (user?.kycStatus === "pending") {
+      console.log(
+        "[KYC Modal] User already has pending verification - showing pending status",
+      );
+      // Keep modal open to show pending status
+      return;
+    }
 
-      try {
-        setVerificationStarted(true);
-        await startVerification.mutateAsync();
-      } catch (error: any) {
-        console.error("[KYC Modal] Failed to initialize verification:", error);
-        setVerificationStarted(false);
-      }
-    };
+    // Start verification if not already started
+    if (!verificationStarted) {
+      console.log("[KYC Modal] Starting verification process");
+      setVerificationStarted(true);
+      startVerification.mutate();
+    }
+  }, [isOpen, userId, user?.kycStatus]);
 
-    if (!kycData?.status || kycData?.status === "not_started") {
-      initializeVerification();
-    } else if (kycData?.status === "Approved") {
-      console.log("[KYC Modal] User already verified");
+  // Monitor for completion from webhook updates
+  useEffect(() => {
+    if (!kycData) return;
+
+    console.log("[KYC Modal] KYC status update:", kycData);
+
+    if (kycData.status === "verified" || kycData.status === "Approved") {
+      console.log("[KYC Modal] Verification completed successfully");
       toast({
         title: "Verification Complete",
         description: "Your identity has been verified successfully.",
       });
       onVerificationComplete?.();
     }
-  }, [isOpen, kycData?.status, userId]);
+  }, [kycData]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -171,6 +208,11 @@ export function KycVerificationModal({
             {!userId ? (
               <p className="text-sm text-red-500">
                 User ID not found. Please try logging in again.
+              </p>
+            ) : user?.kycStatus === "pending" ? (
+              <p className="text-sm text-amber-500">
+                Your verification is in progress. We'll notify you when it's
+                complete.
               </p>
             ) : startVerification.isPending ? (
               <div className="flex items-center space-x-2">
