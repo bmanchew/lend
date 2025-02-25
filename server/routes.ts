@@ -33,10 +33,9 @@ import { sendMerchantCredentials } from "./services/email";
 import { LedgerManager } from "./services/ledger-manager";
 import rewardsRoutes from "./routes/rewards";
 import plaidRoutes from "./routes/plaid";
-import underwritingRoutes from "./routes/underwriting";
+import underwritingApi from './routes/api/underwriting';
 import { diditService } from "./services/didit";
 import bodyParser from "body-parser";
-import underwritingApi from './routes/api/underwriting';
 
 // Updated type declarations for better type safety
 interface RequestWithUser extends Request {
@@ -1104,8 +1103,7 @@ router.post(
             term: term,
             interestRate: interestRate.toString(),
             downPayment: downPayment.toString(),
-            monthlyPayment: monthlyPayment.toString(),
-            totalInterest: totalInterest.toString(),
+            monthlyPayment: monthlyPayment.toString(),totalInterest: totalInterest.toString(),
             status: "pending_review",
             notes: notes,
             underwritingStatus: "pending",
@@ -1200,7 +1198,8 @@ router.patch(
 
 router.use("/rewards", rewardsRoutes);
 router.use("/plaid", plaidRoutes);
-router.use('/underwriting', underwritingRoutes);
+// Note: Old underwriting route removed to prevent conflicts
+// router.use('/underwriting', underwritingRoutes);
 
 router.post(
   "/merchants/:id/send-loan-application",

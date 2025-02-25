@@ -14,6 +14,8 @@ interface IncomeAnalysis {
   incomeStability: number;
   lastPaymentDate: Date;
   incomeSources: string[];
+  annualIncome: number;
+  incomeScore: number;
 }
 
 interface ExpenseAnalysis {
@@ -21,6 +23,7 @@ interface ExpenseAnalysis {
   largestExpenseCategory: string;
   recurringExpenses: number;
   debtObligations: number;
+  dtiScore: number;
 }
 
 interface AssetMetrics {
@@ -28,6 +31,8 @@ interface AssetMetrics {
   averageBalance: number;
   lowestBalance: number;
   balanceStability: number;
+  housingStatus: string;
+  housingScore: number;
 }
 
 interface UnderwritingMetrics {
@@ -37,6 +42,12 @@ interface UnderwritingMetrics {
   riskFactors: string[];
   recommendedMaxPayment: number;
   assetMetrics?: AssetMetrics;
+  employmentScore: number;
+  annualIncome: number;
+  dtiScore: number;
+  totalScore: number;
+  tier: string;
+  isQualified: boolean;
 }
 
 class BankAnalysisService {
@@ -45,7 +56,6 @@ class BankAnalysisService {
       const transactions = await PlaidService.getTransactions(accessToken);
       const income = transactions.filter((t: Transaction) => t.amount > 0);
 
-      // Group by source for income stability analysis
       const incomeBySource = income.reduce((acc: {[key: string]: number[]}, t: Transaction) => {
         const source = t.merchant_name || t.name || 'Unknown';
         acc[source] = acc[source] || [];
@@ -53,18 +63,25 @@ class BankAnalysisService {
         return acc;
       }, {});
 
-      const stableIncomeSources = Object.entries(incomeBySource)
-        .filter(([_, amounts]) => amounts.length >= 2) // At least 2 payments
-        .map(([source]) => source);
+      const monthlyIncome = this.calculateAverageMonthly(income);
+      const annualIncome = monthlyIncome * 12;
 
-      const result = {
-        averageMonthlyIncome: this.calculateAverageMonthly(income),
+      // Score income based on documented thresholds
+      let incomeScore = 1;
+      if (annualIncome >= 100000) incomeScore = 5;
+      else if (annualIncome >= 75000) incomeScore = 4;
+      else if (annualIncome >= 50000) incomeScore = 3;
+      else if (annualIncome >= 35000) incomeScore = 2;
+      else incomeScore = 1;
+
+      return {
+        averageMonthlyIncome: monthlyIncome,
+        annualIncome,
+        incomeScore,
         incomeStability: this.calculateStability(income.map(t => t.amount)),
         lastPaymentDate: new Date(income[0]?.date || Date.now()),
-        incomeSources: stableIncomeSources
+        incomeSources: Object.keys(incomeBySource)
       };
-
-      return result;
     } catch (error) {
       logger.error("Error analyzing income:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -82,14 +99,25 @@ class BankAnalysisService {
         )
       );
 
-      const result = {
-        averageMonthlyExpenses: this.calculateAverageMonthly(expenses),
+      const monthlyExpenses = this.calculateAverageMonthly(expenses);
+      const monthlyDebtObligations = this.calculateAverageMonthly(debtPayments);
+
+      // Calculate DTI score based on documented thresholds
+      const dti = (monthlyDebtObligations / monthlyExpenses) * 100;
+      let dtiScore = 1;
+      if (dti < 15) dtiScore = 5;
+      else if (dti <= 20) dtiScore = 4;
+      else if (dti <= 35) dtiScore = 3;
+      else if (dti <= 45) dtiScore = 2;
+      else dtiScore = 1;
+
+      return {
+        averageMonthlyExpenses: monthlyExpenses,
         largestExpenseCategory: this.findLargestCategory(expenses),
         recurringExpenses: this.identifyRecurring(expenses),
-        debtObligations: Math.abs(this.calculateAverageMonthly(debtPayments))
+        debtObligations: Math.abs(monthlyDebtObligations),
+        dtiScore
       };
-
-      return result;
     } catch (error) {
       logger.error("Error analyzing expenses:", { error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -103,6 +131,7 @@ class BankAnalysisService {
 
       let totalAssets = 0;
       let balances: number[] = [];
+      let housingStatus = 'Renting'; // Default assumption
 
       report.items.forEach(item => {
         item.accounts.forEach(account => {
@@ -112,6 +141,10 @@ class BankAnalysisService {
               balances.push(balance.current);
             });
           }
+          // Detect housing status from account types
+          if (account.type === 'loan' && account.subtype === 'mortgage') {
+            housingStatus = 'Owns Home (With Mortgage)';
+          }
         });
       });
 
@@ -119,11 +152,20 @@ class BankAnalysisService {
       const lowestBalance = Math.min(...balances);
       const balanceStability = this.calculateStability(balances);
 
+      // Score housing status based on documented criteria
+      let housingScore = 3; // Default for renting
+      if (housingStatus === 'Owns Home (No Mortgage)') housingScore = 5;
+      else if (housingStatus === 'Owns Home (With Mortgage)') housingScore = 4;
+      else if (housingStatus === 'Living with friends or family') housingScore = 2;
+      else if (housingStatus === 'Other') housingScore = 1;
+
       return {
         totalAssets,
         averageBalance,
         lowestBalance,
-        balanceStability
+        balanceStability,
+        housingStatus,
+        housingScore
       };
     } catch (error) {
       logger.error("Error analyzing assets:", { error: error instanceof Error ? error.message : String(error) });
@@ -142,39 +184,60 @@ class BankAnalysisService {
       const monthlyIncome = income.averageMonthlyIncome;
       const totalDebtObligations = expenses.debtObligations + proposedPayment;
       const dti = (totalDebtObligations / monthlyIncome) * 100;
-
       const disposableIncome = monthlyIncome - expenses.averageMonthlyExpenses;
-      const hasStableIncome = income.incomeStability > 75 && income.incomeSources.length > 0;
 
+      // Calculate employment score based on income stability
+      let employmentScore = 1;
+      if (income.incomeStability > 90) employmentScore = 5;
+      else if (income.incomeStability > 80) employmentScore = 4;
+      else if (income.incomeStability > 70) employmentScore = 3;
+      else if (income.incomeStability > 60) employmentScore = 2;
+
+      // Risk factors based on documented criteria
       const riskFactors = [];
-      if (dti > 43) riskFactors.push('DTI ratio too high');
-      if (!hasStableIncome) riskFactors.push('Unstable income');
+      if (income.annualIncome < 35000) riskFactors.push('Annual income below minimum threshold');
+      if (dti > 45) riskFactors.push('DTI ratio too high');
       if (disposableIncome < proposedPayment * 1.5) riskFactors.push('Insufficient disposable income');
+      if (assets.totalAssets < proposedPayment * 3) riskFactors.push('Insufficient asset reserves');
+      if (assets.balanceStability < 60) riskFactors.push('Unstable account balances');
+      if (assets.lowestBalance < proposedPayment) riskFactors.push('Low balance history');
 
-      // Asset-based risk factors
-      if (assets.totalAssets < proposedPayment * 3) {
-        riskFactors.push('Insufficient asset reserves');
-      }
-      if (assets.balanceStability < 60) {
-        riskFactors.push('Unstable account balances');
-      }
-      if (assets.lowestBalance < proposedPayment) {
-        riskFactors.push('Low balance history');
-      }
+      // Calculate total score
+      const scores = [
+        income.incomeScore,
+        employmentScore,
+        5, // Credit score placeholder (should be integrated with credit reporting service)
+        expenses.dtiScore,
+        assets.housingScore,
+        5  // Delinquency history placeholder (should be integrated with credit reporting service)
+      ];
+      const totalScore = scores.reduce((sum, score) => sum + score, 0);
+
+      // Determine tier based on total score
+      let tier = 'Tier 4';
+      if (totalScore >= 25) tier = 'Tier 1';
+      else if (totalScore >= 18) tier = 'Tier 2';
+      else if (totalScore >= 12) tier = 'Tier 3';
 
       // Calculate recommended max payment based on both income and assets
       const recommendedMaxPayment = Math.min(
-        (monthlyIncome * 0.28) - expenses.debtObligations, // Traditional DTI-based limit
-        assets.totalAssets * 0.1 // Asset-based limit (10% of total assets)
+        (monthlyIncome * 0.28) - expenses.debtObligations,
+        assets.totalAssets * 0.1
       );
 
       return {
         debtToIncomeRatio: parseFloat(dti.toFixed(2)),
         disposableIncome: parseFloat(disposableIncome.toFixed(2)),
-        hasStableIncome,
+        hasStableIncome: income.incomeStability > 75,
         riskFactors,
         recommendedMaxPayment: Math.max(0, parseFloat(recommendedMaxPayment.toFixed(2))),
-        assetMetrics: assets
+        assetMetrics: assets,
+        employmentScore,
+        annualIncome: income.annualIncome,
+        dtiScore: expenses.dtiScore,
+        totalScore,
+        tier,
+        isQualified: income.annualIncome >= 35000 && totalScore >= 12
       };
     } catch (error) {
       logger.error("Error calculating underwriting metrics:", { error: error instanceof Error ? error.message : String(error) });

@@ -5,6 +5,9 @@ import { z } from 'zod';
 
 const router = Router();
 
+// Log version on module load
+logger.info('Initializing Underwriting API v2 with enhanced scoring system');
+
 // Validation schemas
 const underwritingRequestSchema = z.object({
   accessToken: z.string(),
@@ -22,31 +25,56 @@ const loanApplicationSchema = z.object({
 // Main underwriting analysis endpoint
 router.post('/analyze', async (req, res) => {
   try {
-    const { accessToken, proposedPayment } = underwritingRequestSchema.parse(req.body);
-
-    logger.info('Starting underwriting analysis', {
-      proposedPayment,
+    logger.info('Starting underwriting analysis with enhanced scoring', {
       timestamp: new Date().toISOString()
     });
 
-    const [income, expenses, metrics] = await Promise.all([
-      bankAnalysisService.analyzeIncome(accessToken),
-      bankAnalysisService.analyzeExpenses(accessToken),
-      bankAnalysisService.calculateUnderwritingMetrics(accessToken, proposedPayment)
-    ]);
+    const { accessToken, proposedPayment } = underwritingRequestSchema.parse(req.body);
+
+    const metrics = await bankAnalysisService.calculateUnderwritingMetrics(accessToken, proposedPayment);
 
     logger.info('Completed underwriting analysis', {
-      dti: metrics.debtToIncomeRatio,
-      hasStableIncome: metrics.hasStableIncome,
-      riskFactorCount: metrics.riskFactors.length
+      tier: metrics.tier,
+      totalScore: metrics.totalScore,
+      isQualified: metrics.isQualified
     });
 
     res.json({
-      income,
-      expenses,
-      metrics,
-      timestamp: new Date().toISOString(),
-      isApproved: metrics.riskFactors.length === 0 && metrics.debtToIncomeRatio <= 43
+      status: metrics.isQualified ? 'qualified' : 'not_qualified',
+      underwriting: {
+        tier: metrics.tier,
+        totalScore: metrics.totalScore,
+        factorScores: {
+          income: metrics.assetMetrics?.incomeScore || 0,
+          employment: metrics.employmentScore,
+          credit: 5, // Placeholder
+          dti: metrics.expenses?.dtiScore || 0,
+          housing: metrics.assetMetrics?.housingScore || 0,
+          delinquency: 5 // Placeholder
+        }
+      },
+      financials: {
+        income: {
+          monthly: metrics.disposableIncome,
+          annual: metrics.annualIncome,
+          stability: metrics.hasStableIncome ? 'stable' : 'unstable'
+        },
+        debtToIncome: {
+          ratio: metrics.debtToIncomeRatio,
+          score: metrics.expenses?.dtiScore || 0
+        },
+        assets: {
+          total: metrics.assetMetrics?.totalAssets || 0,
+          averageBalance: metrics.assetMetrics?.averageBalance || 0,
+          stability: metrics.assetMetrics?.balanceStability || 0,
+          housingStatus: metrics.assetMetrics?.housingStatus || 'Unknown'
+        }
+      },
+      assessment: {
+        maxMonthlyPayment: metrics.recommendedMaxPayment,
+        riskFactors: metrics.riskFactors,
+      },
+      timestamp: new Date().toISOString()
     });
   } catch (error: any) {
     logger.error('Error in underwriting analysis:', {
@@ -71,18 +99,11 @@ router.post('/analyze', async (req, res) => {
 // Pre-qualification endpoint with asset verification
 router.post('/prequalify', async (req, res) => {
   try {
+    logger.info('Starting pre-qualification analysis with enhanced scoring');
+
     const { accessToken, proposedPayment, loanAmount, loanTerm, merchantId } = 
       loanApplicationSchema.parse(req.body);
 
-    logger.info('Starting pre-qualification analysis', {
-      proposedPayment,
-      loanAmount,
-      loanTerm,
-      merchantId,
-      timestamp: new Date().toISOString()
-    });
-
-    // Get underwriting metrics with asset analysis
     const metrics = await bankAnalysisService.calculateUnderwritingMetrics(
       accessToken, 
       proposedPayment
@@ -101,21 +122,38 @@ router.post('/prequalify', async (req, res) => {
     const allRiskFactors = [...metrics.riskFactors, ...additionalRiskFactors];
 
     const response = {
-      isPreQualified: allRiskFactors.length === 0 && metrics.debtToIncomeRatio <= 43,
-      maxApprovedAmount: Math.min(
-        metrics.disposableIncome * 12,
-        metrics.recommendedMaxPayment * loanTerm
-      ),
-      suggestedMonthlyPayment: metrics.recommendedMaxPayment,
-      riskFactors: allRiskFactors,
-      metrics,
+      status: metrics.isQualified && allRiskFactors.length === 0 ? 'pre_qualified' : 'not_qualified',
+      underwriting: {
+        tier: metrics.tier,
+        totalScore: metrics.totalScore,
+        factorScores: {
+          income: metrics.assetMetrics?.incomeScore || 0,
+          employment: metrics.employmentScore,
+          credit: 5, // Placeholder
+          dti: metrics.expenses?.dtiScore || 0,
+          housing: metrics.assetMetrics?.housingScore || 0,
+          delinquency: 5 // Placeholder
+        }
+      },
+      terms: {
+        maxApprovedAmount: Math.min(
+          metrics.disposableIncome * 12,
+          metrics.recommendedMaxPayment * loanTerm
+        ),
+        suggestedMonthlyPayment: metrics.recommendedMaxPayment,
+        maxTerm: 60
+      },
+      assessment: {
+        riskFactors: allRiskFactors
+      },
       timestamp: new Date().toISOString()
     };
 
     logger.info('Completed pre-qualification analysis', {
-      isPreQualified: response.isPreQualified,
-      maxApprovedAmount: response.maxApprovedAmount,
-      riskFactorCount: response.riskFactors.length
+      tier: metrics.tier,
+      totalScore: metrics.totalScore,
+      isPreQualified: response.status === 'pre_qualified',
+      maxApprovedAmount: response.terms.maxApprovedAmount
     });
 
     res.json(response);
