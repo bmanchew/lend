@@ -2,10 +2,21 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { useLocation } from "wouter";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -15,7 +26,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 const loginFormSchema = z.object({
   phoneNumber: z.string().min(10, "Phone number must be at least 10 digits"),
   code: z.string().optional(),
-  loginType: z.literal("customer")
+  loginType: z.literal("customer"),
 });
 
 type LoginFormData = z.infer<typeof loginFormSchema>;
@@ -32,23 +43,23 @@ export default function CustomerLogin() {
     defaultValues: {
       phoneNumber: "",
       code: "",
-      loginType: "customer"
+      loginType: "customer",
     },
-    mode: "onChange"
+    mode: "onChange",
   });
 
   // Handle phone from URL params
   useEffect(() => {
     try {
-      const params = new URLSearchParams(location.split('?')[1]);
-      const phone = params.get('phone');
+      const params = new URLSearchParams(location.split("?")[1]);
+      const phone = params.get("phone");
       if (phone) {
-        console.log('[CustomerLogin] Phone from URL:', phone);
-        form.setValue('phoneNumber', phone);
+        console.log("[CustomerLogin] Phone from URL:", phone);
+        form.setValue("phoneNumber", phone);
         handleSendOTP();
       }
     } catch (error) {
-      console.error('[CustomerLogin] Error parsing URL params:', error);
+      console.error("[CustomerLogin] Error parsing URL params:", error);
     }
   }, [location]);
 
@@ -60,31 +71,36 @@ export default function CustomerLogin() {
         toast({
           title: "Error",
           description: "Please enter a phone number",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }
 
-      const phoneNumber = rawPhone.replace(/\D/g, '');
-      console.log('[CustomerLogin] Sending OTP to:', phoneNumber);
+      const phoneNumber = rawPhone.replace(/\D/g, "");
+      console.log("[CustomerLogin] Sending OTP to:", phoneNumber);
 
-      const response = await axios.post("/api/sendOTP", { phoneNumber });
+      const api = axios.create({
+        baseURL: window.location.origin,
+      });
 
-      if (response.data?.message === 'OTP sent successfully') {
+      // Then use the created instance
+      const response = await api.post("/api/sendOTP", { phoneNumber });
+
+      if (response.data?.message === "OTP sent successfully") {
         setIsOtpSent(true);
         toast({
           title: "Code Sent",
-          description: "Enter the code to sign in to your account"
+          description: "Enter the code to sign in to your account",
         });
       } else {
-        throw new Error('Failed to send verification code');
+        throw new Error("Failed to send verification code");
       }
     } catch (error: any) {
-      console.error('[CustomerLogin] OTP send error:', error);
+      console.error("[CustomerLogin] OTP send error:", error);
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to send code",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -94,31 +110,31 @@ export default function CustomerLogin() {
   const handleVerifyAndContinue = async (data: LoginFormData) => {
     try {
       if (!data.code) {
-        toast({ 
-          title: "Error", 
-          description: "Please enter verification code", 
-          variant: "destructive" 
+        toast({
+          title: "Error",
+          description: "Please enter verification code",
+          variant: "destructive",
         });
         return;
       }
 
-      console.log('[CustomerLogin] Verifying OTP:', { 
+      console.log("[CustomerLogin] Verifying OTP:", {
         phoneNumber: data.phoneNumber,
-        code: data.code
+        code: data.code,
       });
 
       await loginMutation.mutateAsync({
         username: data.phoneNumber,
         password: data.code,
-        loginType: 'customer'
+        loginType: "customer",
       });
-
     } catch (error: any) {
       console.error("[CustomerLogin] Verification error:", error);
-      toast({ 
-        title: "Error", 
-        description: error.response?.data?.message || "Invalid verification code", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description:
+          error.response?.data?.message || "Invalid verification code",
+        variant: "destructive",
       });
     }
   };
@@ -140,7 +156,10 @@ export default function CustomerLogin() {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleVerifyAndContinue)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(handleVerifyAndContinue)}
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="phoneNumber"
@@ -148,7 +167,11 @@ export default function CustomerLogin() {
                 <FormItem>
                   <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input {...field} type="tel" placeholder="+1 (555) 000-0000" />
+                    <Input
+                      {...field}
+                      type="tel"
+                      placeholder="+1 (555) 000-0000"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -160,7 +183,9 @@ export default function CustomerLogin() {
                 name="code"
                 render={({ field }) => (
                   <FormItem className="space-y-4">
-                    <FormLabel className="text-center block">Enter Verification Code</FormLabel>
+                    <FormLabel className="text-center block">
+                      Enter Verification Code
+                    </FormLabel>
                     <FormControl>
                       <div className="flex flex-col items-center gap-4">
                         <InputOTP
@@ -175,12 +200,30 @@ export default function CustomerLogin() {
                           className="gap-2"
                         >
                           <InputOTPGroup>
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={0} />
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={1} />
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={2} />
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={3} />
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={4} />
-                            <InputOTPSlot className="w-12 h-12 text-lg" index={5} />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={0}
+                            />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={1}
+                            />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={2}
+                            />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={3}
+                            />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={4}
+                            />
+                            <InputOTPSlot
+                              className="w-12 h-12 text-lg"
+                              index={5}
+                            />
                           </InputOTPGroup>
                         </InputOTP>
                         <Button

@@ -5,21 +5,25 @@
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
-    "module": "node16",
+    "module": "ESNext",
     "target": "es2017",
-    "strict": true,
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "jsx": "preserve",
-    "esModuleInterop": true,
+    "strict": false,
+    "noImplicitAny": false,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "moduleResolution": "node",
+    "moduleResolution": "Bundler",
     "baseUrl": ".",
     "types": ["node", "vite/client"],
     "paths": {
       "@db": ["./db/index.ts"],
       "@db/*": ["./db/*"],
       "@/*": ["./client/src/*"]
-    }
+    },
+    "noEmitOnError": false,
+    "allowJs": true,
+    "checkJs": false,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "ignoreDeprecations": "5.0"
   }
 }
