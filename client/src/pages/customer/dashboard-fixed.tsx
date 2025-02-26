@@ -1,434 +1,451 @@
-import { useAuth } from "@/hooks/use-auth";
-import PortalLayout from "@/components/layout/portal-layout";
-import { KycVerificationModal } from "@/components/kyc/verification-modal";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SelectContract, ContractStatus, KycStatus } from "@db/schema";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { DebitCardForm } from "@/components/payment/debit-card-form";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { KycVerificationModal } from "@/components/kyc/verification-modal";
+import { RewardsDisplay } from "@/components/ui/rewards-display";
+import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
+import { PaymentHistory } from "@/components/payment/payment-history";
+import { formatCurrency } from "@/lib/utils";
+import type { SelectContract } from "@db/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { debugLog } from "@/lib/utils";
 
 export default function CustomerDashboard() {
-  const [showBankLink, setShowBankLink] = useState(false);
-  const { toast } = useToast();
   const { user } = useAuth();
-  const [showKycModal, setShowKycModal] = useState(false);
+  const { toast } = useToast();
+  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const queryClient = useQueryClient();
-
-  // Check if KYC is needed on first load
-  useEffect(() => {
-    if (user && user.role === "customer") {
-      console.log("[CustomerDashboard] User KYC status:", user.kycStatus);
-
-      // Only show verification if:
-      // - No status exists
-      // - Status is initial or failed
-      // - Don't include pending as this will create a loop for users waiting for verification
-      const needsKyc =
-        !user.kycStatus ||
-        user.kycStatus === KycStatus.INITIAL ||
-        user.kycStatus === KycStatus.FAILED;
-
-      console.log("[CustomerDashboard] Needs KYC verification:", needsKyc);
-
-      if (needsKyc) {
-        setShowKycModal(true);
-      } else {
-        // Check if we need to create a contract offer for user that just logged in
-        checkAndCreateContractOffer();
-      }
-    }
-  }, [user]);
-
-  // Refresh current user KYC status
-  const { data: currentKycStatus } = useQuery({
-    queryKey: ["/api/kyc/status", user?.id, refreshTrigger],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const response = await fetch(`/api/kyc/status?userId=${user.id}`);
-      if (!response.ok) throw new Error("Failed to fetch KYC status");
-      return response.json();
-    },
-    enabled: !!user?.id,
+  const userId = user?.id;
+  
+  // KYC status check
+  const { data: kycResponse } = useQuery<{success: boolean, status: string, verified: boolean}>({
+    queryKey: [`/api/kyc/status`],
+    enabled: !!userId,
   });
   
+  const isVerified = kycResponse?.verified;
+  const currentKycStatus = kycResponse?.status;
+  const currentKycVerified = kycResponse?.verified;
+  
   // Fetch user's contracts
-  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: SelectContract[]}>({
+  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: any[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
   });
   
   // Extract contracts from response
-  const contracts = contractsResponse?.data;
-
-  const hasActiveContract = contracts?.some((c) => c.status === ContractStatus.ACTIVE);
-  const hasPendingContract = contracts?.some((c) => c.status === ContractStatus.PENDING);
+  const contracts = contractsResponse?.contracts;
   
-  // Function to check KYC status and create a contract offer if needed
-  const checkAndCreateContractOffer = async () => {
-    if (!user?.id) return;
-    
-    try {
-      console.log("[CustomerDashboard] Checking if contract offer needed");
-      
-      // Force refresh contracts data to ensure we have the latest
-      await refetchContracts();
-      
-      // Check if the user already has contracts
-      if (contracts && contracts.length > 0) {
-        console.log("[CustomerDashboard] User already has contracts:", contracts.length);
-        return;
-      }
-      
-      // Check KYC status to see if user is verified
-      // Cover all possible variations of "verified" status
-      const isVerified = 
-        user?.kycStatus?.toLowerCase() === KycStatus.VERIFIED.toLowerCase() || 
-        user?.kycStatus?.toLowerCase() === "verified" ||
-        user?.kycStatus?.toLowerCase() === "confirmed" ||
-        user?.kycStatus?.toLowerCase() === "approved" ||
-        currentKycStatus?.status?.toLowerCase() === "verified" || 
-        currentKycStatus?.status?.toLowerCase() === "confirmed" ||
-        currentKycStatus?.status?.toLowerCase() === "approved" ||
-        currentKycStatus?.verified === true;
-      
-      if (!isVerified) {
-        console.log("[CustomerDashboard] User is not verified yet, not creating contract offer:", { 
-          userKycStatus: user?.kycStatus,
-          currentKycStatus: currentKycStatus?.status
-        });
-        return;
-      }
-      
-      console.log("[CustomerDashboard] Creating default contract offer for verified user");
-      const result = await createDefaultContractOffer();
-      
-      if (result) {
-        toast({
-          title: "Welcome to ShiFi",
-          description: "Based on your verification, we've prepared a personalized loan offer for you.",
-        });
-      }
-    } catch (error) {
-      console.error("[CustomerDashboard] Error in checkAndCreateContractOffer:", error);
-      toast({
-        title: "Error",
-        description: "There was a problem loading your offers. Please try again later.",
-        variant: "destructive",
-      });
-    }
-  };
+  // Debug logging
+  debugLog("CustomerDashboard", "Loan offer visibility check", { isVerified, currentKycStatus, currentKycVerified });
   
-  // Function to create a default contract offer if none exists
-  const createDefaultContractOffer = async () => {
-    if (!user?.id) return;
-    
-    try {
-      const response = await apiRequest('/api/contracts/create-offer', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+  // Create additional contract sample offer
+  const createSampleOffer = useMutation({
+    mutationFn: async () => {
+      return apiRequest("/api/contracts/create-offer", {
+        method: "POST",
         body: JSON.stringify({
-          customerId: user.id,
-          amount: 5000, // Default amount
-          term: 36, // 36 months
-          interestRate: 24.99,
-        }),
+          customerId: userId,
+          amount: 5000,
+          term: 36,
+          interestRate: 24.99
+        })
       });
-      
-      // Refresh contracts data
-      await queryClient.invalidateQueries({ queryKey: [`/api/contracts/customer`] });
-      console.log("[Dashboard] Contract offer created successfully");
-      
+    },
+    onSuccess: () => {
       toast({
-        title: "Loan offer created",
-        description: "A new loan offer is now available for you",
+        title: "Offer Created",
+        description: "A new loan offer has been created for testing purposes.",
       });
-      
-      return response;
-    } catch (error) {
-      console.error("[Dashboard] Error creating contract offer:", error);
+      debugLog("Dashboard", "Contract offer created successfully");
+      setRefreshTrigger(prev => prev + 1);
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "Unable to create loan offer. Please try again later.",
+        description: "Failed to create sample offer. Please try again.",
         variant: "destructive",
       });
-      return null;
     }
+  });
+  
+  // Check if KYC is needed when the component mounts
+  useEffect(() => {
+    const needsKycVerification = !isVerified;
+    debugLog("CustomerDashboard", "User KYC status", currentKycStatus);
+    debugLog("CustomerDashboard", "Needs KYC verification", needsKycVerification);
+    
+    if (needsKycVerification) {
+      setIsKycModalOpen(true);
+    }
+  }, [isVerified, currentKycStatus]);
+  
+  // Submit payment mutation
+  const submitPayment = useMutation({
+    mutationFn: async (contractId: number) => {
+      return apiRequest(`/api/payments/submit`, {
+        method: "POST",
+        body: JSON.stringify({
+          contractId,
+          amount: 200,
+          paymentMethod: "bank"
+        })
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment Submitted",
+        description: "Your payment has been processed successfully.",
+      });
+      setRefreshTrigger(prev => prev + 1);
+    },
+    onError: () => {
+      toast({
+        title: "Payment Failed",
+        description: "There was an error processing your payment. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Accept contract mutation
+  const acceptContract = useMutation({
+    mutationFn: async (contractId: number) => {
+      return apiRequest(`/api/contracts/${contractId}/accept`, {
+        method: "POST"
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Contract Accepted",
+        description: "You have successfully accepted the loan offer.",
+      });
+      setRefreshTrigger(prev => prev + 1);
+      setIsBankModalOpen(true);
+    },
+    onError: () => {
+      toast({
+        title: "Acceptance Failed",
+        description: "There was an error accepting your loan offer. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Decline contract mutation
+  const declineContract = useMutation({
+    mutationFn: async (contractId: number) => {
+      return apiRequest(`/api/contracts/${contractId}/decline`, {
+        method: "POST"
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Contract Declined",
+        description: "You have declined the loan offer.",
+      });
+      setRefreshTrigger(prev => prev + 1);
+    },
+    onError: () => {
+      toast({
+        title: "Action Failed",
+        description: "There was an error declining your loan offer. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  const handleVerificationComplete = () => {
+    refetchContracts();
   };
   
-  // Check if we need to show the loan offer
-  const showLoanOffer = () => {
-    // User has verified KYC status - check multiple possibilities for verification status
-    const isVerified = 
-      user?.kycStatus?.toLowerCase() === KycStatus.VERIFIED.toLowerCase() || 
-      user?.kycStatus?.toLowerCase() === "verified" ||
-      user?.kycStatus?.toLowerCase() === "confirmed" ||
-      user?.kycStatus?.toLowerCase() === "approved" ||
-      currentKycStatus?.status?.toLowerCase() === "verified" || 
-      currentKycStatus?.status?.toLowerCase() === "confirmed" ||
-      currentKycStatus?.status?.toLowerCase() === "approved" ||
-      currentKycStatus?.verified === true;
-    
-    // Has at least one contract (that's not active) to show as an offer
-    // This checks for PENDING contracts, which are offers
-    const hasPendingOffer = contracts?.some(c => c.status === ContractStatus.PENDING);
-    const hasContractOffer = contracts && contracts.length > 0 && hasPendingOffer;
-    
-    const shouldShowOffer = isVerified && hasContractOffer;
-    
-    console.log("[CustomerDashboard] Loan offer visibility check:", {
-      isVerified,
-      hasActiveContract,
-      hasPendingOffer,
-      hasContractOffer,
-      userKycStatus: user?.kycStatus,
-      currentKycStatus: currentKycStatus?.status,
-      currentKycVerified: currentKycStatus?.verified,
-      contractsCount: contracts?.length,
-      shouldShowOffer
-    });
-    
-    return shouldShowOffer;
+  const handlePaymentSuccess = () => {
+    setRefreshTrigger(prev => prev + 1);
   };
-
+  
+  // Group contracts by status
+  const pendingOffers = contracts?.filter(contract => contract.status === "pending") || [];
+  const activeContracts = contracts?.filter(contract => contract.status === "active") || [];
+  const completedContracts = contracts?.filter(contract => contract.status === "completed") || [];
+  
   return (
-    <PortalLayout>
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Welcome back, {user?.name || "Customer"}
-        </h1>
-
-        <KycVerificationModal
-          isOpen={showKycModal}
-          onClose={() => setShowKycModal(false)}
-          onVerificationComplete={() => {
-            setShowKycModal(false);
-            // Refresh data when verification is complete
-            setRefreshTrigger(prev => prev + 1);
-            // Trigger contract offer creation after successful verification
-            setTimeout(() => {
-              createDefaultContractOffer();
-            }, 1000);
-          }}
+    <div className="container mx-auto p-4 max-w-7xl">
+      <h1 className="text-3xl font-bold mb-6">Welcome, {user?.name || "Customer"}</h1>
+      
+      {/* KYC Verification Modal */}
+      <KycVerificationModal 
+        isOpen={isKycModalOpen} 
+        onClose={() => setIsKycModalOpen(false)}
+        onVerificationComplete={handleVerificationComplete}
+      />
+      
+      {/* Bank Link Dialog */}
+      {selectedContractId && (
+        <BankLinkDialog 
+          contractId={selectedContractId}
+          amount={200} // Placeholder amount
+          onSuccess={handlePaymentSuccess}
+          isOpen={isBankModalOpen}
+          onOpenChange={setIsBankModalOpen}
         />
-
-        {(user?.kycStatus === KycStatus.PENDING || currentKycStatus?.status === "pending") && (
-          <Card className="bg-yellow-50 border-yellow-200">
-            <CardHeader>
-              <CardTitle className="text-yellow-800">
-                Verification in Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-yellow-700">
-                Your identity verification is being processed. This usually
-                takes 1-2 business days.
-              </p>
-              <div className="mt-4">
-                <Button 
-                  variant="outline" 
-                  className="text-yellow-700 border-yellow-400 hover:bg-yellow-100"
-                  onClick={() => setRefreshTrigger(prev => prev + 1)}
-                >
-                  Check Status
+      )}
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loan Offers</CardTitle>
+            <CardDescription>Pending offers for your review</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold">{pendingOffers.length}</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Active Loans</CardTitle>
+            <CardDescription>Your current active loans</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold">{activeContracts.length}</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Rewards</CardTitle>
+            <CardDescription>Your ShiFi rewards points</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RewardsDisplay />
+          </CardContent>
+        </Card>
+      </div>
+      
+      <Tabs defaultValue="offers" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="offers">Loan Offers</TabsTrigger>
+          <TabsTrigger value="active">Active Loans</TabsTrigger>
+          <TabsTrigger value="completed">Completed Loans</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="offers">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {pendingOffers.length > 0 ? (
+              pendingOffers.map((contract) => (
+                <Card key={contract.id} className="overflow-hidden">
+                  <CardHeader className="bg-primary/10">
+                    <CardTitle>Loan Offer #{contract.id}</CardTitle>
+                    <CardDescription>From {contract.merchantId ? `Merchant #${contract.merchantId}` : 'ShiFi Direct'}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Amount:</span>
+                        <span className="font-bold">{formatCurrency(parseFloat(contract.amount))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Term:</span>
+                        <span>{contract.term} months</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Interest Rate:</span>
+                        <span>{contract.interestRate}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Monthly Payment:</span>
+                        <span className="font-bold">
+                          {formatCurrency(
+                            parseFloat(contract.amount) * 
+                            (parseFloat(contract.interestRate) / 100 / 12) * 
+                            Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) / 
+                            (Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) - 1)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-between gap-4">
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={() => declineContract.mutate(contract.id)}
+                      disabled={declineContract.isPending}
+                    >
+                      Decline
+                    </Button>
+                    <Button 
+                      className="w-full" 
+                      onClick={() => {
+                        setSelectedContractId(contract.id);
+                        acceptContract.mutate(contract.id);
+                      }}
+                      disabled={acceptContract.isPending || !isVerified}
+                    >
+                      {!isVerified ? "Verify Identity First" : "Accept"}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-1 md:col-span-2 text-center p-12 border rounded-lg">
+                <h3 className="text-xl font-semibold mb-2">No Loan Offers</h3>
+                <p className="text-muted-foreground mb-6">You currently don't have any pending loan offers.</p>
+                <Button onClick={() => createSampleOffer.mutate()}>
+                  Create Sample Offer
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {showLoanOffer() && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan Offer</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-xl mx-auto">
-                <Card className="border-2 hover:border-primary">
+            )}
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="active">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {activeContracts.length > 0 ? (
+              activeContracts.map((contract) => (
+                <Card key={contract.id}>
                   <CardHeader>
-                    <CardTitle>Personal Loan Terms</CardTitle>
+                    <CardTitle>Loan #{contract.id}</CardTitle>
+                    <CardDescription>Active since {new Date(contract.createdAt!).toLocaleDateString()}</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Loan Amount
-                        </p>
-                        <p className="text-2xl font-bold">
-                          ${contracts?.[0]?.amount?.toString() || "0.00"}
-                        </p>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Amount:</span>
+                        <span className="font-bold">{formatCurrency(parseFloat(contract.amount))}</span>
                       </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Term Length
-                        </p>
-                        <p className="text-2xl font-bold">{contracts?.[0]?.term || 36} Months</p>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Remaining Balance:</span>
+                        <span className="font-bold">{formatCurrency(parseFloat(contract.remainingBalance || contract.amount))}</span>
                       </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Interest Rate
-                        </p>
-                        <p className="text-2xl font-bold">{contracts?.[0]?.interestRate || "24.99"}% APR</p>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Next Payment:</span>
+                        <span>{contract.nextPaymentDate ? new Date(contract.nextPaymentDate).toLocaleDateString() : 'Not scheduled'}</span>
                       </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Monthly Payment
-                        </p>
-                        <p className="text-2xl font-bold">${contracts?.[0]?.monthlyPayment || "199.99"}</p>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Monthly Payment:</span>
+                        <span className="font-bold">
+                          {formatCurrency(
+                            parseFloat(contract.amount) * 
+                            (parseFloat(contract.interestRate) / 100 / 12) * 
+                            Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) / 
+                            (Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) - 1)
+                          )}
+                        </span>
                       </div>
                     </div>
-                    <Button
-                      className="w-full mt-6"
-                      onClick={() => {
-                        if (contracts?.[0]?.id) {
-                          setShowBankLink(true);
-                        }
-                      }}
-                    >
-                      Accept Offer
-                    </Button>
-                    <BankLinkDialog
-                      contractId={contracts?.[0]?.id ?? 0}
-                      amount={Number(contracts?.[0]?.amount ?? 0) * 0.05}
-                      isOpen={showBankLink}
-                      onOpenChange={setShowBankLink}
-                      onSuccess={() => {
-                        toast({
-                          title: "Success",
-                          description:
-                            "Bank account linked and payment processed successfully",
-                        });
-                        queryClient.invalidateQueries({ queryKey: [`/api/contracts/customer`] });
-                        setRefreshTrigger(prev => prev + 1);
-                      }}
-                    />
+                    
+                    <div className="mt-6">
+                      <h4 className="font-semibold mb-4">Payment History</h4>
+                      <PaymentHistory contractId={contract.id} />
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button className="w-full">Make Payment</Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Make a Payment</DialogTitle>
+                        </DialogHeader>
+                        <div className="py-4">
+                          <div className="mb-4">
+                            <p className="font-medium">Loan #{contract.id}</p>
+                            <p className="text-muted-foreground">Monthly payment: 
+                              {formatCurrency(
+                                parseFloat(contract.amount) * 
+                                (parseFloat(contract.interestRate) / 100 / 12) * 
+                                Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) / 
+                                (Math.pow(1 + parseFloat(contract.interestRate) / 100 / 12, contract.term) - 1)
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex gap-4">
+                            <Button 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={() => {
+                                setSelectedContractId(contract.id);
+                                setIsBankModalOpen(true);
+                              }}
+                            >
+                              Pay with Bank
+                            </Button>
+                            <Button 
+                              className="w-full"
+                              onClick={() => {
+                                submitPayment.mutate(contract.id);
+                              }}
+                              disabled={submitPayment.isPending}
+                            >
+                              Pay Now (Test)
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-1 md:col-span-2 text-center p-12 border rounded-lg">
+                <h3 className="text-xl font-semibold mb-2">No Active Loans</h3>
+                <p className="text-muted-foreground">You currently don't have any active loans.</p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="completed">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {completedContracts.length > 0 ? (
+              completedContracts.map((contract) => (
+                <Card key={contract.id}>
+                  <CardHeader>
+                    <CardTitle>Loan #{contract.id}</CardTitle>
+                    <CardDescription>Completed on {new Date(contract.updatedAt!).toLocaleDateString()}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Amount:</span>
+                        <span className="font-bold">{formatCurrency(parseFloat(contract.amount))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Term:</span>
+                        <span>{contract.term} months</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Interest Rate:</span>
+                        <span>{contract.interestRate}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Total Paid:</span>
+                        <span className="font-bold">{formatCurrency(parseFloat(contract.amount) * 1.2)}</span>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
+              ))
+            ) : (
+              <div className="col-span-1 md:col-span-2 text-center p-12 border rounded-lg">
+                <h3 className="text-xl font-semibold mb-2">No Completed Loans</h3>
+                <p className="text-muted-foreground">You haven't completed any loans yet.</p>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {hasActiveContract && (
-          <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Loans</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">
-                    {contracts?.filter((c) => c.status === ContractStatus.ACTIVE).length ??
-                      0}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Next Payment</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">
-                    ${contracts?.find(c => c.status === ContractStatus.ACTIVE)?.monthlyPayment || "0.00"}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reward Points</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">250 pts</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Loan Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {contracts?.filter(c => c.status === ContractStatus.ACTIVE).map((contract) => (
-                    <div
-                      key={contract.id}
-                      className="flex flex-col gap-4 p-4 border rounded-lg"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Loan #{contract.contractNumber || contract.id}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Principal: ${contract.amount}
-                          </p>
-                        </div>
-                        <Button variant="outline" size="sm">
-                          View Details
-                        </Button>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Monthly Payment</p>
-                          <p className="font-medium">${contract.monthlyPayment}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Next Due</p>
-                          <p className="font-medium">Mar 15, 2025</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Remaining Term</p>
-                          <p className="font-medium">{contract.term} months</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Interest Rate</p>
-                          <p className="font-medium">{contract.interestRate}%</p>
-                        </div>
-                      </div>
-                      
-                      <Button className="w-full sm:w-auto">
-                        Make Payment
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {!hasActiveContract && !showLoanOffer() && !showKycModal && 
-         user?.kycStatus !== KycStatus.PENDING && 
-         currentKycStatus?.status !== "pending" && (
-          <Card className="p-8 text-center">
-            <CardContent className="pt-6">
-              <h3 className="text-xl font-semibold mb-4">No Active Loans</h3>
-              <p className="text-muted-foreground mb-6">
-                You don't have any active loans or pending offers at the moment.
-              </p>
-              <Button
-                onClick={() => setShowKycModal(true)}
-                className="mx-auto"
-              >
-                Apply for a Loan
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </PortalLayout>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+      
+      {/* Additional information or app features could go here */}
+    </div>
   );
 }
