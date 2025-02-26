@@ -265,19 +265,19 @@ router.post(
       
       const merchantId = defaultMerchant?.id || 1; // Use default if none found
       
-      // Create the contract offer - use snake_case for column names
+      // Create the contract offer - using camelCase property names matching Drizzle schema
       const newContract = await db.insert(contracts).values({
-        merchant_id: merchantId,
-        customer_id: userId,
-        contract_number: contractNumber,
+        merchantId: merchantId,
+        customerId: userId,
+        contractNumber: contractNumber,
         amount: amount.toString(),
         term,
-        interest_rate: interestRate.toString(),
+        interestRate: interestRate.toString(),
         status: ContractStatus.PENDING,
-        monthly_payment: monthlyPayment.toFixed(2),
-        total_interest: totalInterest.toFixed(2),
-        down_payment: (amount * 0.05).toFixed(2), // 5% down payment
-      } as any).returning();
+        monthlyPayment: monthlyPayment.toFixed(2),
+        totalInterest: totalInterest.toFixed(2),
+        downPayment: (amount * 0.05).toFixed(2), // 5% down payment
+      }).returning();
       
       logger.info("Created contract offer after KYC verification", { 
         userId, 
@@ -407,19 +407,19 @@ router.get(
       
       const merchantId = defaultMerchant?.id || 1; // Use default if none found
       
-      // Create the contract offer
+      // Create the contract offer using camelCase property names matching Drizzle schema
       const newContract = await db.insert(contracts).values({
-        merchant_id: merchantId,
-        customer_id: userId,
-        contract_number: contractNumber,
+        merchantId: merchantId,
+        customerId: userId,
+        contractNumber: contractNumber,
         amount: amount.toString(),
         term,
-        interest_rate: interestRate.toString(),
+        interestRate: interestRate.toString(),
         status: ContractStatus.PENDING,
-        monthly_payment: monthlyPayment.toFixed(2),
-        total_interest: totalInterest.toFixed(2),
-        down_payment: (amount * 0.05).toFixed(2), // 5% down payment
-      } as any).returning();
+        monthlyPayment: monthlyPayment.toFixed(2),
+        totalInterest: totalInterest.toFixed(2),
+        downPayment: (amount * 0.05).toFixed(2), // 5% down payment
+      }).returning();
       
       logger.info("Created automatic contract offer for user", { 
         userId, 

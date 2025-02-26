@@ -1249,19 +1249,19 @@ router.post(
                 const totalInterest = (monthlyPayment * term) - amount;
                 
                 try {
-                  // Create the contract offer - using snake_case column names for DB
+                  // Create the contract offer - using camelCase property names matching Drizzle schema
                   const newContract = await db.insert(contracts).values({
-                    merchant_id: merchantId,
-                    customer_id: user.id,
-                    contract_number: contractNumber,
+                    merchantId: merchantId,
+                    customerId: user.id,
+                    contractNumber: contractNumber,
                     amount: amount.toString(),
                     term,
-                    interest_rate: interestRate.toString(),
+                    interestRate: interestRate.toString(),
                     status: ContractStatus.PENDING,
-                    monthly_payment: monthlyPayment.toFixed(2),
-                    total_interest: totalInterest.toFixed(2),
-                    down_payment: (amount * 0.05).toFixed(2), // 5% down payment
-                  } as any).returning();
+                    monthlyPayment: monthlyPayment.toFixed(2),
+                    totalInterest: totalInterest.toFixed(2),
+                    downPayment: (amount * 0.05).toFixed(2), // 5% down payment
+                  }).returning();
                   
                   logger.info("[KYC] Contract offer created automatically after verification", { 
                     userId: user.id,
@@ -1352,28 +1352,28 @@ router.post(
         );
         const contractNumber = `LN${Date.now()}`;
 
-        // Insert contract with proper types - snake_case keys for DB columns
+        // Insert contract with proper types - using camelCase property names matching Drizzle schema
         const [newContract] = await db
           .insert(contracts)
           .values({
-            merchant_id: merchantId,
-            customer_id: customer.id,
-            contract_number: contractNumber,
+            merchantId: merchantId,
+            customerId: customer.id,
+            contractNumber: contractNumber,
             amount: amount.toString(),
             term: term,
-            interest_rate: interestRate.toString(),
-            down_payment: downPayment.toString(),
-            monthly_payment: monthlyPayment.toString(),
-            total_interest: totalInterest.toString(),
+            interestRate: interestRate.toString(),
+            downPayment: downPayment.toString(),
+            monthlyPayment: monthlyPayment.toString(),
+            totalInterest: totalInterest.toString(),
             status: "pending_review",
             notes: notes,
-            underwriting_status: "pending",
-            borrower_email: customerDetails.email,
-            borrower_phone: customerDetails.phone,
+            underwritingStatus: "pending",
+            borrowerEmail: customerDetails.email,
+            borrowerPhone: customerDetails.phone,
             active: true,
-            last_payment_id: null,
-            last_payment_status: null,
-          } as any)
+            lastPaymentId: null,
+            lastPaymentStatus: null,
+          })
           .returning();
 
         // Get merchant details for notifications
