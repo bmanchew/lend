@@ -63,13 +63,13 @@ export default function CustomerDashboard() {
   });
   
   // Fetch user's contracts
-  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, contracts: SelectContract[]}>({
+  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: SelectContract[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
   });
   
   // Extract contracts from response
-  const contracts = contractsResponse?.contracts;
+  const contracts = contractsResponse?.data;
 
   const hasActiveContract = contracts?.some((c) => c.status === ContractStatus.ACTIVE);
   const hasPendingContract = contracts?.some((c) => c.status === ContractStatus.PENDING);

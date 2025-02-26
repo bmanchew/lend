@@ -28,6 +28,9 @@ import { shifiRewardsService } from "./services/shifi-rewards";
 import jwt from "jsonwebtoken";
 import { authService } from "./auth";
 import type { User } from "./auth";
+
+// Import route modules
+import contractsRouter from "./routes/contracts";
 import { asyncHandler } from "./lib/async-handler";
 import { sendMerchantCredentials } from "./services/email";
 import { LedgerManager } from "./services/ledger-manager";
@@ -210,6 +213,7 @@ router.use(cacheMiddleware(300));
 
 // Mount the API routes before any UI routes
 router.use("/api/underwriting", underwritingApi);
+router.use("/api/contracts", contractsRouter);
 
 // Protected Routes (JWT Required)
 router.get(
