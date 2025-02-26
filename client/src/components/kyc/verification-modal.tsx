@@ -191,22 +191,11 @@ export function KycVerificationModal({
       console.log("[KYC Modal] Verification completed successfully");
       toast({
         title: "Verification Complete",
-        description: "Your identity has been verified successfully. Your loan offers will appear shortly.",
+        description: "Your identity has been verified successfully.",
       });
-      
-      // Call the completion handler provided by the parent component
-      if (onVerificationComplete) {
-        onVerificationComplete();
-        
-        // Reload the page after a short delay to show the contract offers
-        // that will be automatically created by the backend
-        setTimeout(() => {
-          console.log("[KYC Modal] Reloading page to show loan offers");
-          window.location.reload();
-        }, 2000);
-      }
+      onVerificationComplete?.();
     }
-  }, [kycData, onVerificationComplete]);
+  }, [kycData]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
