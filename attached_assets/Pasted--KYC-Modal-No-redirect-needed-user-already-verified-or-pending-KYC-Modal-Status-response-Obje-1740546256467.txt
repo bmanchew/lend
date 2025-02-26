@@ -1,0 +1,53 @@
+[KYC Modal] No redirect needed - user already verified or pending
+[KYC Modal] Status response: 
+Object {success: true, status: "verified", verified: true}
+[CustomerDashboard] Loan offer visibility check 
+Object {isVerified: undefined, currentKycStatus: undefined, currentKycVerified: undefined}
+[KYC Modal] User info: 
+Object {userId: 5, user: {…}, kycStatus: undefined}
+[KYC Modal] KYC status update: 
+Object {success: true, status: "verified", verified: true}
+[KYC Modal] Verification completed successfully
+[CustomerDashboard] Loading contracts... 
+[KYC Modal] Error refreshing user data: 
+Error {}
+
+[API] Query error: 
+SyntaxError {}
+message: "Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+stack: "SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+get stack: ƒ ()
+length: 0
+name: ""
+[[Prototype]]: ƒ ()
+set stack: ƒ ()
+length: 1
+name: ""
+[[Prototype]]: ƒ ()
+[[Prototype]]: Object
+constructor: ƒ SyntaxError()
+message: "Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+name: "SyntaxError"
+[[Prototype]]: Object
+
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://79368548-ffca-4dba-b3d2-66878c9daa1e-00-g9bbf0qgfdru.riker.repl.co/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
+[CustomerDashboard] Loan offer visibility check 
+Object {isVerified: undefined, currentKycStatus: undefined, currentKycVerified: undefined}
+[KYC Modal] User info: 
+Object {userId: 5, user: {…}, kycStatus: undefined}
+[CustomerDashboard] Error loading contracts 
+SyntaxError {}
+[KYC Modal] Checking status for user: 5
+[KYC Modal] Status response: 
+Object {success: true, status: "verified", verified: true}
+[CustomerDashboard] Loan offer visibility check 
+Object {isVerified: undefined, currentKycStatus: undefined, currentKycVerified: undefined}
+[KYC Modal] User info: 
+Object {userId: 5, user: {…}, kycStatus: undefined}
+[CustomerDashboard] Loan offer visibility check 
+Object {isVerified: undefined, currentKycStatus: undefined, currentKycVerified: undefined}
+[KYC Modal] User info: 
+Object {userId: 5, user: {…}, kycStatus: undefined}

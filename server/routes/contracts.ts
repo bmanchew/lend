@@ -66,19 +66,30 @@ router.get("/customer", authenticate, authorize(["customer"]),
 router.post("/create-offer", authenticate, authorize(["admin", "merchant", "customer"]),
   asyncHandler(async (req: RequestWithUser, res: Response) => {
     try {
-      const { customerId, amount, term, interestRate } = req.body;
+      const { customerId, amount, term, interestRate, contractNumber: providedContractNumber } = req.body;
       
       // Debug
-      console.log("User object:", req.user);
+      logger.debug("Creating contract offer:", { 
+        user: req.user?.id, 
+        role: req.user?.role, 
+        customerId, 
+        amount, 
+        term, 
+        interestRate,
+        providedContractNumber,
+        hasAuth: !!req.headers.authorization
+      });
       
-      // If customer role, use their own ID
+      // For customer role, we always use their own ID
       const finalCustomerId = req.user?.role === "customer" 
         ? req.user.id 
         : customerId;
       
+      logger.info(`User ${req.user?.id} (${req.user?.role}) creating contract for customer ${finalCustomerId}`);
+      
       if (!finalCustomerId) {
         return res.status(400).json({
-          success: false,
+          status: "error",
           message: "Customer ID is required"
         });
       }
@@ -97,8 +108,8 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
         });
       }
       
-      // Generate contract number
-      const contractNumber = `LOAN-${Date.now().toString().slice(-6)}-${finalCustomerId}`;
+      // Generate or use provided contract number
+      const contractNumber = providedContractNumber || `LOAN-${Date.now().toString().slice(-6)}-${finalCustomerId}`;
       
       // Create contract offer with proper TypeScript typing
       const contractData = {
@@ -118,14 +129,14 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
         .returning();
       
       return res.json({
-        success: true,
+        status: "success", // Changed to match other endpoints
         data: newContract
       });
     } catch (error) {
       console.error("Error creating contract offer:", error);
       logger.error("Contract creation error details:", error instanceof Error ? error : new Error(String(error)));
       return res.status(500).json({
-        success: false,
+        status: "error", // Changed to match other endpoints
         message: "Failed to create contract offer"
       });
     }
