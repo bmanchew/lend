@@ -247,8 +247,8 @@ router.use(requestTrackingMiddleware);
 router.use(cacheMiddleware(300));
 
 // Mount the API routes before any UI routes
-router.use("/api/underwriting", underwritingApi);
-router.use("/api/contracts", contractsRouter);
+router.use("/underwriting", underwritingApi);
+router.use("/contracts", contractsRouter);
 
 // Protected Routes (JWT Required)
 router.get(

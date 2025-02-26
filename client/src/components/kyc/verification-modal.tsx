@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -64,12 +65,13 @@ export function KycVerificationModal({
         throw new Error("User ID is required");
       }
 
-      // Don't start verification if user is already verified or pending
-      if (user?.kycStatus === "verified" || user?.kycStatus === "pending") {
-        console.log("[KYC Modal] User already has status:", user.kycStatus);
+      // Don't start verification if user is already verified
+      if (user?.kycStatus === "verified") {
+        console.log("[KYC Modal] User already verified:", user.kycStatus);
         return null;
       }
 
+      // Allow users with pending status to restart verification
       try {
         // Add redirectUrl to direct users back to the dashboard after verification
         const redirectUrl = window.location.origin + "/customer/dashboard";
@@ -97,15 +99,15 @@ export function KycVerificationModal({
         console.log("[KYC Modal] Received verification response:", data);
 
         // If user is already verified, just return success without redirecting
-        if (
-          data.alreadyVerified ||
-          data.currentStatus === "verified" ||
-          data.currentStatus === "pending"
-        ) {
-          console.log(
-            "[KYC Modal] User already verified or pending, no redirect needed",
-          );
+        if (data.alreadyVerified || data.currentStatus === "verified") {
+          console.log("[KYC Modal] User already verified, no redirect needed");
           return null;
+        }
+        
+        // If we're retrying a pending verification, continue with the verification process
+        if (data.currentStatus === "pending" && user?.kycStatus === "pending") {
+          console.log("[KYC Modal] Restarting verification for user with pending status");
+          // Return the verification URL even for pending users
         }
 
         if (!data.verificationUrl) {
@@ -266,16 +268,31 @@ export function KycVerificationModal({
           <DialogTitle>Identity Verification</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center justify-center space-y-4 p-4">
-          <div className="text-center space-y-3">
+          <div className="text-center space-y-4">
             {!userId ? (
               <p className="text-sm text-red-500">
                 User ID not found. Please try logging in again.
               </p>
             ) : user?.kycStatus === "pending" ? (
-              <p className="text-sm text-amber-500">
-                Your verification is in progress. We'll notify you when it's
-                complete.
-              </p>
+              <>
+                <p className="text-sm text-amber-500">
+                  Your verification is in progress. You can wait for it to complete, or restart the verification process if needed.
+                </p>
+                <Button 
+                  onClick={() => startVerification.mutate()}
+                  disabled={startVerification.isPending}
+                  className="mt-2 w-full"
+                >
+                  {startVerification.isPending ? (
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Restarting verification...</span>
+                    </div>
+                  ) : (
+                    <span>Restart Verification</span>
+                  )}
+                </Button>
+              </>
             ) : startVerification.isPending ? (
               <div className="flex items-center space-x-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
