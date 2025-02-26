@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DebitCardForm } from "@/components/payment/debit-card-form";
+import { queryClient } from "@/lib/queryClient";
 
 export default function CustomerDashboard() {
   const [showBankLink, setShowBankLink] = useState(false);
@@ -22,6 +23,7 @@ export default function CustomerDashboard() {
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [kycChecked, setKycChecked] = useState(false);
 
   // Check if KYC is needed on first load
   useEffect(() => {
@@ -56,6 +58,54 @@ export default function CustomerDashboard() {
     },
     enabled: !!user?.id,
   });
+  
+  // Function to manually check KYC status
+  const checkKycStatus = async () => {
+    if (!user?.id || kycChecked) return;
+    
+    try {
+      console.log("[CustomerDashboard] Checking KYC status manually");
+      
+      // Fetch the latest KYC status
+      const response = await fetch(`/api/kyc/status?userId=${user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to check KYC status');
+      }
+      
+      const data = await response.json();
+      console.log("[CustomerDashboard] KYC status check result:", data);
+      
+      // If the status is verified but we don't have any contract offers
+      if ((data.status === 'verified' || data.verified === true) && 
+          (!contracts || contracts.length === 0)) {
+        console.log("[CustomerDashboard] User is verified but has no contract offers, creating one");
+        await createDefaultContractOffer();
+      }
+      
+      // Mark that we've checked the KYC status
+      setKycChecked(true);
+      
+      // Force a refresh of the data
+      setRefreshTrigger(prev => prev + 1);
+      
+      return data;
+    } catch (error) {
+      console.error("[CustomerDashboard] Error checking KYC status:", error);
+      return null;
+    }
+  };
+  
+  // Check KYC status when component mounts or when user changes
+  useEffect(() => {
+    if (user?.id && !kycChecked) {
+      checkKycStatus();
+    }
+  }, [user?.id, kycChecked, contracts]);
 
   // Fetch user's contracts
   const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
@@ -112,14 +162,29 @@ export default function CustomerDashboard() {
   
   // Check if we need to show the loan offer
   const showLoanOffer = () => {
-    // User has verified KYC status
-    const isVerified = user?.kycStatus === KycStatus.VERIFIED || 
-                     (currentKycStatus?.status === "verified" || currentKycStatus?.verified);
+    // User has verified KYC status - check multiple possibilities for verification status
+    const isVerified = 
+      user?.kycStatus?.toLowerCase() === KycStatus.VERIFIED.toLowerCase() || 
+      currentKycStatus?.status?.toLowerCase() === "verified" || 
+      currentKycStatus?.verified === true;
     
-    // No active contract but has pending contract offers
-    const hasPendingOffer = !hasActiveContract && contracts && contracts.length > 0;
+    // Has at least one contract (that's not active) to show as an offer
+    const hasContractOffer = contracts && contracts.length > 0 && !hasActiveContract;
     
-    return isVerified && !hasActiveContract;
+    const shouldShowOffer = isVerified && !hasActiveContract;
+    
+    console.log("[CustomerDashboard] Loan offer visibility check:", {
+      isVerified,
+      hasActiveContract,
+      hasContractOffer,
+      userKycStatus: user?.kycStatus,
+      currentKycStatus: currentKycStatus?.status,
+      currentKycVerified: currentKycStatus?.verified,
+      contractsCount: contracts?.length,
+      shouldShowOffer
+    });
+    
+    return shouldShowOffer;
   };
 
   return (
