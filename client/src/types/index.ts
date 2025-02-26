@@ -37,3 +37,26 @@ export interface JWTPayload {
   email?: string;
   phoneNumber?: string;
 }
+
+export type ContractStatus = 'pending' | 'active' | 'completed' | 'cancelled' | 'defaulted';
+
+export interface Contract {
+  id: number;
+  customerId: number;
+  merchantId: number;
+  contractNumber: string;
+  amount: string;
+  term: number;
+  interestRate: string;
+  status: ContractStatus;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  downPayment?: string;
+  monthlyPayment?: string;
+  totalInterest?: string;
+  nextPaymentDate?: string | Date;
+  remainingBalance?: string;
+  achVerificationStatus?: string;
+  plaidAccessToken?: string;
+  plaidAccountId?: string;
+}

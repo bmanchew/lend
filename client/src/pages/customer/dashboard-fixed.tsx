@@ -11,9 +11,9 @@ import { RewardsDisplay } from "@/components/ui/rewards-display";
 import { BankLinkDialog } from "@/components/plaid/bank-link-dialog";
 import { PaymentHistory } from "@/components/payment/payment-history";
 import { formatCurrency } from "@/lib/utils";
-import type { SelectContract } from "@db/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { debugLog } from "@/lib/utils";
+import { Contract, ContractStatus } from "@/types";
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
@@ -35,13 +35,13 @@ export default function CustomerDashboard() {
   const currentKycVerified = kycResponse?.verified;
   
   // Fetch user's contracts
-  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: any[]}>({
+  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: Contract[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
   });
   
   // Extract contracts from response
-  const contracts = contractsResponse?.contracts;
+  const contracts = contractsResponse?.data || [];
   
   // Debug logging
   debugLog("CustomerDashboard", "Loan offer visibility check", { isVerified, currentKycStatus, currentKycVerified });
@@ -171,9 +171,9 @@ export default function CustomerDashboard() {
   };
   
   // Group contracts by status
-  const pendingOffers = contracts?.filter(contract => contract.status === "pending") || [];
-  const activeContracts = contracts?.filter(contract => contract.status === "active") || [];
-  const completedContracts = contracts?.filter(contract => contract.status === "completed") || [];
+  const pendingOffers = contracts?.filter(contract => contract.status === ContractStatus.PENDING) || [];
+  const activeContracts = contracts?.filter(contract => contract.status === ContractStatus.ACTIVE) || [];
+  const completedContracts = contracts?.filter(contract => contract.status === ContractStatus.COMPLETED) || [];
   
   return (
     <div className="container mx-auto p-4 max-w-7xl">
