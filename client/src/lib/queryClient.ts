@@ -82,7 +82,13 @@ export const getQueryFn: <T>(options: {
       }
 
       await throwIfResNotOk(response);
-      return await response.json();
+      const data = await response.json();
+      
+      // Handle both direct data and {status, data} envelope formats
+      if (data && typeof data === 'object' && 'status' in data && data.status === 'success' && 'data' in data) {
+        return data;
+      }
+      return data;
     } catch (error) {
       console.error('[API] Query error:', error);
       throw error;

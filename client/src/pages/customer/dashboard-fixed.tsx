@@ -34,7 +34,7 @@ export default function CustomerDashboard() {
   const currentKycStatus = kycResponse?.status;
   const currentKycVerified = kycResponse?.verified;
   
-  // Fetch user's contracts
+  // Fetch user's contracts - ensure we handle the response format with status and data properties
   const { data: contractsResponse, refetch: refetchContracts, isLoading: isLoadingContracts, error: contractsError } = useQuery<{status: string, data: Contract[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
@@ -52,8 +52,10 @@ export default function CustomerDashboard() {
     }
   }, [isLoadingContracts, contractsError, contractsResponse]);
   
-  // Extract contracts from response
-  const contracts = contractsResponse?.data || [];
+  // Extract contracts from response - handle both wrapped and unwrapped response formats
+  const contracts = Array.isArray(contractsResponse) 
+    ? contractsResponse 
+    : (contractsResponse?.data || []);
   
   // Debug logging
   debugLog("CustomerDashboard", "Loan offer visibility check", { isVerified, currentKycStatus, currentKycVerified });
@@ -61,13 +63,15 @@ export default function CustomerDashboard() {
   // Create additional contract sample offer
   const createSampleOffer = useMutation({
     mutationFn: async () => {
+      debugLog("Dashboard", "Creating sample contract offer...");
       return apiRequest("/api/contracts/create-offer", {
         method: "POST",
         body: JSON.stringify({
           customerId: userId,
           amount: 5000,
           term: 36,
-          interestRate: 24.99
+          interestRate: 24.99,
+          contractNumber: `SHIFI-TEST-${Math.floor(Math.random() * 1000)}`
         })
       });
     },
@@ -78,8 +82,11 @@ export default function CustomerDashboard() {
       });
       debugLog("Dashboard", "Contract offer created successfully");
       setRefreshTrigger(prev => prev + 1);
+      // Manually trigger refetch after creating the sample offer
+      refetchContracts();
     },
     onError: (error) => {
+      debugLog("Dashboard", "Error creating sample offer", error);
       toast({
         title: "Error",
         description: "Failed to create sample offer. Please try again.",
