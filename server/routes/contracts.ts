@@ -1,10 +1,10 @@
-import express, { Response } from "express";
+import express, { Response, NextFunction } from "express";
 import { asyncHandler } from "../lib/async-handler";
 import { db } from "@db";
 import { contracts, users, ContractStatus } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
-
+import { type InsertContract } from "drizzle-orm/pg-core";
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ interface RequestWithUser extends express.Request {
 }
 
 // Middleware to authenticate requests
-const authenticate = (req: RequestWithUser, res: Response, next: Function) => {
+const authenticate = (req: RequestWithUser, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({ status: "error", message: "Not authenticated" });
   }
@@ -29,7 +29,7 @@ const authenticate = (req: RequestWithUser, res: Response, next: Function) => {
 
 // Middleware to check role authorization
 const authorize = (roles: string[]) => {
-  return (req: RequestWithUser, res: Response, next: Function) => {
+  return (req: RequestWithUser, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ status: "error", message: "Unauthorized" });
     }
@@ -98,17 +98,22 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
       // Generate contract number
       const contractNumber = `LOAN-${Date.now().toString().slice(-6)}-${finalCustomerId}`;
       
-      // Create contract offer
-      const [newContract] = await db.insert(contracts).values({
-        customerId: finalCustomerId,
+      // Create contract offer with proper TypeScript typing
+      const contractData = {
         merchantId: req.user?.role === "merchant" ? req.user.id : 1, // Default to merchant ID 1 if not specified
+        customerId: finalCustomerId,
         amount: amount.toString(),
         term: term,
         interestRate: interestRate.toString(),
         contractNumber: contractNumber,
         status: ContractStatus.PENDING,
-        createdAt: new Date()
-      }).returning();
+        borrowerPhone: customer.phoneNumber,
+        borrowerEmail: customer.email
+      };
+      
+      const [newContract] = await db.insert(contracts)
+        .values(contractData)
+        .returning();
       
       return res.json({
         status: "success",
@@ -116,6 +121,9 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
       });
     } catch (error) {
       console.error("Error creating contract offer:", error);
+      if (error instanceof Error) {
+        logger.error("Contract creation error details:", { message: error.message, stack: error.stack });
+      }
       return res.status(500).json({
         status: "error",
         message: "Failed to create contract offer"
@@ -208,12 +216,10 @@ router.patch("/:id/status", authenticate, authorize(["admin", "merchant"]),
         });
       }
       
-      // Update contract status
+      // Update contract status using the status field from schema
       const [updatedContract] = await db
         .update(contracts)
-        .set({
-          status: status
-        })
+        .set({ status })
         .where(eq(contracts.id, contractId))
         .returning();
       
@@ -311,9 +317,7 @@ router.post("/:id/accept", authenticate, authorize(["customer"]),
       // Update contract status to accepted
       const [updatedContract] = await db
         .update(contracts)
-        .set({
-          status: ContractStatus.ACTIVE // When accepted, the contract becomes active
-        })
+        .set({ status: ContractStatus.ACTIVE }) // When accepted, the contract becomes active
         .where(eq(contracts.id, contractId))
         .returning();
       
@@ -326,6 +330,70 @@ router.post("/:id/accept", authenticate, authorize(["customer"]),
       return res.status(500).json({
         status: "error",
         message: "Failed to accept contract"
+      });
+    }
+  })
+);
+
+// Decline contract offer (customer)
+router.post("/:id/decline", authenticate, authorize(["customer"]),
+  asyncHandler(async (req: RequestWithUser, res: Response) => {
+    try {
+      const contractId = parseInt(req.params.id);
+      const userId = req.user?.id;
+      
+      if (isNaN(contractId)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid contract ID"
+        });
+      }
+      
+      const [contract] = await db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.id, contractId))
+        .limit(1);
+      
+      if (!contract) {
+        return res.status(404).json({
+          status: "error",
+          message: "Contract not found"
+        });
+      }
+      
+      // Verify this contract belongs to the user
+      if (contract.customerId !== userId) {
+        return res.status(403).json({
+          status: "error",
+          message: "Unauthorized to decline this contract"
+        });
+      }
+      
+      // Verify the contract is in a pending state
+      if (contract.status !== ContractStatus.PENDING) {
+        return res.status(400).json({
+          status: "error",
+          message: "Contract is not in a pending state"
+        });
+      }
+      
+      // Update contract status to cancelled
+      const [updatedContract] = await db
+        .update(contracts)
+        .set({ status: ContractStatus.CANCELLED })
+        .where(eq(contracts.id, contractId))
+        .returning();
+      
+      return res.json({
+        status: "success",
+        data: updatedContract
+      });
+    } catch (error) {
+      logger.error("Error declining contract:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Failed to decline contract"
       });
     }
   })

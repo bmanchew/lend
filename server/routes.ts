@@ -410,6 +410,19 @@ router.post(
           });
         }
         
+        // Calculate monthly payment and total interest
+        const monthlyPayment = calculateMonthlyPayment(
+          parseFloat(amount.toString()),
+          parseFloat(interestRate.toString()),
+          term
+        ).toString();
+        
+        const totalInterest = calculateTotalInterest(
+          parseFloat(amount.toString()),
+          parseFloat(interestRate.toString()),
+          term
+        ).toString();
+        
         // Create the contract offer
         const [newContract] = await db
           .insert(contracts)
@@ -420,11 +433,12 @@ router.post(
             amount: amount.toString(),
             term,
             interestRate: interestRate.toString(),
-            status: "pending", // Initial status is pending until accepted
+            status: ContractStatus.PENDING, // Using the ContractStatus enum
             underwritingStatus: "approved", // Pre-approved
-            monthlyPayment: "0", // Placeholder, will be calculated later
-            totalInterest: "0" // Placeholder, will be calculated later
-          })
+            monthlyPayment,
+            totalInterest,
+            createdAt: new Date()
+          } as typeof contracts.$inferInsert)
           .returning();
           
         return res.json({
