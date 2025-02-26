@@ -4,7 +4,6 @@ import { db } from "@db";
 import { contracts, users, ContractStatus } from "@db/schema";
 import { eq, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { type InsertContract } from "drizzle-orm/pg-core";
 
 const router = express.Router();
 
@@ -69,6 +68,9 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
     try {
       const { customerId, amount, term, interestRate } = req.body;
       
+      // Debug
+      console.log("User object:", req.user);
+      
       // If customer role, use their own ID
       const finalCustomerId = req.user?.role === "customer" 
         ? req.user.id 
@@ -76,7 +78,7 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
       
       if (!finalCustomerId) {
         return res.status(400).json({
-          status: "error",
+          success: false,
           message: "Customer ID is required"
         });
       }
@@ -116,16 +118,14 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
         .returning();
       
       return res.json({
-        status: "success",
+        success: true,
         data: newContract
       });
     } catch (error) {
       console.error("Error creating contract offer:", error);
-      if (error instanceof Error) {
-        logger.error("Contract creation error details:", { message: error.message, stack: error.stack });
-      }
+      logger.error("Contract creation error details:", error instanceof Error ? error : new Error(String(error)));
       return res.status(500).json({
-        status: "error",
+        success: false,
         message: "Failed to create contract offer"
       });
     }
@@ -216,10 +216,10 @@ router.patch("/:id/status", authenticate, authorize(["admin", "merchant"]),
         });
       }
       
-      // Update contract status using the status field from schema
+      // Update contract status
       const [updatedContract] = await db
         .update(contracts)
-        .set({ status })
+        .set({ status: status as any })
         .where(eq(contracts.id, contractId))
         .returning();
       
@@ -317,7 +317,7 @@ router.post("/:id/accept", authenticate, authorize(["customer"]),
       // Update contract status to accepted
       const [updatedContract] = await db
         .update(contracts)
-        .set({ status: ContractStatus.ACTIVE }) // When accepted, the contract becomes active
+        .set({ status: ContractStatus.ACTIVE as any }) // When accepted, the contract becomes active
         .where(eq(contracts.id, contractId))
         .returning();
       
@@ -381,7 +381,7 @@ router.post("/:id/decline", authenticate, authorize(["customer"]),
       // Update contract status to cancelled
       const [updatedContract] = await db
         .update(contracts)
-        .set({ status: ContractStatus.CANCELLED })
+        .set({ status: ContractStatus.CANCELLED as any })
         .where(eq(contracts.id, contractId))
         .returning();
       

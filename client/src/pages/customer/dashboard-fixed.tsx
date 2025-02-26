@@ -35,10 +35,22 @@ export default function CustomerDashboard() {
   const currentKycVerified = kycResponse?.verified;
   
   // Fetch user's contracts
-  const { data: contractsResponse, refetch: refetchContracts } = useQuery<{status: string, data: Contract[]}>({
+  const { data: contractsResponse, refetch: refetchContracts, isLoading: isLoadingContracts, error: contractsError } = useQuery<{status: string, data: Contract[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
   });
+  
+  // Log contract fetching status for debugging
+  useEffect(() => {
+    if (isLoadingContracts) {
+      debugLog("CustomerDashboard", "Loading contracts...");
+    } else if (contractsError) {
+      debugLog("CustomerDashboard", "Error loading contracts", contractsError);
+    } else if (contractsResponse) {
+      debugLog("CustomerDashboard", "Contracts loaded successfully", 
+        { count: contractsResponse?.data?.length || 0, data: contractsResponse?.data });
+    }
+  }, [isLoadingContracts, contractsError, contractsResponse]);
   
   // Extract contracts from response
   const contracts = contractsResponse?.data || [];
