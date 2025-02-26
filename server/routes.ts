@@ -416,7 +416,9 @@ router.post(
             term,
             interestRate: interestRate.toString(),
             status: "pending", // Initial status is pending until accepted
-            underwritingStatus: "approved" // Pre-approved
+            underwritingStatus: "approved", // Pre-approved
+            monthlyPayment: "0", // Placeholder, will be calculated later
+            totalInterest: "0" // Placeholder, will be calculated later
           })
           .returning();
           
