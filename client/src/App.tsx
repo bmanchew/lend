@@ -20,9 +20,9 @@ function AppRouter() {
   const [location, setLocation] = useLocation();
 
   React.useEffect(() => {
-    // Show the auth landing page for root
+    // Redirect root to merchant login
     if (location === "/") {
-      setLocation("/auth/customer-login");
+      setLocation("/auth/merchant");
     }
   }, [location, setLocation]);
 

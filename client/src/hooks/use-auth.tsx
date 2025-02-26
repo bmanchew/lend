@@ -22,12 +22,12 @@ interface AuthContextType {
 }
 
 interface RegisterData {
-  username?: string;
-  password?: string;
-  email?: string;
-  name?: string;
-  role?: "admin" | "merchant" | "customer";
-  phoneNumber: string;
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+  role: "admin" | "merchant" | "customer";
+  phoneNumber?: string;
 }
 
 export const AuthContext = React.createContext<

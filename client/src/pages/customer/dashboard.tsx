@@ -1,4 +1,3 @@
-//To do fix type error.
 import { useAuth } from "@/hooks/use-auth";
 import PortalLayout from "@/components/layout/portal-layout";
 import { KycVerificationModal } from "@/components/kyc/verification-modal";
