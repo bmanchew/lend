@@ -1189,6 +1189,104 @@ router.post(
 
       // Process the webhook asynchronously
       await diditService.processWebhook(req.body);
+      
+      // If verification is approved/confirmed, generate a contract offer
+      if (req.body.status === "Approved" || req.body.status === "confirmed") {
+        try {
+          // Look up the verification session to get the user
+          const session = await db.query.verificationSessions.findFirst({
+            where: eq(verificationSessions.sessionId, req.body.session_id)
+          });
+          
+          if (session && session.userId) {
+            logger.info("[KYC] Verification approved, checking for user", {
+              sessionId: req.body.session_id,
+              userId: session.userId
+            });
+            
+            // Find the user
+            const user = await db.query.users.findFirst({
+              where: eq(users.id, session.userId)
+            });
+            
+            if (user) {
+              // Check if user already has a contract offer
+              const existingOffer = await db.query.contracts.findFirst({
+                where: and(
+                  eq(contracts.customerId, user.id),
+                  eq(contracts.status, ContractStatus.PENDING)
+                )
+              });
+              
+              // Only create a new offer if one doesn't exist
+              if (!existingOffer) {
+                logger.info("[KYC] Generating contract offer after successful verification", { 
+                  userId: user.id, 
+                  session: req.body.session_id 
+                });
+                
+                // Get default merchant
+                const defaultMerchant = await db.query.merchants.findFirst({
+                  where: eq(merchants.active, true)
+                });
+                
+                const merchantId = defaultMerchant?.id || 1;
+                
+                // Create a default contract offer
+                const amount = 5000; // Default amount
+                const term = 36; // 36 months
+                const interestRate = 24.99; // Default interest rate
+                const contractNumber = `SHIFI-${Date.now().toString().slice(-6)}-${user.id}`;
+                
+                // Calculate monthly payment
+                const monthlyRate = interestRate / 100 / 12;
+                const monthlyPayment = (amount * monthlyRate * Math.pow(1 + monthlyRate, term)) / 
+                                     (Math.pow(1 + monthlyRate, term) - 1);
+                
+                // Calculate total interest
+                const totalInterest = (monthlyPayment * term) - amount;
+                
+                try {
+                  // Create the contract offer
+                  const newContract = await db.insert(contracts).values({
+                    merchantId,
+                    customerId: user.id,
+                    contractNumber,
+                    amount: amount.toString(),
+                    term,
+                    interestRate: interestRate.toString(),
+                    status: ContractStatus.PENDING,
+                    monthlyPayment: monthlyPayment.toFixed(2),
+                    totalInterest: totalInterest.toFixed(2),
+                    downPayment: (amount * 0.05).toFixed(2), // 5% down payment
+                  }).returning();
+                  
+                  logger.info("[KYC] Contract offer created automatically after verification", { 
+                    userId: user.id,
+                    contractId: newContract[0].id
+                  });
+                } catch (insertError) {
+                  logger.error("[KYC] Error inserting contract offer", { 
+                    error: insertError, 
+                    userId: user.id 
+                  });
+                }
+              } else {
+                logger.info("[KYC] User already has a contract offer, not creating new one", {
+                  userId: user.id,
+                  existingContractId: existingOffer.id
+                });
+              }
+            }
+          }
+        } catch (offerError) {
+          logger.error("[KYC] Error creating automatic contract offer", { 
+            error: offerError,
+            sessionId: req.body.session_id
+          });
+          // Don't fail the webhook response due to contract creation error
+        }
+      }
 
       // Return 200 immediately to acknowledge receipt
       return res.status(200).json({ received: true });

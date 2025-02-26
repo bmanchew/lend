@@ -181,6 +181,45 @@ export function KycVerificationModal({
     }
   }, [isOpen, userId, user?.kycStatus]);
 
+  // Generate contract offer after successful verification
+  const generateContractOffer = useMutation({
+    mutationFn: async () => {
+      console.log("[KYC Modal] Generating contract offer after verification");
+      const response = await fetch("/api/contracts/post-kyc-offer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to generate contract offer");
+      }
+      
+      const data = await response.json();
+      console.log("[KYC Modal] Contract offer generated:", data);
+      return data;
+    },
+    onSuccess: (data) => {
+      console.log("[KYC Modal] Contract offer success:", data);
+      if (data.status === "success") {
+        toast({
+          title: "Loan Offer Ready",
+          description: "We've prepared a loan offer based on your verification. View it in your dashboard.",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      console.error("[KYC Modal] Error generating contract offer:", error);
+      toast({
+        title: "Notice",
+        description: "Your identity verification was successful, but we couldn't prepare a loan offer. Please check your dashboard.",
+        variant: "destructive",
+      });
+    }
+  });
+  
   // Monitor for completion from webhook updates
   useEffect(() => {
     if (!kycData) return;
@@ -204,9 +243,13 @@ export function KycVerificationModal({
           
           toast({
             title: "Verification Complete",
-            description: "Your identity has been verified successfully. You can now view loan offers.",
+            description: "Your identity has been verified successfully. Generating loan offers...",
           });
           
+          // Generate contract offer after verification is complete
+          generateContractOffer.mutate();
+          
+          // Still call onComplete regardless of offer generation
           onVerificationComplete?.();
         })
         .catch(error => {
