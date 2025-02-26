@@ -11,6 +11,8 @@ export interface LoginResponse {
   name: string | null;
   email: string;
   username: string;
+  kycStatus?: string | null;
+  phoneNumber?: string | null;
 }
 
 export interface User {

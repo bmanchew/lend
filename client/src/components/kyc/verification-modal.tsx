@@ -187,13 +187,32 @@ export function KycVerificationModal({
 
     console.log("[KYC Modal] KYC status update:", kycData);
 
-    if (kycData.status === "verified" || kycData.status === "Approved") {
+    if (kycData.status === "verified" || kycData.status === "Approved" || kycData.verified === true) {
       console.log("[KYC Modal] Verification completed successfully");
-      toast({
-        title: "Verification Complete",
-        description: "Your identity has been verified successfully.",
-      });
-      onVerificationComplete?.();
+      
+      // Fetch the latest user data to update the context
+      fetch('/api/user')
+        .then(response => {
+          if (response.ok) {
+            return response.json();
+          }
+          throw new Error('Failed to refresh user data');
+        })
+        .then(userData => {
+          console.log("[KYC Modal] Updated user data:", userData);
+          // The user data will be automatically updated in the auth context
+          
+          toast({
+            title: "Verification Complete",
+            description: "Your identity has been verified successfully. You can now view loan offers.",
+          });
+          
+          onVerificationComplete?.();
+        })
+        .catch(error => {
+          console.error("[KYC Modal] Error refreshing user data:", error);
+          onVerificationComplete?.(); // Still complete even if refresh fails
+        });
     }
   }, [kycData]);
 

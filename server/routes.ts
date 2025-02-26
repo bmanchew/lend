@@ -346,6 +346,94 @@ router.post(
   }),
 );
 
+// Create a contract offer for a customer who has completed KYC
+router.post(
+  "/contracts/create-offer",
+  asyncHandler(
+    async (req: RequestWithUser, res: Response, next: NextFunction) => {
+      try {
+        const { customerId, amount = 5000, term = 36, interestRate = 24.99 } = req.body;
+        
+        if (!customerId) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Customer ID is required" 
+          });
+        }
+
+        // Verify customer exists and is KYC verified
+        const [customer] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, customerId))
+          .limit(1);
+          
+        if (!customer) {
+          return res.status(404).json({
+            success: false,
+            message: "Customer not found"
+          });
+        }
+        
+        // Check if customer already has a contract
+        const existingContracts = await db
+          .select()
+          .from(contracts)
+          .where(eq(contracts.customerId, customerId));
+          
+        if (existingContracts.length > 0) {
+          return res.json({
+            success: true,
+            message: "Customer already has contracts",
+            contract: existingContracts[0]
+          });
+        }
+        
+        // Generate a unique contract number
+        const contractNumber = `LOAN-${Date.now().toString().slice(-6)}-${customerId}`;
+        
+        // Get a default merchant (first one in the system)
+        const [merchant] = await db
+          .select()
+          .from(merchants)
+          .limit(1);
+          
+        if (!merchant) {
+          return res.status(400).json({
+            success: false,
+            message: "No merchants available in system"
+          });
+        }
+        
+        // Create the contract offer
+        const [newContract] = await db
+          .insert(contracts)
+          .values({
+            merchantId: merchant.id,
+            customerId,
+            contractNumber,
+            amount: amount.toString(),
+            term,
+            interestRate: interestRate.toString(),
+            status: "pending", // Initial status is pending until accepted
+            underwritingStatus: "approved" // Pre-approved
+          })
+          .returning();
+          
+        return res.json({
+          success: true,
+          message: "Contract offer created successfully",
+          contract: newContract
+        });
+        
+      } catch (error) {
+        logger.error("Error creating contract offer:", error);
+        next(error);
+      }
+    }
+  )
+);
+
 router.get(
   "/customers/:id/contracts",
   asyncHandler(

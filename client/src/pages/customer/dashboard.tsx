@@ -21,6 +21,7 @@ export default function CustomerDashboard() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [showKycModal, setShowKycModal] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Check if KYC is needed on first load
   useEffect(() => {
@@ -44,11 +45,82 @@ export default function CustomerDashboard() {
     }
   }, [user]);
 
-  const { data: contracts } = useQuery<SelectContract[]>({
-    queryKey: [`/api/customers/${user?.id}/contracts`],
+  // Refresh current user KYC status
+  const { data: currentKycStatus } = useQuery({
+    queryKey: ["/api/kyc/status", user?.id, refreshTrigger],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const response = await fetch(`/api/kyc/status?userId=${user.id}`);
+      if (!response.ok) throw new Error("Failed to fetch KYC status");
+      return response.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch user's contracts
+  const { data: contracts, refetch: refetchContracts } = useQuery<SelectContract[]>({
+    queryKey: [`/api/customers/${user?.id}/contracts`, refreshTrigger],
+    enabled: !!user?.id,
   });
 
   const hasActiveContract = contracts?.some((c) => c.status === "active");
+  
+  // Function to create a default contract offer if none exists
+  const createDefaultContractOffer = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Use apiRequest from queryClient to handle auth headers
+      const response = await fetch('/api/contracts/create-offer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          customerId: user.id,
+          amount: 5000, // Default amount
+          term: 36, // 36 months
+          interestRate: 24.99,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create contract offer');
+      }
+      
+      // Refresh contracts data
+      refetchContracts();
+      console.log("[Dashboard] Contract offer created successfully");
+      
+      // Add a small delay before showing toast to ensure UI is updated
+      setTimeout(() => {
+        toast({
+          title: "Loan offer created",
+          description: "A new loan offer is now available for you",
+        });
+      }, 500);
+    } catch (error) {
+      console.error("[Dashboard] Error creating contract offer:", error);
+      toast({
+        title: "Error",
+        description: "Unable to create loan offer. Please try again later.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Check if we need to show the loan offer
+  const showLoanOffer = () => {
+    // User has verified KYC status
+    const isVerified = user?.kycStatus === KycStatus.VERIFIED || 
+                     (currentKycStatus?.status === "verified" || currentKycStatus?.verified);
+    
+    // No active contract but has pending contract offers
+    const hasPendingOffer = !hasActiveContract && contracts && contracts.length > 0;
+    
+    return isVerified && !hasActiveContract;
+  };
 
   return (
     <PortalLayout>
@@ -62,13 +134,16 @@ export default function CustomerDashboard() {
           onClose={() => setShowKycModal(false)}
           onVerificationComplete={() => {
             setShowKycModal(false);
-            // If you've added refetchUser to your auth context
-            // you can refresh user data here
-            // refetchUser?.();
+            // Refresh data when verification is complete
+            setRefreshTrigger(prev => prev + 1);
+            // Create a default contract offer if none exists yet
+            if (!contracts || contracts.length === 0) {
+              createDefaultContractOffer();
+            }
           }}
         />
 
-        {user?.kycStatus === KycStatus.PENDING && (
+        {(user?.kycStatus === KycStatus.PENDING || currentKycStatus?.status === "pending") && (
           <Card className="bg-yellow-50 border-yellow-200">
             <CardHeader>
               <CardTitle className="text-yellow-800">
@@ -84,7 +159,7 @@ export default function CustomerDashboard() {
           </Card>
         )}
 
-        {!hasActiveContract && user?.kycStatus === KycStatus.VERIFIED && (
+        {showLoanOffer() && (
           <Card>
             <CardHeader>
               <CardTitle>Loan Offer</CardTitle>
