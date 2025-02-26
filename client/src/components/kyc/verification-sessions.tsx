@@ -10,6 +10,7 @@ import {
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button"; // Import Button component
 
 interface VerificationSession {
   id: number;
@@ -55,6 +56,11 @@ export function VerificationSessions() {
     }
   };
 
+  const restartVerification = () => {
+    // Implement your restart logic here
+    console.log("Restarting verification...");
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">Verification Sessions</h2>
@@ -67,6 +73,7 @@ export function VerificationSessions() {
             <TableHead>Features</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Last Updated</TableHead>
+            <TableHead>Action</TableHead> {/* Added header for the button */}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -85,6 +92,11 @@ export function VerificationSessions() {
               </TableCell>
               <TableCell>
                 {format(new Date(session.updatedAt), 'PPp')}
+              </TableCell>
+              <TableCell>
+                <Button onClick={restartVerification}>
+                  Verify Identity First
+                </Button>
               </TableCell>
             </TableRow>
           ))}
