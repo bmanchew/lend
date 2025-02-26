@@ -170,10 +170,23 @@ router.get(
         });
       }
       
+      // Query contracts by customer ID
       const customerContracts = await db.query.contracts.findMany({
         where: eq(contracts.customerId, userId)
       });
       
+      console.log("[API] Customer contracts found:", {
+        userId,
+        contractCount: customerContracts.length,
+        phoneNumber: req.user?.phoneNumber,
+        contracts: customerContracts.map(c => ({
+          id: c.id,
+          amount: c.amount,
+          status: c.status
+        }))
+      });
+      
+      // Return contracts in expected format
       res.json({
         status: "success",
         contracts: customerContracts
