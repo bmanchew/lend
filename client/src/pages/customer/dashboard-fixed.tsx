@@ -78,6 +78,9 @@ export default function CustomerDashboard() {
     try {
       console.log("[CustomerDashboard] Checking if contract offer needed");
       
+      // Force refresh contracts data to ensure we have the latest
+      await refetchContracts();
+      
       // Check if the user already has contracts
       if (contracts && contracts.length > 0) {
         console.log("[CustomerDashboard] User already has contracts:", contracts.length);
@@ -85,20 +88,41 @@ export default function CustomerDashboard() {
       }
       
       // Check KYC status to see if user is verified
+      // Cover all possible variations of "verified" status
       const isVerified = 
         user?.kycStatus?.toLowerCase() === KycStatus.VERIFIED.toLowerCase() || 
+        user?.kycStatus?.toLowerCase() === "verified" ||
+        user?.kycStatus?.toLowerCase() === "confirmed" ||
+        user?.kycStatus?.toLowerCase() === "approved" ||
         currentKycStatus?.status?.toLowerCase() === "verified" || 
+        currentKycStatus?.status?.toLowerCase() === "confirmed" ||
+        currentKycStatus?.status?.toLowerCase() === "approved" ||
         currentKycStatus?.verified === true;
       
       if (!isVerified) {
-        console.log("[CustomerDashboard] User is not verified yet, not creating contract offer");
+        console.log("[CustomerDashboard] User is not verified yet, not creating contract offer:", { 
+          userKycStatus: user?.kycStatus,
+          currentKycStatus: currentKycStatus?.status
+        });
         return;
       }
       
       console.log("[CustomerDashboard] Creating default contract offer for verified user");
-      await createDefaultContractOffer();
+      const result = await createDefaultContractOffer();
+      
+      if (result) {
+        toast({
+          title: "Welcome to ShiFi",
+          description: "Based on your verification, we've prepared a personalized loan offer for you.",
+        });
+      }
     } catch (error) {
       console.error("[CustomerDashboard] Error in checkAndCreateContractOffer:", error);
+      toast({
+        title: "Error",
+        description: "There was a problem loading your offers. Please try again later.",
+        variant: "destructive",
+      });
     }
   };
   
@@ -146,17 +170,25 @@ export default function CustomerDashboard() {
     // User has verified KYC status - check multiple possibilities for verification status
     const isVerified = 
       user?.kycStatus?.toLowerCase() === KycStatus.VERIFIED.toLowerCase() || 
+      user?.kycStatus?.toLowerCase() === "verified" ||
+      user?.kycStatus?.toLowerCase() === "confirmed" ||
+      user?.kycStatus?.toLowerCase() === "approved" ||
       currentKycStatus?.status?.toLowerCase() === "verified" || 
+      currentKycStatus?.status?.toLowerCase() === "confirmed" ||
+      currentKycStatus?.status?.toLowerCase() === "approved" ||
       currentKycStatus?.verified === true;
     
     // Has at least one contract (that's not active) to show as an offer
-    const hasContractOffer = contracts && contracts.length > 0 && !hasActiveContract;
+    // This checks for PENDING contracts, which are offers
+    const hasPendingOffer = contracts?.some(c => c.status === ContractStatus.PENDING);
+    const hasContractOffer = contracts && contracts.length > 0 && hasPendingOffer;
     
     const shouldShowOffer = isVerified && hasContractOffer;
     
     console.log("[CustomerDashboard] Loan offer visibility check:", {
       isVerified,
       hasActiveContract,
+      hasPendingOffer,
       hasContractOffer,
       userKycStatus: user?.kycStatus,
       currentKycStatus: currentKycStatus?.status,
@@ -201,6 +233,15 @@ export default function CustomerDashboard() {
                 Your identity verification is being processed. This usually
                 takes 1-2 business days.
               </p>
+              <div className="mt-4">
+                <Button 
+                  variant="outline" 
+                  className="text-yellow-700 border-yellow-400 hover:bg-yellow-100"
+                  onClick={() => setRefreshTrigger(prev => prev + 1)}
+                >
+                  Check Status
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}

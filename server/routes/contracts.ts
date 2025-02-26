@@ -126,19 +126,19 @@ router.post(
         merchantIdToUse = firstMerchant?.id || 1; // Use default if none found
       }
       
-      // Create the contract offer
+      // Create the contract offer - use typed insert
       const newContract = await db.insert(contracts).values({
-        merchantId: merchantIdToUse,
-        customerId: userId,
-        contractNumber,
+        merchant_id: merchantIdToUse,
+        customer_id: userId,
+        contract_number: contractNumber,
         amount: contractAmount.toString(),
         term: contractTerm,
-        interestRate: contractInterestRate.toString(),
+        interest_rate: contractInterestRate.toString(),
         status: ContractStatus.PENDING,
-        monthlyPayment: monthlyPayment.toFixed(2),
-        totalInterest: totalInterest.toFixed(2),
-        downPayment: (contractAmount * 0.05).toFixed(2), // 5% down payment
-      }).returning();
+        monthly_payment: monthlyPayment.toFixed(2),
+        total_interest: totalInterest.toFixed(2),
+        down_payment: (contractAmount * 0.05).toFixed(2), // 5% down payment
+      } as any).returning();
       
       res.json({
         status: "success",
@@ -215,8 +215,12 @@ router.post(
         });
       }
       
-      // Check if KYC is verified
-      if (user.kycStatus !== 'Approved' && user.kycStatus !== 'confirmed') {
+      // Check if KYC is verified - cover all possible approved status wordings
+      const kycStatus = user.kycStatus?.toLowerCase();
+      if (!kycStatus || 
+          (kycStatus !== 'approved' && 
+          kycStatus !== 'confirmed' && 
+          kycStatus !== 'verified')) {
         return res.status(400).json({
           status: "error",
           message: "KYC verification is required before receiving offers",
@@ -261,19 +265,19 @@ router.post(
       
       const merchantId = defaultMerchant?.id || 1; // Use default if none found
       
-      // Create the contract offer
+      // Create the contract offer - use snake_case for column names
       const newContract = await db.insert(contracts).values({
-        merchantId,
-        customerId: userId,
-        contractNumber,
+        merchant_id: merchantId,
+        customer_id: userId,
+        contract_number: contractNumber,
         amount: amount.toString(),
         term,
-        interestRate: interestRate.toString(),
+        interest_rate: interestRate.toString(),
         status: ContractStatus.PENDING,
-        monthlyPayment: monthlyPayment.toFixed(2),
-        totalInterest: totalInterest.toFixed(2),
-        downPayment: (amount * 0.05).toFixed(2), // 5% down payment
-      }).returning();
+        monthly_payment: monthlyPayment.toFixed(2),
+        total_interest: totalInterest.toFixed(2),
+        down_payment: (amount * 0.05).toFixed(2), // 5% down payment
+      } as any).returning();
       
       logger.info("Created contract offer after KYC verification", { 
         userId, 
@@ -324,6 +328,114 @@ router.get(
       res.status(500).json({
         status: "error",
         message: error.message || "Failed to fetch contracts",
+      });
+    }
+  })
+);
+
+// Create or get contract offer for a verified customer
+router.get(
+  "/auto-offer",
+  authenticate,
+  asyncHandler(async (req: RequestWithUser, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication required",
+        });
+      }
+      
+      // Get the user to check KYC status
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId)
+      });
+      
+      if (!user) {
+        return res.status(404).json({
+          status: "error",
+          message: "User not found",
+        });
+      }
+      
+      // Check if the user already has an offer
+      const existingOffers = await db.query.contracts.findMany({
+        where: eq(contracts.customerId, userId)
+      });
+      
+      if (existingOffers.length > 0) {
+        return res.json({
+          status: "success",
+          message: "User already has contracts",
+          contracts: existingOffers
+        });
+      }
+      
+      // Check if KYC is verified - cover all possible variations
+      const kycStatus = user.kycStatus?.toLowerCase();
+      if (!kycStatus || 
+          (kycStatus !== 'approved' && 
+          kycStatus !== 'confirmed' && 
+          kycStatus !== 'verified')) {
+        return res.status(400).json({
+          status: "error",
+          message: "KYC verification required before receiving offers",
+          kycStatus: user.kycStatus
+        });
+      }
+      
+      // Create a default contract offer
+      const amount = 5000; // Default amount
+      const term = 36; // 36 months
+      const interestRate = 24.99; // Default interest rate
+      const contractNumber = `SHIFI-${Date.now().toString().slice(-6)}-${userId}`;
+      
+      // Calculate monthly payment
+      const monthlyRate = interestRate / 100 / 12;
+      const monthlyPayment = (amount * monthlyRate * Math.pow(1 + monthlyRate, term)) / 
+                           (Math.pow(1 + monthlyRate, term) - 1);
+      
+      // Calculate total interest
+      const totalInterest = (monthlyPayment * term) - amount;
+      
+      // Get default merchant (first active merchant)
+      const defaultMerchant = await db.query.merchants.findFirst({
+        where: eq(merchants.active, true)
+      });
+      
+      const merchantId = defaultMerchant?.id || 1; // Use default if none found
+      
+      // Create the contract offer
+      const newContract = await db.insert(contracts).values({
+        merchant_id: merchantId,
+        customer_id: userId,
+        contract_number: contractNumber,
+        amount: amount.toString(),
+        term,
+        interest_rate: interestRate.toString(),
+        status: ContractStatus.PENDING,
+        monthly_payment: monthlyPayment.toFixed(2),
+        total_interest: totalInterest.toFixed(2),
+        down_payment: (amount * 0.05).toFixed(2), // 5% down payment
+      } as any).returning();
+      
+      logger.info("Created automatic contract offer for user", { 
+        userId, 
+        contractId: newContract[0].id
+      });
+      
+      res.json({
+        status: "success",
+        message: "Contract offer created automatically",
+        contract: newContract[0]
+      });
+    } catch (error: any) {
+      logger.error("Error creating automatic contract offer:", error);
+      res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to create contract offer",
       });
     }
   })

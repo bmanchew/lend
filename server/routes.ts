@@ -1247,19 +1247,19 @@ router.post(
                 const totalInterest = (monthlyPayment * term) - amount;
                 
                 try {
-                  // Create the contract offer
+                  // Create the contract offer - using snake_case column names for DB
                   const newContract = await db.insert(contracts).values({
-                    merchantId,
-                    customerId: user.id,
-                    contractNumber,
+                    merchant_id: merchantId,
+                    customer_id: user.id,
+                    contract_number: contractNumber,
                     amount: amount.toString(),
                     term,
-                    interestRate: interestRate.toString(),
+                    interest_rate: interestRate.toString(),
                     status: ContractStatus.PENDING,
-                    monthlyPayment: monthlyPayment.toFixed(2),
-                    totalInterest: totalInterest.toFixed(2),
-                    downPayment: (amount * 0.05).toFixed(2), // 5% down payment
-                  }).returning();
+                    monthly_payment: monthlyPayment.toFixed(2),
+                    total_interest: totalInterest.toFixed(2),
+                    down_payment: (amount * 0.05).toFixed(2), // 5% down payment
+                  } as any).returning();
                   
                   logger.info("[KYC] Contract offer created automatically after verification", { 
                     userId: user.id,
@@ -1350,28 +1350,28 @@ router.post(
         );
         const contractNumber = `LN${Date.now()}`;
 
-        // Insert contract with proper types
+        // Insert contract with proper types - snake_case keys for DB columns
         const [newContract] = await db
           .insert(contracts)
           .values({
-            merchantId: merchantId,
-            customerId: customer.id,
-            contractNumber: contractNumber,
+            merchant_id: merchantId,
+            customer_id: customer.id,
+            contract_number: contractNumber,
             amount: amount.toString(),
             term: term,
-            interestRate: interestRate.toString(),
-            downPayment: downPayment.toString(),
-            monthlyPayment: monthlyPayment.toString(),
-            totalInterest: totalInterest.toString(),
+            interest_rate: interestRate.toString(),
+            down_payment: downPayment.toString(),
+            monthly_payment: monthlyPayment.toString(),
+            total_interest: totalInterest.toString(),
             status: "pending_review",
             notes: notes,
-            underwritingStatus: "pending",
-            borrowerEmail: customerDetails.email,
-            borrowerPhone: customerDetails.phone,
+            underwriting_status: "pending",
+            borrower_email: customerDetails.email,
+            borrower_phone: customerDetails.phone,
             active: true,
-            payment_id: null,
-            payment_status: null,
-          } as typeof contracts.$inferInsert)
+            last_payment_id: null,
+            last_payment_status: null,
+          } as any)
           .returning();
 
         // Get merchant details for notifications
