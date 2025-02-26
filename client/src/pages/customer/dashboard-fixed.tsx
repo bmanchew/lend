@@ -38,6 +38,14 @@ export default function CustomerDashboard() {
   const { data: contractsResponse, refetch: refetchContracts, isLoading: isLoadingContracts, error: contractsError } = useQuery<{status: string, data: Contract[]}>({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
+    onError: (error) => {
+      console.error("Error fetching contracts:", error);
+      toast({
+        title: "Error loading contracts",
+        description: `${error}. Please try refreshing the page.`,
+        variant: "destructive",
+      });
+    }
   });
   
   // Log contract fetching status for debugging

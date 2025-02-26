@@ -134,23 +134,57 @@ router.use(async (req: RequestWithUser, res: Response, next: NextFunction) => {
       ? authHeader.split(" ")[1]
       : null;
 
+    logger.debug(`[Auth] Verifying JWT for path: ${path}`, {
+      hasToken: !!token,
+      headerPresent: !!authHeader,
+      path,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
+
     if (!token) {
-      throw new APIError(401, "Authentication required");
+      // Return JSON error instead of throwing an error
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required"
+      });
     }
 
-    const user = await authService.verifyJWT(token);
-    if (!user) {
-      throw new APIError(401, "Invalid or expired token");
+    try {
+      const user = await authService.verifyJWT(token);
+      if (!user) {
+        return res.status(401).json({
+          status: "error",
+          message: "Invalid or expired token"
+        });
+      }
+      
+      req.user = user;
+      next();
+    } catch (jwtError) {
+      logger.error("[Auth] JWT validation error:", {
+        error: jwtError instanceof Error ? jwtError.message : "Unknown error",
+        path,
+        timestamp: new Date().toISOString()
+      });
+      
+      return res.status(401).json({
+        status: "error",
+        message: jwtError instanceof Error ? jwtError.message : "Invalid token"
+      });
     }
-
-    req.user = user;
-    next();
   } catch (error) {
-    logger.error("Auth middleware error:", {
+    logger.error("[Auth] Auth middleware error:", {
       error: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
+      path,
+      timestamp: new Date().toISOString()
     });
-    next(error);
+    
+    return res.status(500).json({
+      status: "error",
+      message: "Authentication error"
+    });
   }
 });
 

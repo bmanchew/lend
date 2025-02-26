@@ -40,20 +40,72 @@ const authorize = (roles: string[]) => {
 router.get("/customer", authenticate, authorize(["customer"]), 
   asyncHandler(async (req: RequestWithUser, res: Response) => {
     try {
-      const userId = req.user?.id;
+      if (!req.user) {
+        // This shouldn't happen due to authenticate middleware, but just in case
+        return res.status(401).json({
+          status: "error",
+          message: "Authentication required"
+        });
+      }
       
-      const customerContracts = await db
-        .select()
-        .from(contracts)
-        .where(eq(contracts.customerId, userId as number))
-        .orderBy(desc(contracts.createdAt));
+      const userId = req.user.id;
       
-      return res.json({
-        status: "success",
-        data: customerContracts
+      logger.info(`[Contracts] Getting contracts for customer ${userId}`, {
+        userId,
+        auth: !!req.headers.authorization,
+        userRole: req.user.role,
+        timestamp: new Date().toISOString()
       });
+      
+      try {
+        // Explicitly convert userId to number
+        const userIdNumber = typeof userId === 'string' ? parseInt(userId) : userId;
+        
+        const customerContracts = await db
+          .select()
+          .from(contracts)
+          .where(eq(contracts.customerId, userIdNumber))
+          .orderBy(desc(contracts.createdAt));
+        
+        logger.info(`[Contracts] Found ${customerContracts.length} contracts for customer ${userId}`);
+        
+        // Add debug data to response in development
+        let responseData: any = {
+          status: "success",
+          data: customerContracts
+        };
+        
+        if (process.env.NODE_ENV !== 'production') {
+          responseData._debug = {
+            userId,
+            userIdType: typeof userId,
+            userIdNumber,
+            contractsFound: customerContracts.length
+          };
+        }
+        
+        // Set proper Content-Type header
+        res.setHeader('Content-Type', 'application/json');
+        return res.json(responseData);
+      } catch (dbError) {
+        logger.error("[Contracts] Database error in customer contracts:", {
+          error: dbError instanceof Error ? dbError.message : "Unknown error",
+          userId,
+          timestamp: new Date().toISOString()
+        });
+        
+        return res.status(500).json({
+          status: "error",
+          message: "Failed to fetch contracts - database error"
+        });
+      }
     } catch (error) {
-      console.error("Error fetching customer contracts:", error);
+      logger.error("[Contracts] Error fetching customer contracts:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      });
+      
       return res.status(500).json({
         status: "error",
         message: "Failed to fetch contracts"

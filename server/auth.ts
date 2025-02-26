@@ -82,10 +82,34 @@ class AuthService {
     try {
       const jwtSecret =
         process.env.JWT_SECRET || process.env.REPL_ID || "development-secret";
-      const decoded = jwt.verify(token, jwtSecret) as Express.User;
-      return decoded;
+      const decoded = jwt.verify(token, jwtSecret) as any;
+      
+      logger.debug("[Auth] JWT verified successfully", {
+        hasId: !!decoded.id,
+        idType: typeof decoded.id,
+        role: decoded.role,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Ensure id is a number - JWT may store it as a string
+      const userId = typeof decoded.id === 'string' ? parseInt(decoded.id, 10) : decoded.id;
+      
+      const userResponse: Express.User = {
+        id: userId,
+        username: decoded.username || decoded.id?.toString() || '',
+        email: decoded.email || '',
+        role: decoded.role as UserRole,
+        name: decoded.name || null,
+        phoneNumber: decoded.phoneNumber || null
+      };
+      
+      return userResponse;
     } catch (err) {
       if (err instanceof jwt.TokenExpiredError) {
+        logger.warn("[Auth] JWT token expired", {
+          error: err.message,
+          timestamp: new Date().toISOString()
+        });
         throw new AuthError(
           401,
           "Token expired",
@@ -93,12 +117,21 @@ class AuthService {
         );
       }
       if (err instanceof jwt.JsonWebTokenError) {
+        logger.warn("[Auth] JWT token invalid", {
+          error: err.message,
+          timestamp: new Date().toISOString()
+        });
         throw new AuthError(
           401,
           "Invalid token",
           AUTH_ERROR_CODES.TOKEN_INVALID
         );
       }
+      logger.error("[Auth] JWT verification failed", {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        timestamp: new Date().toISOString()
+      });
       throw new AuthError(
         401,
         "Token verification failed",

@@ -16,6 +16,18 @@ async function throwIfResNotOk(res: Response) {
 // Helper to get auth headers
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
+  
+  // Debug token presence
+  if (token) {
+    console.log('[API] Auth token found:', {
+      tokenLength: token.length,
+      tokenStart: token.substring(0, 10) + '...',
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    console.log('[API] No auth token found in localStorage');
+  }
+  
   return token ? { 
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'
