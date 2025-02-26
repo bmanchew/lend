@@ -100,14 +100,14 @@ router.post("/create-offer", authenticate, authorize(["admin", "merchant", "cust
       
       // Create contract offer
       const [newContract] = await db.insert(contracts).values({
-        customer_id: finalCustomerId,
-        merchant_id: req.user?.role === "merchant" ? req.user.id : 1, // Default to merchant ID 1 if not specified
+        customerId: finalCustomerId,
+        merchantId: req.user?.role === "merchant" ? req.user.id : 1, // Default to merchant ID 1 if not specified
         amount: amount.toString(),
         term: term,
-        interest_rate: interestRate.toString(),
-        contract_number: contractNumber,
+        interestRate: interestRate.toString(),
+        contractNumber: contractNumber,
         status: ContractStatus.PENDING,
-        created_at: new Date()
+        createdAt: new Date()
       }).returning();
       
       return res.json({
@@ -212,8 +212,7 @@ router.patch("/:id/status", authenticate, authorize(["admin", "merchant"]),
       const [updatedContract] = await db
         .update(contracts)
         .set({
-          status: status,
-          updatedAt: new Date()
+          status: status
         })
         .where(eq(contracts.id, contractId))
         .returning();
@@ -313,8 +312,7 @@ router.post("/:id/accept", authenticate, authorize(["customer"]),
       const [updatedContract] = await db
         .update(contracts)
         .set({
-          status: ContractStatus.ACTIVE, // When accepted, the contract becomes active
-          updatedAt: new Date()
+          status: ContractStatus.ACTIVE // When accepted, the contract becomes active
         })
         .where(eq(contracts.id, contractId))
         .returning();

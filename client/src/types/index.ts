@@ -40,6 +40,14 @@ export interface JWTPayload {
 
 export type ContractStatus = 'pending' | 'active' | 'completed' | 'cancelled' | 'defaulted';
 
+export const ContractStatus = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  DEFAULTED: 'defaulted'
+} as const;
+
 export interface Contract {
   id: number;
   customerId: number;
