@@ -35,17 +35,9 @@ export default function CustomerDashboard() {
   const currentKycVerified = kycResponse?.verified;
   
   // Fetch user's contracts - ensure we handle the response format with status and data properties
-  const { data: contractsResponse, refetch: refetchContracts, isLoading: isLoadingContracts, error: contractsError } = useQuery<{status: string, data: Contract[]}>({
+  const { data: contractsResponse, refetch: refetchContracts, isLoading: isLoadingContracts, error: contractsError } = useQuery({
     queryKey: [`/api/contracts/customer`, refreshTrigger],
     enabled: !!user?.id,
-    onError: (error) => {
-      console.error("Error fetching contracts:", error);
-      toast({
-        title: "Error loading contracts",
-        description: `${error}. Please try refreshing the page.`,
-        variant: "destructive",
-      });
-    }
   });
   
   // Log contract fetching status for debugging
@@ -202,6 +194,15 @@ export default function CustomerDashboard() {
   const activeContracts = contracts?.filter(contract => contract.status === ContractStatus.ACTIVE) || [];
   const completedContracts = contracts?.filter(contract => contract.status === ContractStatus.COMPLETED) || [];
   
+  // Debug log to track contract statuses
+  debugLog("CustomerDashboard", "Contracts by status", {
+    pending: pendingOffers.length,
+    active: activeContracts.length,
+    completed: completedContracts.length,
+    allContracts: contracts?.length || 0,
+    contractStatusValues: contracts?.map(c => c.status)
+  });
+  
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <h1 className="text-3xl font-bold mb-6">Welcome, {user?.name || "Customer"}</h1>
@@ -308,16 +309,25 @@ export default function CustomerDashboard() {
                     >
                       Decline
                     </Button>
-                    <Button 
-                      className="w-full" 
-                      onClick={() => {
-                        setSelectedContractId(contract.id);
-                        acceptContract.mutate(contract.id);
-                      }}
-                      disabled={acceptContract.isPending || !isVerified}
-                    >
-                      {!isVerified ? "Verify Identity First" : "Accept"}
-                    </Button>
+                    {!isVerified ? (
+                      <Button 
+                        className="w-full" 
+                        onClick={() => setIsKycModalOpen(true)}
+                      >
+                        Verify Identity First
+                      </Button>
+                    ) : (
+                      <Button 
+                        className="w-full" 
+                        onClick={() => {
+                          setSelectedContractId(contract.id);
+                          acceptContract.mutate(contract.id);
+                        }}
+                        disabled={acceptContract.isPending}
+                      >
+                        Accept
+                      </Button>
+                    )}
                   </CardFooter>
                 </Card>
               ))
